@@ -228,6 +228,124 @@ Configurable platform-wide settings (feature flags, thresholds, limits).
 
 ---
 
+### gamification_modules
+Admin-controlled engagement modules for daily login, streaks, achievements, XP, levels, leaderboards, lucky wheel, mystery rewards, spin bonuses, missions, seasonal events, and daily quests.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | UUID | Primary key |
+| module_key | TEXT | Unique stable key |
+| module_type | TEXT | Normalized module category |
+| title | TEXT | Display title |
+| description | TEXT | Human-readable explanation |
+| cadence | TEXT | Reset or trigger cadence |
+| reward_label | TEXT | Reward display label |
+| xp_reward | INTEGER | XP value awarded |
+| config | JSONB | Flexible module options |
+| starts_at | TIMESTAMPTZ | Optional activation start |
+| ends_at | TIMESTAMPTZ | Optional activation end |
+| is_active | BOOLEAN | Module enabled state |
+| created_at | TIMESTAMPTZ | Auto-set |
+| updated_at | TIMESTAMPTZ | Auto-updated |
+
+**RLS Policies**:
+- Authenticated users can view modules
+- super_admin can CRUD all
+
+---
+
+### gamification_user_state
+Per-user progression state used for XP, levels, streaks, spins, and seasonal points.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| user_id | UUID | Primary key, references profiles |
+| xp | INTEGER | Total XP accumulated |
+| level_tier | INTEGER | Current level |
+| streak_count | INTEGER | Active login streak |
+| season_points | INTEGER | Seasonal ranking points |
+| wheel_spins_remaining | INTEGER | Daily spins left |
+| mystery_rewards_available | INTEGER | Available surprise rewards |
+| last_login_at | TIMESTAMPTZ | Last successful login claim |
+| daily_login_claimed_at | TIMESTAMPTZ | Last daily login reward claim |
+| season_name | TEXT | Active season name |
+| season_theme | TEXT | Active season theme |
+| updated_at | TIMESTAMPTZ | Auto-updated |
+
+**RLS Policies**:
+- Users can view and update their own state
+- super_admin can view and update all
+
+---
+
+### gamification_progress
+Per-user module progress for quests, missions, achievements, and event participation.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | UUID | Primary key |
+| user_id | UUID | References profiles |
+| module_id | UUID | References gamification_modules |
+| progress | INTEGER | Current progress value |
+| target | INTEGER | Completion target |
+| status | TEXT | in_progress \| completed \| claimed |
+| unlocked_at | TIMESTAMPTZ | Completion timestamp |
+| claimed_at | TIMESTAMPTZ | Reward claim timestamp |
+| metadata | JSONB | Extra state |
+| created_at | TIMESTAMPTZ | Auto-set |
+| updated_at | TIMESTAMPTZ | Auto-updated |
+
+**Constraint**: UNIQUE(user_id, module_id) - one progress row per user per module.
+
+**RLS Policies**:
+- Users can view and update their own progress
+- super_admin can view and update all
+
+---
+
+### gamification_activity_log
+Append-only event log for claims, spins, reward drops, and progression events.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | UUID | Primary key |
+| user_id | UUID | References profiles |
+| action | TEXT | Claim or progression action |
+| source | TEXT | Source module or trigger |
+| xp_awarded | INTEGER | XP granted by the action |
+| metadata | JSONB | Extra event detail |
+| created_at | TIMESTAMPTZ | Auto-set |
+
+**RLS Policies**:
+- Users can view their own log entries
+- super_admin can view all
+
+---
+
+### gamification_leaderboard_snapshots
+Seasonal leaderboard snapshots for ranking and display.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | UUID | Primary key |
+| season_name | TEXT | Season label |
+| snapshot_date | DATE | Snapshot date |
+| user_id | UUID | References profiles |
+| rank | INTEGER | Rank within the snapshot |
+| xp | INTEGER | XP total |
+| streak_count | INTEGER | Streak at snapshot time |
+| level_tier | INTEGER | Level at snapshot time |
+| badge_label | TEXT | Highlight badge |
+| created_at | TIMESTAMPTZ | Auto-set |
+
+**Constraint**: UNIQUE(season_name, snapshot_date, user_id)
+
+**RLS Policies**:
+- Authenticated users can read leaderboard snapshots
+- super_admin can CRUD all
+
+---
+
 ## Indexes
 
 All frequently queried columns are indexed:
@@ -240,6 +358,11 @@ All frequently queried columns are indexed:
 - `rewards.user_id`, `rewards.campaign_id`
 - `reward_ledger.user_id`
 - `admin_action_audit.admin_id`, `admin_action_audit.created_at`
+- `gamification_modules.module_type`, `gamification_modules.is_active`
+- `gamification_user_state.user_id`
+- `gamification_progress.user_id`, `gamification_progress.module_id`
+- `gamification_activity_log.user_id`, `gamification_activity_log.created_at`
+- `gamification_leaderboard_snapshots.season_name`, `gamification_leaderboard_snapshots.snapshot_date`, `gamification_leaderboard_snapshots.rank`
 
 ---
 
@@ -257,6 +380,11 @@ All frequently queried columns are indexed:
 | reward_ledger | View own | View all | View all |
 | admin_action_audit | — | — | View all |
 | platform_settings | — | — | View/update all |
+| gamification_modules | View all | View all | CRUD all |
+| gamification_user_state | View/update own | View/update all | CRUD all |
+| gamification_progress | View/update own | View/update all | CRUD all |
+| gamification_activity_log | View own | View all | View all |
+| gamification_leaderboard_snapshots | View all | View all | CRUD all |
 
 ---
 

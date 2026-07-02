@@ -24,6 +24,7 @@ import { CampaignBrowsePage } from '@/features/campaigns/pages/CampaignBrowsePag
 import { CampaignDetailPage } from '@/features/campaigns/pages/CampaignDetailPage';
 import { UserTasksPage } from '@/features/rewards/pages/UserTasksPage';
 import { RewardHistoryPage } from '@/features/rewards/pages/RewardHistoryPage';
+import { GamificationPage } from '@/features/rewards/pages/GamificationPage';
 import { ProfilePage } from '@/features/profile/pages/ProfilePage';
 
 // Admin/Campaign Manager pages
@@ -31,6 +32,7 @@ import { BusinessDashboardPage } from '@/features/admin/pages/BusinessDashboardP
 import { CampaignManagementPage } from '@/features/admin/pages/CampaignManagementPage';
 import { CampaignEditorPage } from '@/features/admin/pages/CampaignEditorPage';
 import { SubmissionReviewPage } from '@/features/admin/pages/SubmissionReviewPage';
+import { GamificationAdminPage } from '@/features/admin/pages/GamificationAdminPage';
 
 // Super Admin pages
 import { AdminPanelPage } from '@/features/admin/pages/AdminPanelPage';
@@ -66,7 +68,9 @@ const routes: RouteObject[] = [
       { path: 'campaigns', element: <CampaignBrowsePage /> },
       { path: 'campaigns/:id', element: <CampaignDetailPage /> },
       { path: 'tasks', element: <UserTasksPage /> },
+      { path: 'wallet', element: <RewardHistoryPage /> },
       { path: 'rewards', element: <RewardHistoryPage /> },
+      { path: 'gamification', element: <GamificationPage /> },
     ],
   },
 
@@ -97,6 +101,8 @@ const routes: RouteObject[] = [
     ),
     children: [
       { index: true, element: <AdminPanelPage /> },
+      { path: 'verification', element: <SubmissionReviewPage /> },
+      { path: 'gamification', element: <GamificationAdminPage /> },
       { path: 'users', element: <UsersManagementPage /> },
       { path: 'settings', element: <PlatformSettingsPage /> },
       { path: 'audit-logs', element: <AuditLogsPage /> },

@@ -15,6 +15,23 @@ export function AppLayout({ children }: PropsWithChildren): JSX.Element {
             Campaign Reward Platform
           </Link>
           <div className="flex items-center gap-3">
+            <nav className="hidden items-center gap-4 text-sm text-mist/80 lg:flex">
+              <Link to="/app" className="transition hover:text-ember">
+                Dashboard
+              </Link>
+              <Link to="/app/campaigns" className="transition hover:text-ember">
+                Campaigns
+              </Link>
+              <Link to="/app/tasks" className="transition hover:text-ember">
+                Tasks
+              </Link>
+              <Link to="/app/wallet" className="transition hover:text-ember">
+                Wallet
+              </Link>
+              <Link to="/app/gamification" className="transition hover:text-ember">
+                Gamification
+              </Link>
+            </nav>
             <span className="hidden text-sm text-mist/80 sm:inline">
               {profile?.fullName ?? 'Guest'} ({profile?.role ?? 'guest'})
             </span>

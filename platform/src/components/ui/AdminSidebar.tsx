@@ -7,7 +7,15 @@ interface AdminSidebarProps {
 
 export function AdminSidebar({ open }: AdminSidebarProps) {
   const menuItems = [
-    { label: 'Overview', path: '/admin' },
+    { label: 'Overview', path: '/admin#overview' },
+    { label: 'Operations', path: '/admin#operations' },
+    { label: 'Finance', path: '/admin#finance' },
+    { label: 'Insights', path: '/admin#insights' },
+    { label: 'Gamification', path: '/admin/gamification' },
+    { label: 'Trust', path: '/admin#trust' },
+    { label: 'Content', path: '/admin#content' },
+    { label: 'Platform', path: '/admin#platform' },
+    { label: 'Verification', path: '/admin/verification' },
     { label: 'Users', path: '/admin/users' },
     { label: 'Settings', path: '/admin/settings' },
     { label: 'Audit Logs', path: '/admin/audit-logs' },

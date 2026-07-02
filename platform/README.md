@@ -90,6 +90,7 @@ See [.env.setup.md](.env.setup.md) for:
 - 🔲 Complete tasks and submit data
 - 🔲 Earn and track rewards
 - 🔲 View reward history and balance
+- 🔲 Daily login, streaks, XP, achievements, and seasonal rewards
 
 ### Admin Control Plane
 - 🔲 User management and role assignment
@@ -97,6 +98,7 @@ See [.env.setup.md](.env.setup.md) for:
 - 🔲 Submission review & approval
 - 🔲 Platform settings (all configurable, no code changes)
 - 🔲 Audit logs for compliance
+- 🔲 Gamification controls for daily login, streaks, XP, wheels, missions, and events
 
 ### Data-Driven Configurability
 - ✅ Campaign rules stored in database
@@ -144,6 +146,7 @@ See `netlify.toml` for deployment configuration.
 - 🔲 **Phase 3**: Campaign management UI
 - 🔲 **Phase 4**: Task completion & rewards mechanics
 - 🔲 **Phase 5**: Admin control plane & platform settings UI
+- 🔲 **Phase 8**: Gamification systems (daily login, streaks, achievements, XP, levels, leaderboards, lucky wheel, mystery rewards, missions, seasonal events, daily quests)
 
 ## Project Structure
 

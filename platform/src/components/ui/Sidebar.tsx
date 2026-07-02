@@ -13,7 +13,8 @@ export function Sidebar({ open }: SidebarProps) {
     { label: 'Dashboard', path: '/app', show: true },
     { label: 'Browse Campaigns', path: '/app/campaigns', show: true },
     { label: 'My Tasks', path: '/app/tasks', show: true },
-    { label: 'Rewards', path: '/app/rewards', show: true },
+    { label: 'Gamification', path: '/app/gamification', show: true },
+    { label: 'Wallet', path: '/app/wallet', show: true },
     { label: 'Business Dashboard', path: '/business', show: permissions.isAdvertiser || permissions.isCampaignManager },
   ];
 

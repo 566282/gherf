@@ -258,6 +258,17 @@ export async function adjustWalletBalance(
 
   if (error) throw error;
 
+  await supabase.from('wallet_transactions').insert({
+    user_id: userId,
+    transaction_type: 'admin_adjustment',
+    amount,
+    balance_after: nextBalance,
+    currency: 'USD',
+    status: 'available',
+    note: reason ?? 'Admin balance adjustment',
+    metadata: { source: 'admin_adjustment' },
+  });
+
   await supabase.from('wallet_ledger').insert({
     user_id: userId,
     amount,
