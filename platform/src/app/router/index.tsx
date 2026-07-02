@@ -24,6 +24,7 @@ import { CampaignBrowsePage } from '@/features/campaigns/pages/CampaignBrowsePag
 import { CampaignDetailPage } from '@/features/campaigns/pages/CampaignDetailPage';
 import { UserTasksPage } from '@/features/rewards/pages/UserTasksPage';
 import { RewardHistoryPage } from '@/features/rewards/pages/RewardHistoryPage';
+import { ProfilePage } from '@/features/profile/pages/ProfilePage';
 
 // Admin/Campaign Manager pages
 import { BusinessDashboardPage } from '@/features/admin/pages/BusinessDashboardPage';
@@ -61,6 +62,7 @@ const routes: RouteObject[] = [
     ),
     children: [
       { index: true, element: <DashboardPage /> },
+      { path: 'profile', element: <ProfilePage /> },
       { path: 'campaigns', element: <CampaignBrowsePage /> },
       { path: 'campaigns/:id', element: <CampaignDetailPage /> },
       { path: 'tasks', element: <UserTasksPage /> },

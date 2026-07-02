@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { signIn } from '@/services/api/auth';
+import { signIn, signInWithGoogle } from '@/services/api/auth';
 
 export function LoginPage(): JSX.Element {
   const navigate = useNavigate();
@@ -18,40 +18,35 @@ export function LoginPage(): JSX.Element {
 
     try {
       await signIn(email, password);
-      navigate('/dashboard', { replace: true });
-    } catch {
-      setError('Unable to sign in. Check your credentials and try again.');
+      navigate('/app', { replace: true });
+    } catch (authenticationError) {
+      setError(authenticationError instanceof Error ? authenticationError.message : 'Unable to sign in.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="grid min-h-[70vh] place-items-center">
+    <div className="grid min-h-[70vh] place-items-center px-4 py-12">
       <Card className="w-full max-w-md">
-        <h1 className="mb-6 text-2xl font-bold">Sign in</h1>
-        <form onSubmit={onSubmit} className="space-y-4">
-          <input
-            className="w-full rounded-xl border border-white/15 bg-ink/40 px-3 py-2 text-mist"
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-          <input
-            className="w-full rounded-xl border border-white/15 bg-ink/40 px-3 py-2 text-mist"
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
+        <p className="text-sm uppercase tracking-[0.2em] text-mint">Authentication</p>
+        <h1 className="mt-2 text-2xl font-bold">Sign in</h1>
+        <p className="mt-2 text-sm text-mist/80">Use your email, Google, or a password reset flow to access the platform.</p>
+        <form onSubmit={onSubmit} className="mt-6 space-y-4">
+          <input className="input-base" type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          <input className="input-base" type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required />
           {error ? <p className="text-sm text-red-300">{error}</p> : null}
-          <Button type="submit" fullWidth disabled={isSubmitting}>
-            {isSubmitting ? 'Signing in...' : 'Sign in'}
-          </Button>
+          <Button type="submit" fullWidth disabled={isSubmitting}>{isSubmitting ? 'Signing in...' : 'Sign in'}</Button>
         </form>
+        <div className="mt-4 space-y-3">
+          <Button type="button" variant="ghost" fullWidth onClick={() => void signInWithGoogle().catch(() => setError('Google sign-in is unavailable right now.'))}>
+            Continue with Google
+          </Button>
+          <div className="flex items-center justify-between text-sm text-mist/75">
+            <Link to="/signup" className="hover:text-ember">Create account</Link>
+            <Link to="/forgot-password" className="hover:text-ember">Forgot password?</Link>
+          </div>
+        </div>
       </Card>
     </div>
   );

@@ -18,6 +18,9 @@ export function AppLayout({ children }: PropsWithChildren): JSX.Element {
             <span className="hidden text-sm text-mist/80 sm:inline">
               {profile?.fullName ?? 'Guest'} ({profile?.role ?? 'guest'})
             </span>
+            <Link to="/app/profile" className="text-sm text-mist/90 hover:text-ember">
+              Profile
+            </Link>
             {profile ? (
               <Button variant="ghost" onClick={() => void signOut()}>
                 Sign out
