@@ -12,6 +12,8 @@ export const env = {
   supabaseUrl: import.meta.env.VITE_SUPABASE_URL ?? '',
   supabaseAnonKey: import.meta.env.VITE_SUPABASE_ANON_KEY ?? '',
   appEnv: import.meta.env.VITE_APP_ENV ?? 'development',
+  assetCdnBaseUrl: import.meta.env.VITE_ASSET_CDN_BASE_URL ?? '',
+  webVitalsEndpoint: import.meta.env.VITE_WEB_VITALS_ENDPOINT ?? '',
   captchaSiteKey: import.meta.env.VITE_TURNSTILE_SITE_KEY ?? '',
   captchaEnabled: (import.meta.env.VITE_SECURITY_CAPTCHA_ENABLED ?? 'false').toLowerCase() === 'true',
   authSessionIdleTimeoutMinutes: Number(import.meta.env.VITE_AUTH_SESSION_IDLE_TIMEOUT_MINUTES ?? '30'),

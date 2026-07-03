@@ -119,9 +119,16 @@ export function AnalyticsReportingPage(): JSX.Element {
     return Math.max(1, ...report.conversionFunnels.map((entry) => entry.users));
   }, [report]);
 
-  const handleExport = (format: ExportFormat) => {
+  const handleExport = async (format: ExportFormat) => {
     if (!report) return;
-    exportAnalyticsReport(report, format, exportScope);
+
+    setStatusMessage(`Preparing ${format.toUpperCase()} export...`);
+    try {
+      await exportAnalyticsReport(report, format, exportScope);
+      setStatusMessage(`Export complete: ${format.toUpperCase()} file downloaded.`);
+    } catch {
+      setStatusMessage(`Export failed. Please retry ${format.toUpperCase()} export.`);
+    }
   };
 
   if (!report) {
@@ -168,9 +175,9 @@ export function AnalyticsReportingPage(): JSX.Element {
                   ))}
                 </select>
               </label>
-              <Button onClick={() => handleExport('csv')}>CSV</Button>
-              <Button onClick={() => handleExport('excel')}>Excel</Button>
-              <Button onClick={() => handleExport('pdf')}>PDF</Button>
+              <Button onClick={() => void handleExport('csv')}>CSV</Button>
+              <Button onClick={() => void handleExport('excel')}>Excel</Button>
+              <Button onClick={() => void handleExport('pdf')}>PDF</Button>
             </div>
             <p className="text-xs text-mist/70">{isLoading ? 'Refreshing analytics...' : statusMessage}</p>
           </div>

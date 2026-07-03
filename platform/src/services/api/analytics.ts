@@ -1,6 +1,7 @@
 import { supabase } from '@/services/supabase/client';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const ANALYTICS_CACHE_TTL_MS = 60 * 1000;
 
 type RangeOption = 7 | 30 | 90;
 
@@ -124,6 +125,34 @@ export interface AnalyticsReport {
   conversionFunnels: ConversionStep[];
 }
 
+type CachedAnalyticsReport = {
+  report: AnalyticsReport;
+  expiresAt: number;
+};
+
+const analyticsReportCache = new Map<RangeOption, CachedAnalyticsReport>();
+
+function getCachedReport(rangeDays: RangeOption): AnalyticsReport | null {
+  const cached = analyticsReportCache.get(rangeDays);
+  if (!cached) {
+    return null;
+  }
+
+  if (cached.expiresAt <= Date.now()) {
+    analyticsReportCache.delete(rangeDays);
+    return null;
+  }
+
+  return cached.report;
+}
+
+function setCachedReport(rangeDays: RangeOption, report: AnalyticsReport): void {
+  analyticsReportCache.set(rangeDays, {
+    report,
+    expiresAt: Date.now() + ANALYTICS_CACHE_TTL_MS,
+  });
+}
+
 function toNumber(value: number | string | null | undefined): number {
   const parsed = typeof value === 'number' ? value : Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -215,8 +244,13 @@ async function fetchCampaignTasks(): Promise<CampaignTaskRow[]> {
   return data as CampaignTaskRow[];
 }
 
-async function fetchSubmissions(): Promise<SubmissionRow[]> {
-  const { data, error } = await supabase.from('task_submissions').select('id,task_id,user_id,status,created_at,submission_data');
+async function fetchSubmissions(sinceIso?: string): Promise<SubmissionRow[]> {
+  let query = supabase.from('task_submissions').select('id,task_id,user_id,status,created_at,submission_data');
+  if (sinceIso) {
+    query = query.gte('created_at', sinceIso);
+  }
+
+  const { data, error } = await query;
   if (error || !data) return [];
   return data as SubmissionRow[];
 }
@@ -227,14 +261,24 @@ async function fetchRewards(): Promise<RewardRow[]> {
   return data as RewardRow[];
 }
 
-async function fetchWithdrawals(): Promise<WithdrawalRow[]> {
-  const { data, error } = await supabase.from('withdrawal_requests').select('id,status,method,amount,created_at');
+async function fetchWithdrawals(sinceIso?: string): Promise<WithdrawalRow[]> {
+  let query = supabase.from('withdrawal_requests').select('id,status,method,amount,created_at');
+  if (sinceIso) {
+    query = query.gte('created_at', sinceIso);
+  }
+
+  const { data, error } = await query;
   if (error || !data) return [];
   return data as WithdrawalRow[];
 }
 
-async function fetchWalletTransactions(): Promise<WalletTransactionRow[]> {
-  const { data, error } = await supabase.from('wallet_transactions').select('id,transaction_type,amount,created_at');
+async function fetchWalletTransactions(sinceIso?: string): Promise<WalletTransactionRow[]> {
+  let query = supabase.from('wallet_transactions').select('id,transaction_type,amount,created_at');
+  if (sinceIso) {
+    query = query.gte('created_at', sinceIso);
+  }
+
+  const { data, error } = await query;
   if (error || !data) return [];
   return data as WalletTransactionRow[];
 }
@@ -268,18 +312,25 @@ function buildConversionSteps(signups: number, active: number, submissions: numb
 }
 
 export async function listAnalyticsReport(rangeDays: RangeOption = 30): Promise<AnalyticsReport> {
+  const cachedReport = getCachedReport(rangeDays);
+  if (cachedReport) {
+    return cachedReport;
+  }
+
+  const sinceTime = Date.now() - rangeDays * DAY_MS;
+  const sinceIso = new Date(sinceTime).toISOString();
+
   const [profiles, campaigns, campaignTasks, submissions, rewards, withdrawals, walletTransactions] = await Promise.all([
     fetchProfiles(),
     fetchCampaigns(),
     fetchCampaignTasks(),
-    fetchSubmissions(),
+    fetchSubmissions(sinceIso),
     fetchRewards(),
-    fetchWithdrawals(),
-    fetchWalletTransactions(),
+    fetchWithdrawals(sinceIso),
+    fetchWalletTransactions(sinceIso),
   ]);
 
   const dateLabels = buildDateRange(rangeDays);
-  const sinceTime = Date.now() - rangeDays * DAY_MS;
 
   const growthByDay = profiles.reduce<Record<string, number>>((accumulator, profile) => {
     if (!inWindow(profile.created_at, sinceTime)) return accumulator;
@@ -378,7 +429,7 @@ export async function listAnalyticsReport(rangeDays: RangeOption = 30): Promise<
     (reward) => inWindow(reward.created_at, sinceTime) && reward.status === 'claimed',
   );
 
-  return {
+  const report: AnalyticsReport = {
     generatedAt: new Date().toISOString(),
     rangeDays,
     kpis: {
@@ -413,4 +464,11 @@ export async function listAnalyticsReport(rangeDays: RangeOption = 30): Promise<
       claimedRewardsInWindow.length,
     ),
   };
+
+  setCachedReport(rangeDays, report);
+  return report;
+}
+
+export function invalidateAnalyticsReportCache(): void {
+  analyticsReportCache.clear();
 }

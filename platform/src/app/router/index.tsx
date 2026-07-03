@@ -1,58 +1,102 @@
-import { createBrowserRouter, RouteObject, Navigate } from 'react-router-dom';
+import { lazy, Suspense, type ComponentType } from 'react';
+import { createBrowserRouter, type RouteObject } from 'react-router-dom';
 import { ProtectedRoute } from '@/hooks/ProtectedRoute';
 import { UserRole } from '@/types';
 
-// Layouts
-import { PublicLayout } from '@/app/layouts/PublicLayout';
-import { AppLayout } from '@/app/layouts/AppLayout';
-import { AdminLayout } from '@/app/layouts/AdminLayout';
+const loadPublicLayout = () => import('@/app/layouts/PublicLayout');
+const loadAppLayout = () => import('@/app/layouts/AppLayout');
+const loadAdminLayout = () => import('@/app/layouts/AdminLayout');
 
-// Auth pages
-import { LoginPage } from '@/features/auth/pages/LoginPage';
-import { SignupPage } from '@/features/auth/pages/SignupPage';
-import { ForgotPasswordPage } from '@/features/auth/pages/ForgotPasswordPage';
-import { ResetPasswordPage } from '@/features/auth/pages/ResetPasswordPage';
+const PublicLayout = lazy(() => loadPublicLayout().then((module) => ({ default: module.PublicLayout })));
+const AppLayout = lazy(() => loadAppLayout().then((module) => ({ default: module.AppLayout })));
+const AdminLayout = lazy(() => loadAdminLayout().then((module) => ({ default: module.AdminLayout })));
 
-// Public pages
-import { HomePage } from '@/features/home/pages/HomePage';
-import { UnauthorizedPage } from '@/features/errors/pages/UnauthorizedPage';
-import { NotFoundPage } from '@/features/errors/pages/NotFoundPage';
+const loadLoginPage = () => import('@/features/auth/pages/LoginPage');
+const loadSignupPage = () => import('@/features/auth/pages/SignupPage');
+const loadDashboardPage = () => import('@/features/dashboard/pages/DashboardPage');
+const loadCampaignBrowsePage = () => import('@/features/campaigns/pages/CampaignBrowsePage');
 
-// Authenticated pages
-import { DashboardPage } from '@/features/dashboard/pages/DashboardPage';
-import { CampaignBrowsePage } from '@/features/campaigns/pages/CampaignBrowsePage';
-import { CampaignDetailPage } from '@/features/campaigns/pages/CampaignDetailPage';
-import { UserTasksPage } from '@/features/rewards/pages/UserTasksPage';
-import { RewardHistoryPage } from '@/features/rewards/pages/RewardHistoryPage';
-import { GamificationPage } from '@/features/rewards/pages/GamificationPage';
-import { ProfilePage } from '@/features/profile/pages/ProfilePage';
+const LoginPage = lazy(() => loadLoginPage().then((module) => ({ default: module.LoginPage })));
+const SignupPage = lazy(() => loadSignupPage().then((module) => ({ default: module.SignupPage })));
+const ForgotPasswordPage = lazy(() =>
+  import('@/features/auth/pages/ForgotPasswordPage').then((module) => ({ default: module.ForgotPasswordPage })),
+);
+const ResetPasswordPage = lazy(() =>
+  import('@/features/auth/pages/ResetPasswordPage').then((module) => ({ default: module.ResetPasswordPage })),
+);
 
-// Admin/Campaign Manager pages
-import { BusinessDashboardPage } from '@/features/admin/pages/BusinessDashboardPage';
-import { CampaignManagementPage } from '@/features/admin/pages/CampaignManagementPage';
-import { CampaignEditorPage } from '@/features/admin/pages/CampaignEditorPage';
-import { SubmissionReviewPage } from '@/features/admin/pages/SubmissionReviewPage';
-import { GamificationAdminPage } from '@/features/admin/pages/GamificationAdminPage';
-import { CommunicationSystemPage } from '@/features/admin/pages/CommunicationSystemPage';
-import { AnalyticsReportingPage } from '@/features/admin/pages/AnalyticsReportingPage';
+const HomePage = lazy(() => import('@/features/home/pages/HomePage').then((module) => ({ default: module.HomePage })));
+const UnauthorizedPage = lazy(() =>
+  import('@/features/errors/pages/UnauthorizedPage').then((module) => ({ default: module.UnauthorizedPage })),
+);
+const NotFoundPage = lazy(() => import('@/features/errors/pages/NotFoundPage').then((module) => ({ default: module.NotFoundPage })));
 
-// Super Admin pages
-import { AdminPanelPage } from '@/features/admin/pages/AdminPanelPage';
-import { UsersManagementPage } from '@/features/admin/pages/UsersManagementPage';
-import { PlatformSettingsPage } from '@/features/admin/pages/PlatformSettingsPage';
-import { AuditLogsPage } from '@/features/admin/pages/AuditLogsPage';
+const DashboardPage = lazy(() => loadDashboardPage().then((module) => ({ default: module.DashboardPage })));
+const CampaignBrowsePage = lazy(() =>
+  loadCampaignBrowsePage().then((module) => ({ default: module.CampaignBrowsePage })),
+);
+const CampaignDetailPage = lazy(() =>
+  import('@/features/campaigns/pages/CampaignDetailPage').then((module) => ({ default: module.CampaignDetailPage })),
+);
+const UserTasksPage = lazy(() => import('@/features/rewards/pages/UserTasksPage').then((module) => ({ default: module.UserTasksPage })));
+const RewardHistoryPage = lazy(() =>
+  import('@/features/rewards/pages/RewardHistoryPage').then((module) => ({ default: module.RewardHistoryPage })),
+);
+const GamificationPage = lazy(() =>
+  import('@/features/rewards/pages/GamificationPage').then((module) => ({ default: module.GamificationPage })),
+);
+const ProfilePage = lazy(() => import('@/features/profile/pages/ProfilePage').then((module) => ({ default: module.ProfilePage })));
+
+const BusinessDashboardPage = lazy(() =>
+  import('@/features/admin/pages/BusinessDashboardPage').then((module) => ({ default: module.BusinessDashboardPage })),
+);
+const CampaignManagementPage = lazy(() =>
+  import('@/features/admin/pages/CampaignManagementPage').then((module) => ({ default: module.CampaignManagementPage })),
+);
+const CampaignEditorPage = lazy(() =>
+  import('@/features/admin/pages/CampaignEditorPage').then((module) => ({ default: module.CampaignEditorPage })),
+);
+const SubmissionReviewPage = lazy(() =>
+  import('@/features/admin/pages/SubmissionReviewPage').then((module) => ({ default: module.SubmissionReviewPage })),
+);
+const GamificationAdminPage = lazy(() =>
+  import('@/features/admin/pages/GamificationAdminPage').then((module) => ({ default: module.GamificationAdminPage })),
+);
+const CommunicationSystemPage = lazy(() =>
+  import('@/features/admin/pages/CommunicationSystemPage').then((module) => ({ default: module.CommunicationSystemPage })),
+);
+const AnalyticsReportingPage = lazy(() =>
+  import('@/features/admin/pages/AnalyticsReportingPage').then((module) => ({ default: module.AnalyticsReportingPage })),
+);
+
+const AdminPanelPage = lazy(() => import('@/features/admin/pages/AdminPanelPage').then((module) => ({ default: module.AdminPanelPage })));
+const UsersManagementPage = lazy(() =>
+  import('@/features/admin/pages/UsersManagementPage').then((module) => ({ default: module.UsersManagementPage })),
+);
+const PlatformSettingsPage = lazy(() =>
+  import('@/features/admin/pages/PlatformSettingsPage').then((module) => ({ default: module.PlatformSettingsPage })),
+);
+const AuditLogsPage = lazy(() => import('@/features/admin/pages/AuditLogsPage').then((module) => ({ default: module.AuditLogsPage })));
+
+function routeElement(Component: ComponentType): JSX.Element {
+  return (
+    <Suspense fallback={<div className="grid min-h-[30vh] place-items-center text-sm text-mist/80">Loading page...</div>}>
+      <Component />
+    </Suspense>
+  );
+}
 
 const routes: RouteObject[] = [
   {
     path: '/',
-    element: <PublicLayout />,
+    element: routeElement(PublicLayout),
     children: [
-      { index: true, element: <HomePage /> },
-      { path: 'login', element: <LoginPage /> },
-      { path: 'signup', element: <SignupPage /> },
-      { path: 'forgot-password', element: <ForgotPasswordPage /> },
-      { path: 'reset-password', element: <ResetPasswordPage /> },
-      { path: 'unauthorized', element: <UnauthorizedPage /> },
+      { index: true, element: routeElement(HomePage) },
+      { path: 'login', element: routeElement(LoginPage) },
+      { path: 'signup', element: routeElement(SignupPage) },
+      { path: 'forgot-password', element: routeElement(ForgotPasswordPage) },
+      { path: 'reset-password', element: routeElement(ResetPasswordPage) },
+      { path: 'unauthorized', element: routeElement(UnauthorizedPage) },
     ],
   },
 
@@ -61,18 +105,18 @@ const routes: RouteObject[] = [
     path: '/app',
     element: (
       <ProtectedRoute requiredRoles={[UserRole.REGISTERED_USER]}>
-        <AppLayout />
+        {routeElement(AppLayout)}
       </ProtectedRoute>
     ),
     children: [
-      { index: true, element: <DashboardPage /> },
-      { path: 'profile', element: <ProfilePage /> },
-      { path: 'campaigns', element: <CampaignBrowsePage /> },
-      { path: 'campaigns/:id', element: <CampaignDetailPage /> },
-      { path: 'tasks', element: <UserTasksPage /> },
-      { path: 'wallet', element: <RewardHistoryPage /> },
-      { path: 'rewards', element: <RewardHistoryPage /> },
-      { path: 'gamification', element: <GamificationPage /> },
+      { index: true, element: routeElement(DashboardPage) },
+      { path: 'profile', element: routeElement(ProfilePage) },
+      { path: 'campaigns', element: routeElement(CampaignBrowsePage) },
+      { path: 'campaigns/:id', element: routeElement(CampaignDetailPage) },
+      { path: 'tasks', element: routeElement(UserTasksPage) },
+      { path: 'wallet', element: routeElement(RewardHistoryPage) },
+      { path: 'rewards', element: routeElement(RewardHistoryPage) },
+      { path: 'gamification', element: routeElement(GamificationPage) },
     ],
   },
 
@@ -81,15 +125,15 @@ const routes: RouteObject[] = [
     path: '/business',
     element: (
       <ProtectedRoute requiredRoles={[UserRole.ADVERTISER, UserRole.CAMPAIGN_MANAGER]}>
-        <AppLayout />
+        {routeElement(AppLayout)}
       </ProtectedRoute>
     ),
     children: [
-      { index: true, element: <BusinessDashboardPage /> },
-      { path: 'campaigns', element: <CampaignManagementPage /> },
-      { path: 'campaigns/new', element: <CampaignEditorPage /> },
-      { path: 'campaigns/:id/edit', element: <CampaignEditorPage /> },
-      { path: 'submissions/:campaignId', element: <SubmissionReviewPage /> },
+      { index: true, element: routeElement(BusinessDashboardPage) },
+      { path: 'campaigns', element: routeElement(CampaignManagementPage) },
+      { path: 'campaigns/new', element: routeElement(CampaignEditorPage) },
+      { path: 'campaigns/:id/edit', element: routeElement(CampaignEditorPage) },
+      { path: 'submissions/:campaignId', element: routeElement(SubmissionReviewPage) },
     ],
   },
 
@@ -98,23 +142,48 @@ const routes: RouteObject[] = [
     path: '/admin',
     element: (
       <ProtectedRoute requiredRoles={[UserRole.SUPER_ADMIN]}>
-        <AdminLayout />
+        {routeElement(AdminLayout)}
       </ProtectedRoute>
     ),
     children: [
-      { index: true, element: <AdminPanelPage /> },
-      { path: 'verification', element: <SubmissionReviewPage /> },
-      { path: 'gamification', element: <GamificationAdminPage /> },
-      { path: 'communications', element: <CommunicationSystemPage /> },
-      { path: 'analytics', element: <AnalyticsReportingPage /> },
-      { path: 'users', element: <UsersManagementPage /> },
-      { path: 'settings', element: <PlatformSettingsPage /> },
-      { path: 'audit-logs', element: <AuditLogsPage /> },
+      { index: true, element: routeElement(AdminPanelPage) },
+      { path: 'verification', element: routeElement(SubmissionReviewPage) },
+      { path: 'gamification', element: routeElement(GamificationAdminPage) },
+      { path: 'communications', element: routeElement(CommunicationSystemPage) },
+      { path: 'analytics', element: routeElement(AnalyticsReportingPage) },
+      { path: 'users', element: routeElement(UsersManagementPage) },
+      { path: 'settings', element: routeElement(PlatformSettingsPage) },
+      { path: 'audit-logs', element: routeElement(AuditLogsPage) },
     ],
   },
 
   // Catch-all
-  { path: '*', element: <NotFoundPage /> },
+  { path: '*', element: routeElement(NotFoundPage) },
 ];
 
 export const router = createBrowserRouter(routes);
+
+export function preloadCriticalRoutes(): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  const preload = () => {
+    void Promise.allSettled([
+      loadPublicLayout(),
+      loadLoginPage(),
+      loadSignupPage(),
+      loadAppLayout(),
+      loadDashboardPage(),
+      loadCampaignBrowsePage(),
+      loadAdminLayout(),
+    ]);
+  };
+
+  if ('requestIdleCallback' in window) {
+    window.requestIdleCallback(preload, { timeout: 1800 });
+    return;
+  }
+
+  window.setTimeout(preload, 900);
+}

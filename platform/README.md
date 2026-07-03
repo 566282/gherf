@@ -160,6 +160,7 @@ See `netlify.toml` for deployment configuration.
 - 🔲 **Phase 9**: Communication system (internal messaging, editable email/push/SMS templates, live announcements, promotional notifications)
 - ✅ **Phase 10**: Analytics & reporting dashboards (growth, revenue, campaign/reward/withdrawal/referral/geography/device/browser/funnel analytics with CSV/Excel/PDF exports)
 - ✅ **Phase 11**: Security hardening (RLS enforcement, rate limiting, CAPTCHA, CSRF, XSS/SQLi prevention, audit/session/device/IP monitoring, encryption controls, backup strategy)
+- ✅ **Phase 14**: Performance optimization (lazy loading + route preloading, static asset caching/CDN support, analytics caching, DB indexing/query tuning, compression, SEO/accessibility, Core Web Vitals instrumentation)
 
 ## Project Structure
 
