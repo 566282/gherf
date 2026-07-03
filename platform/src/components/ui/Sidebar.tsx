@@ -1,44 +1,71 @@
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { usePermissions } from '@/hooks/useAuth';
+import clsx from 'clsx';
 
 interface SidebarProps {
   open: boolean;
   onToggle?: () => void;
 }
 
-export function Sidebar({ open }: SidebarProps) {
+export function Sidebar({ open, onToggle }: SidebarProps) {
   const permissions = usePermissions();
+  const location = useLocation();
 
   const menuItems = [
-    { label: 'Dashboard', path: '/app', show: true },
-    { label: 'Browse Campaigns', path: '/app/campaigns', show: true },
-    { label: 'My Tasks', path: '/app/tasks', show: true },
-    { label: 'Gamification', path: '/app/gamification', show: true },
-    { label: 'Wallet', path: '/app/wallet', show: true },
-    { label: 'Business Dashboard', path: '/business', show: permissions.isAdvertiser || permissions.isCampaignManager },
+    { label: 'Dashboard', path: '/app' },
+    { label: 'Browse Campaigns', path: '/app/campaigns' },
+    { label: 'My Tasks', path: '/app/tasks' },
+    { label: 'Gamification', path: '/app/gamification' },
+    { label: 'Wallet', path: '/app/wallet' },
+    ...(permissions.isAdvertiser || permissions.isCampaignManager
+      ? [{ label: 'Business Dashboard', path: '/business' }]
+      : []),
   ];
 
   return (
     <aside
-      className={`${open ? 'w-64' : 'w-20'} bg-slate/50 border-r border-mist/20 transition-all duration-300 overflow-y-auto`}
+      aria-label="App navigation"
+      className={clsx(
+        open ? 'w-64' : 'w-20',
+        'bg-slate/50 border-r border-mist/20 transition-all duration-300 overflow-y-auto flex flex-col',
+      )}
     >
-      <div className="p-4">
-        <h1 className="font-bold text-ember text-xl">CR</h1>
+      <div className="flex items-center justify-between p-4">
+        <span className="font-bold text-ember text-xl" aria-hidden={!open || undefined}>
+          {open ? 'CR Platform' : 'CR'}
+        </span>
+        {onToggle && (
+          <button
+            type="button"
+            onClick={onToggle}
+            aria-label={open ? 'Collapse sidebar' : 'Expand sidebar'}
+            className="ml-auto text-mist hover:text-ember focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember rounded"
+          >
+            {open ? '←' : '→'}
+          </button>
+        )}
       </div>
 
-      <nav className="space-y-1 px-2 py-4">
-        {menuItems
-          .filter((item) => item.show)
-          .map((item) => (
+      <nav aria-label="Primary" className="space-y-1 px-2 py-4">
+        {menuItems.map((item) => {
+          const active = location.pathname === item.path || location.pathname.startsWith(item.path + '/');
+          return (
             <Link
               key={item.path}
               to={item.path}
-              className="block px-4 py-3 text-sm rounded-lg hover:bg-mist/10 text-mist hover:text-ember transition-colors"
-              title={!open ? item.label : undefined}
+              aria-label={!open ? item.label : undefined}
+              aria-current={active ? 'page' : undefined}
+              className={clsx(
+                'block px-4 py-3 text-sm rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember',
+                active
+                  ? 'bg-ember/20 text-ember font-medium'
+                  : 'text-mist hover:bg-mist/10 hover:text-ember',
+              )}
             >
-              {open ? item.label : item.label.charAt(0)}
+              {open ? item.label : <span aria-hidden="true">{item.label.charAt(0)}</span>}
             </Link>
-          ))}
+          );
+        })}
       </nav>
     </aside>
   );
