@@ -1,6 +1,7 @@
 import type { PropsWithChildren } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from '@/app/providers/AuthProvider';
+import { ErrorBoundary } from '@/app/providers/ErrorBoundary';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -18,8 +19,10 @@ const queryClient = new QueryClient({
 
 export function AppProviders({ children }: PropsWithChildren): JSX.Element {
   return (
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>{children}</AuthProvider>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>{children}</AuthProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }

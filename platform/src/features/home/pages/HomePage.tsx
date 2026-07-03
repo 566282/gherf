@@ -1,4 +1,5 @@
 import { Card } from '@/components/ui/Card';
+import { Link } from 'react-router-dom';
 
 export function HomePage() {
   return (
@@ -10,12 +11,15 @@ export function HomePage() {
           complete tasks, get rewarded.
         </p>
         <div className="flex gap-4 justify-center">
-          <a href="/login" className="px-6 py-3 bg-ember rounded-lg hover:bg-orange-600 transition">
+          <Link to="/login" className="px-6 py-3 bg-ember rounded-lg hover:bg-orange-600 transition">
             Login
-          </a>
-          <a href="/signup" className="px-6 py-3 bg-mint rounded-lg text-ink hover:bg-green-600 transition">
+          </Link>
+          <Link
+            to="/signup"
+            className="px-6 py-3 bg-mint rounded-lg text-ink hover:bg-green-600 transition"
+          >
             Sign Up
-          </a>
+          </Link>
         </div>
       </Card>
     </div>
