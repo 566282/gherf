@@ -15,6 +15,7 @@ export function AdminSidebar({ open }: AdminSidebarProps) {
     { label: 'Trust', path: '/admin#trust' },
     { label: 'Content', path: '/admin#content' },
     { label: 'Platform', path: '/admin#platform' },
+    { label: 'Communications', path: '/admin/communications' },
     { label: 'Verification', path: '/admin/verification' },
     { label: 'Users', path: '/admin/users' },
     { label: 'Settings', path: '/admin/settings' },

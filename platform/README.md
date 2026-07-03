@@ -99,6 +99,7 @@ See [.env.setup.md](.env.setup.md) for:
 - 🔲 Platform settings (all configurable, no code changes)
 - 🔲 Audit logs for compliance
 - 🔲 Gamification controls for daily login, streaks, XP, wheels, missions, and events
+- 🔲 Communication system (internal messaging, email/push/SMS templates, live announcements, promotional notifications)
 
 ### Data-Driven Configurability
 - ✅ Campaign rules stored in database
@@ -147,6 +148,7 @@ See `netlify.toml` for deployment configuration.
 - 🔲 **Phase 4**: Task completion & rewards mechanics
 - 🔲 **Phase 5**: Admin control plane & platform settings UI
 - 🔲 **Phase 8**: Gamification systems (daily login, streaks, achievements, XP, levels, leaderboards, lucky wheel, mystery rewards, missions, seasonal events, daily quests)
+- 🔲 **Phase 9**: Communication system (internal messaging, editable email/push/SMS templates, live announcements, promotional notifications)
 
 ## Project Structure
 

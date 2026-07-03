@@ -304,7 +304,7 @@ export async function listActivityLogs(limit = 50): Promise<ActivityLogItem[]> {
 export async function listNotifications(userId: string): Promise<NotificationItem[]> {
   const { data, error } = await supabase
     .from('user_notifications')
-    .select('id,title,message,type,is_read,created_at')
+    .select('id,title,message,type,channel,category,template_key,is_promotional,metadata,is_read,created_at')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .limit(8);
@@ -316,6 +316,11 @@ export async function listNotifications(userId: string): Promise<NotificationIte
     title: row.title,
     message: row.message,
     type: row.type,
+    channel: row.channel,
+    category: row.category,
+    templateKey: row.template_key,
+    isPromotional: row.is_promotional,
+    metadata: row.metadata,
     isRead: row.is_read,
     createdAt: row.created_at,
   }));

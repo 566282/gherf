@@ -99,7 +99,7 @@ export function ProfilePage(): JSX.Element {
         <Card>
           <h2 className="text-xl font-semibold">Notifications</h2>
           <ul className="mt-4 space-y-3 text-sm text-mist/80">
-            {notifications.length ? notifications.map((item) => <li key={item.id} className="rounded-xl border border-white/10 bg-white/5 p-3"><p className="font-medium text-white">{item.title}</p><p>{item.message}</p></li>) : <li>No notifications yet.</li>}
+            {notifications.length ? notifications.map((item) => <li key={item.id} className="rounded-xl border border-white/10 bg-white/5 p-3"><div className="flex flex-wrap items-center gap-2"><p className="font-medium text-white">{item.title}</p>{item.category ? <span className="rounded-full border border-white/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-mist/70">{item.category.replace(/_/g, ' ')}</span> : null}{item.channel ? <span className="rounded-full border border-white/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-mist/70">{item.channel.replace(/_/g, ' ')}</span> : null}</div><p>{item.message}</p></li>) : <li>No notifications yet.</li>}
           </ul>
         </Card>
         <Card>
