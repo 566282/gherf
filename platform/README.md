@@ -134,8 +134,17 @@ See `netlify.toml` for deployment configuration.
 ## Security
 
 - All authentication handled by Supabase Auth
-- Row-Level Security policies enforce access control at database level
+- Row-Level Security policies enforce access control at database level (including FORCE RLS hardening)
+- Server-side and client-side rate limiting for auth-sensitive flows
+- CAPTCHA enforcement hooks for sign-up, login, and password reset
+- CSRF token lifecycle for write operations and secured request metadata headers
+- Input sanitization and HTML escaping guards for XSS prevention
+- Parameterized Supabase query patterns plus sanitized search filtering for SQL injection prevention
 - Admin actions logged and auditable
+- Security audit logs, session telemetry, and device/IP observation tables
+- Session hardening with idle timeout and revocation workflow
+- Hashed security telemetry fields (pgcrypto SHA-256) for encryption-at-rest of sensitive monitoring data
+- Backup and recovery policy stored in platform settings with PITR and restore drill requirements
 - Environment variables for all secrets
 - No hard-coded credentials or API keys
 
@@ -150,6 +159,7 @@ See `netlify.toml` for deployment configuration.
 - 🔲 **Phase 8**: Gamification systems (daily login, streaks, achievements, XP, levels, leaderboards, lucky wheel, mystery rewards, missions, seasonal events, daily quests)
 - 🔲 **Phase 9**: Communication system (internal messaging, editable email/push/SMS templates, live announcements, promotional notifications)
 - ✅ **Phase 10**: Analytics & reporting dashboards (growth, revenue, campaign/reward/withdrawal/referral/geography/device/browser/funnel analytics with CSV/Excel/PDF exports)
+- ✅ **Phase 11**: Security hardening (RLS enforcement, rate limiting, CAPTCHA, CSRF, XSS/SQLi prevention, audit/session/device/IP monitoring, encryption controls, backup strategy)
 
 ## Project Structure
 

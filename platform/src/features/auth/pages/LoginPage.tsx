@@ -2,12 +2,14 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { env } from '@/lib/env';
 import { signIn, signInWithGoogle } from '@/services/api/auth';
 
 export function LoginPage(): JSX.Element {
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [captchaToken, setCaptchaToken] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -16,8 +18,14 @@ export function LoginPage(): JSX.Element {
     setIsSubmitting(true);
     setError(null);
 
+    if (env.captchaEnabled && !captchaToken.trim()) {
+      setError('Complete CAPTCHA verification before signing in.');
+      setIsSubmitting(false);
+      return;
+    }
+
     try {
-      await signIn(email, password);
+      await signIn(email, password, captchaToken || undefined);
       navigate('/app', { replace: true });
     } catch (authenticationError) {
       setError(authenticationError instanceof Error ? authenticationError.message : 'Unable to sign in.');
@@ -35,6 +43,15 @@ export function LoginPage(): JSX.Element {
         <form onSubmit={onSubmit} className="mt-6 space-y-4">
           <input className="input-base" type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required />
           <input className="input-base" type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+          {env.captchaEnabled ? (
+            <input
+              className="input-base"
+              placeholder="CAPTCHA token"
+              value={captchaToken}
+              onChange={(e) => setCaptchaToken(e.target.value)}
+              required
+            />
+          ) : null}
           {error ? <p className="text-sm text-red-300">{error}</p> : null}
           <Button type="submit" fullWidth disabled={isSubmitting}>{isSubmitting ? 'Signing in...' : 'Sign in'}</Button>
         </form>

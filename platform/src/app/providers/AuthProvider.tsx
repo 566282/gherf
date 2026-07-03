@@ -1,5 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import type { PropsWithChildren } from 'react';
+import { env } from '@/lib/env';
+import { clearSecuritySessionState } from '@/lib/security';
 import { getCurrentProfile } from '@/services/api/auth';
 import { supabase } from '@/services/supabase/client';
 import type { AuthState } from '@/types/auth';
@@ -32,13 +34,50 @@ export function AuthProvider({ children }: PropsWithChildren): JSX.Element {
   useEffect(() => {
     void refreshProfile();
 
+    const idleTimeoutMs = Math.max(5, env.authSessionIdleTimeoutMinutes) * 60 * 1000;
+    let timeoutHandle: number | undefined;
+
+    const clearIdleTimeout = () => {
+      if (timeoutHandle) {
+        window.clearTimeout(timeoutHandle);
+      }
+    };
+
+    const scheduleIdleTimeout = () => {
+      clearIdleTimeout();
+      timeoutHandle = window.setTimeout(() => {
+        void supabase.auth.signOut();
+        clearSecuritySessionState();
+      }, idleTimeoutMs);
+    };
+
+    const onActivity = () => {
+      scheduleIdleTimeout();
+    };
+
+    window.addEventListener('pointerdown', onActivity);
+    window.addEventListener('keydown', onActivity);
+    window.addEventListener('visibilitychange', onActivity);
+    scheduleIdleTimeout();
+
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(() => {
+    } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') {
+        clearSecuritySessionState();
+      }
+
+      onActivity();
       void refreshProfile();
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      clearIdleTimeout();
+      window.removeEventListener('pointerdown', onActivity);
+      window.removeEventListener('keydown', onActivity);
+      window.removeEventListener('visibilitychange', onActivity);
+      subscription.unsubscribe();
+    };
   }, []);
 
   const value = useMemo(() => ({ ...state, refreshProfile }), [state]);
