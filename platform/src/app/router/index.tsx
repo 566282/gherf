@@ -34,6 +34,7 @@ import { CampaignEditorPage } from '@/features/admin/pages/CampaignEditorPage';
 import { SubmissionReviewPage } from '@/features/admin/pages/SubmissionReviewPage';
 import { GamificationAdminPage } from '@/features/admin/pages/GamificationAdminPage';
 import { CommunicationSystemPage } from '@/features/admin/pages/CommunicationSystemPage';
+import { AnalyticsReportingPage } from '@/features/admin/pages/AnalyticsReportingPage';
 
 // Super Admin pages
 import { AdminPanelPage } from '@/features/admin/pages/AdminPanelPage';
@@ -105,6 +106,7 @@ const routes: RouteObject[] = [
       { path: 'verification', element: <SubmissionReviewPage /> },
       { path: 'gamification', element: <GamificationAdminPage /> },
       { path: 'communications', element: <CommunicationSystemPage /> },
+      { path: 'analytics', element: <AnalyticsReportingPage /> },
       { path: 'users', element: <UsersManagementPage /> },
       { path: 'settings', element: <PlatformSettingsPage /> },
       { path: 'audit-logs', element: <AuditLogsPage /> },
