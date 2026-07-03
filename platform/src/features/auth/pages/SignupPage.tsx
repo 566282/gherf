@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { env } from '@/lib/env';
 import { signUp } from '@/services/api/auth';
 import type { AppRole } from '@/types/auth';
 
@@ -19,7 +18,6 @@ export function SignupPage(): JSX.Element {
   const [role, setRole] = useState<AppRole>('registered_user');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [captchaToken, setCaptchaToken] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -31,16 +29,11 @@ export function SignupPage(): JSX.Element {
       return;
     }
 
-    if (env.captchaEnabled && !captchaToken.trim()) {
-      setMessage('Complete CAPTCHA verification before creating an account.');
-      return;
-    }
-
     setIsSubmitting(true);
     setMessage(null);
 
     try {
-      await signUp(email, password, fullName, referralCode || undefined, role, captchaToken || undefined);
+      await signUp(email, password, fullName, referralCode || undefined, role);
       navigate('/login', { replace: true });
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to create account.');
@@ -64,15 +57,6 @@ export function SignupPage(): JSX.Element {
               <option key={option.value} value={option.value}>{option.label}</option>
             ))}
           </select>
-          {env.captchaEnabled ? (
-            <input
-              className="input-base md:col-span-2"
-              placeholder="CAPTCHA token"
-              value={captchaToken}
-              onChange={(e) => setCaptchaToken(e.target.value)}
-              required
-            />
-          ) : null}
           <input className="input-base" type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required />
           <input className="input-base" type="password" placeholder="Confirm password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required />
           {message ? <p className="md:col-span-2 text-sm text-red-300">{message}</p> : null}

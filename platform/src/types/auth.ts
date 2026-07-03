@@ -40,11 +40,6 @@ export interface NotificationItem {
   title: string;
   message: string;
   type: 'info' | 'success' | 'warning' | 'critical';
-  channel?: 'in_app' | 'email' | 'push' | 'sms';
-  category?: 'internal' | 'transactional' | 'live_announcement' | 'promotional';
-  templateKey?: string | null;
-  isPromotional?: boolean;
-  metadata?: Record<string, unknown> | null;
   isRead: boolean;
   createdAt: string;
 }

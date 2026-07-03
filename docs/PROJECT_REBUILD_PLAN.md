@@ -229,6 +229,25 @@ Exit criteria:
 - Lighthouse/perf and responsive checks meet agreed thresholds
 - Security/RLS regression tests pass
 
+## Phase 15: Deployment and Operations
+
+Scope:
+- Netlify production and preview deployments for the frontend
+- Supabase production database and authentication environment
+- GitHub Actions CI for lint, typecheck, test, and build validation
+- Environment variable management for local, preview, and production contexts
+- Production monitoring, error logging, analytics, and backup operations
+
+Deliverables:
+- CI pipeline that validates every pull request
+- Production deployment workflow with explicit release gating
+- Deployment runbook for rollback, monitoring, and backup restore steps
+
+Exit criteria:
+- Main branch builds deploy successfully through the release pipeline
+- Production environment variables are documented and configured
+- Monitoring, logging, analytics, and backup ownership are defined
+
 ## 5) Testing Strategy by Layer
 
 - Unit tests: pure utilities, validators, rule evaluators

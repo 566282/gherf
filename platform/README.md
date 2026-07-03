@@ -131,6 +131,26 @@ Test coverage includes:
 
 See `netlify.toml` for deployment configuration.
 
+### GitHub Actions
+
+1. Pull requests run lint, typecheck, test, and build validation.
+2. Pushes to `main` can deploy to Netlify once the production secrets are configured.
+3. Required secrets: `NETLIFY_AUTH_TOKEN`, `NETLIFY_SITE_ID`.
+4. Required build variables: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_APP_ENV=production`.
+
+### Supabase Production
+
+1. Use a dedicated production Supabase project and database branch.
+2. Apply migrations before promoting a release.
+3. Keep service-role credentials out of the frontend and store them only in secure server contexts.
+4. Verify RLS, storage policies, and seed data before cutover.
+
+### Monitoring, Analytics, and Backups
+
+1. Track runtime errors and deployment failures in the release workflow and external logging tools.
+2. Confirm analytics events and dashboards after each production deploy.
+3. Keep backup policy, retention, and restore drill requirements documented in `platform_settings` and operational runbooks.
+
 ## Security
 
 - All authentication handled by Supabase Auth
@@ -157,10 +177,11 @@ See `netlify.toml` for deployment configuration.
 - 🔲 **Phase 4**: Task completion & rewards mechanics
 - 🔲 **Phase 5**: Admin control plane & platform settings UI
 - 🔲 **Phase 8**: Gamification systems (daily login, streaks, achievements, XP, levels, leaderboards, lucky wheel, mystery rewards, missions, seasonal events, daily quests)
-- 🔲 **Phase 9**: Communication system (internal messaging, editable email/push/SMS templates, live announcements, promotional notifications)
+- ✅ **Phase 9**: Communication system (internal messaging, editable email/push/SMS templates, live announcements, promotional notifications)
 - ✅ **Phase 10**: Analytics & reporting dashboards (growth, revenue, campaign/reward/withdrawal/referral/geography/device/browser/funnel analytics with CSV/Excel/PDF exports)
 - ✅ **Phase 11**: Security hardening (RLS enforcement, rate limiting, CAPTCHA, CSRF, XSS/SQLi prevention, audit/session/device/IP monitoring, encryption controls, backup strategy)
 - ✅ **Phase 14**: Performance optimization (lazy loading + route preloading, static asset caching/CDN support, analytics caching, DB indexing/query tuning, compression, SEO/accessibility, Core Web Vitals instrumentation)
+- 🔲 **Phase 15**: Deployment & operations (Netlify, Supabase production, GitHub Actions, environment variables, monitoring, error logging, analytics, backups)
 
 ## Project Structure
 

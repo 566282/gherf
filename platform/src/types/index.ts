@@ -270,6 +270,7 @@ export interface Reward {
   userId: string;
   campaignId: string;
   taskId?: string;
+  submissionId?: string;
   amount: number;
   currency: string;
   status: 'pending' | 'approved' | 'claimed' | 'refunded';
@@ -285,6 +286,7 @@ export interface RewardLedgerEntry {
   id: string;
   userId: string;
   rewardId: string;
+  status: 'pending' | 'approved' | 'claimed' | 'refunded';
   action: 'issued' | 'approved' | 'claimed' | 'refunded';
   amount: number;
   reason?: string;

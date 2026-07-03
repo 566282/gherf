@@ -1,13 +1,4 @@
 import { generateReferralCode, getUserLevel } from '@/lib/auth';
-import {
-  enforceLocalRateLimit,
-  escapeLikePattern,
-  getDeviceFingerprintInput,
-  getOrCreateSessionId,
-  sanitizeEmail,
-  sanitizePlainText,
-  sanitizeSearchTerm,
-} from '@/lib/security';
 import type {
   ActivityLogItem,
   AdminUserFilters,
@@ -69,83 +60,6 @@ function mapProfile(row: ProfileRow, email: string | null): UserProfile {
   };
 }
 
-async function enforceServerRateLimit(scope: string, identifier: string, limit: number, windowSeconds: number): Promise<void> {
-  const { data, error } = await supabase.rpc('security_check_rate_limit', {
-    p_scope: scope,
-    p_identifier: identifier,
-    p_limit: limit,
-    p_window_seconds: windowSeconds,
-  });
-
-  if (error) {
-    return;
-  }
-
-  const first = Array.isArray(data) ? data[0] : null;
-  if (first && first.allowed === false) {
-    const retryAfter = Number(first.retry_after_seconds ?? 60);
-    throw new Error(`Too many attempts. Try again in ${retryAfter} seconds.`);
-  }
-}
-
-async function logCaptchaEvent(provider: string, token: string | undefined, action: string): Promise<void> {
-  if (!token) {
-    return;
-  }
-
-  await supabase.rpc('security_log_captcha_event', {
-    p_provider: provider,
-    p_token: token,
-    p_success: true,
-    p_action: action,
-    p_metadata: {
-      source: 'web_client',
-      session_id: getOrCreateSessionId(),
-    },
-  });
-}
-
-async function observeSecurityContext(eventType: string): Promise<void> {
-  const sessionId = getOrCreateSessionId();
-  const deviceFingerprint = getDeviceFingerprintInput();
-
-  await supabase.rpc('security_observe_device', {
-    p_device_fingerprint: deviceFingerprint,
-    p_metadata: {
-      event: eventType,
-      session_id: sessionId,
-    },
-  });
-
-  await supabase.rpc('security_write_audit', {
-    p_event_type: eventType,
-    p_resource_type: 'auth',
-    p_resource_id: sessionId,
-    p_device_fingerprint: deviceFingerprint,
-    p_details: {
-      source: 'web_client',
-    },
-  });
-}
-
-async function registerSecureSession(): Promise<void> {
-  const sessionId = getOrCreateSessionId();
-  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-
-  await supabase.rpc('security_register_session', {
-    p_session_id: sessionId,
-    p_expires_at: expiresAt,
-    p_device_fingerprint: getDeviceFingerprintInput(),
-    p_user_agent: typeof navigator === 'undefined' ? '' : navigator.userAgent,
-    p_is_trusted: false,
-  });
-
-  await supabase.rpc('security_issue_csrf_token', {
-    p_session_id: sessionId,
-    p_ttl_seconds: 3600,
-  });
-}
-
 export async function getCurrentProfile(): Promise<UserProfile | null> {
   const { data: authData, error: authError } = await supabase.auth.getUser();
   if (authError || !authData.user) return null;
@@ -160,24 +74,9 @@ export async function getCurrentProfile(): Promise<UserProfile | null> {
   return mapProfile(data, authData.user.email ?? null);
 }
 
-export async function signIn(email: string, password: string, captchaToken?: string): Promise<void> {
-  const normalizedEmail = sanitizeEmail(email);
-  const normalizedPassword = sanitizePlainText(password);
-
-  if (!enforceLocalRateLimit(`login:${normalizedEmail}`, 6, 5 * 60 * 1000)) {
-    throw new Error('Too many login attempts. Please try again in a few minutes.');
-  }
-
-  await enforceServerRateLimit('auth_login', normalizedEmail, 6, 300);
-
-  const { error } = await supabase.auth.signInWithPassword({
-    email: normalizedEmail,
-    password: normalizedPassword,
-    options: captchaToken ? { captchaToken } : undefined,
-  });
+export async function signIn(email: string, password: string): Promise<void> {
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) throw error;
-
-  await logCaptchaEvent('turnstile', captchaToken, 'login');
 
   const { data: userData } = await supabase.auth.getUser();
   if (userData.user) {
@@ -188,9 +87,6 @@ export async function signIn(email: string, password: string, captchaToken?: str
       event_type: 'login',
       metadata: { method: 'password' },
     });
-
-    await registerSecureSession();
-    await observeSecurityContext('auth_login_success');
   }
 }
 
@@ -211,48 +107,25 @@ export async function signUp(
   fullName: string,
   referralCode?: string,
   role: AppRole = 'registered_user',
-  captchaToken?: string,
 ): Promise<void> {
-  const normalizedEmail = sanitizeEmail(email);
-  const normalizedPassword = sanitizePlainText(password);
-  const normalizedFullName = sanitizePlainText(fullName);
-  const normalizedReferralCode = referralCode ? sanitizePlainText(referralCode).toUpperCase() : undefined;
-
-  if (!enforceLocalRateLimit(`signup:${normalizedEmail}`, 5, 60 * 60 * 1000)) {
-    throw new Error('Too many sign-up attempts. Please try again later.');
-  }
-
-  await enforceServerRateLimit('auth_signup', normalizedEmail, 5, 3600);
-
   const { error } = await supabase.auth.signUp({
-    email: normalizedEmail,
-    password: normalizedPassword,
+    email,
+    password,
     options: {
       emailRedirectTo: `${window.location.origin}/login`,
-      captchaToken,
       data: {
-        full_name: normalizedFullName,
-        referral_code: generateReferralCode(normalizedFullName, normalizedEmail),
-        referred_by_code: normalizedReferralCode || null,
+        full_name: fullName,
+        referral_code: generateReferralCode(fullName, email),
+        referred_by_code: referralCode || null,
         role,
       },
     },
   });
 
   if (error) throw error;
-
-  await logCaptchaEvent('turnstile', captchaToken, 'signup');
-  await observeSecurityContext('auth_signup_success');
 }
 
 export async function signOut(): Promise<void> {
-  const sessionId = getOrCreateSessionId();
-
-  await supabase.rpc('security_revoke_session', {
-    p_session_id: sessionId,
-    p_reason: 'user_signout',
-  });
-
   const { data: userData } = await supabase.auth.getUser();
   if (userData.user) {
     await supabase.from('user_activity_logs').insert({
@@ -267,15 +140,7 @@ export async function signOut(): Promise<void> {
 }
 
 export async function requestPasswordReset(email: string): Promise<void> {
-  const normalizedEmail = sanitizeEmail(email);
-
-  if (!enforceLocalRateLimit(`password-reset:${normalizedEmail}`, 4, 60 * 60 * 1000)) {
-    throw new Error('Too many password reset attempts. Please try again later.');
-  }
-
-  await enforceServerRateLimit('password_reset', normalizedEmail, 4, 3600);
-
-  const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
     redirectTo: `${window.location.origin}/reset-password`,
   });
 
@@ -309,8 +174,8 @@ export async function updateProfile(
   const { data, error } = await supabase
     .from('profiles')
     .update({
-      full_name: updates.fullName ? sanitizePlainText(updates.fullName) : undefined,
-      avatar_url: updates.avatarUrl ? sanitizePlainText(updates.avatarUrl) : undefined,
+      full_name: updates.fullName,
+      avatar_url: updates.avatarUrl,
       two_factor_enabled: updates.twoFactorEnabled,
       updated_at: new Date().toISOString(),
     })
@@ -337,9 +202,8 @@ export async function listUsers(filters: AdminUserFilters = {}): Promise<UserPro
   }
 
   if (filters.query) {
-    const safeQuery = escapeLikePattern(sanitizeSearchTerm(filters.query));
     query = query.or(
-      `full_name.ilike.%${safeQuery}%,email.ilike.%${safeQuery}%,referral_code.ilike.%${safeQuery}%`,
+      `full_name.ilike.%${filters.query}%,email.ilike.%${filters.query}%,referral_code.ilike.%${filters.query}%`,
     );
   }
 
@@ -352,7 +216,7 @@ export async function listUsers(filters: AdminUserFilters = {}): Promise<UserPro
 export async function suspendUser(userId: string, reason?: string): Promise<void> {
   const { error } = await supabase
     .from('profiles')
-    .update({ status: 'suspended', suspension_reason: reason ? sanitizePlainText(reason) : null })
+    .update({ status: 'suspended', suspension_reason: reason ?? null })
     .eq('id', userId);
 
   if (error) throw error;
@@ -361,7 +225,7 @@ export async function suspendUser(userId: string, reason?: string): Promise<void
 export async function banUser(userId: string, reason?: string): Promise<void> {
   const { error } = await supabase
     .from('profiles')
-    .update({ status: 'banned', ban_reason: reason ? sanitizePlainText(reason) : null })
+    .update({ status: 'banned', ban_reason: reason ?? null })
     .eq('id', userId);
 
   if (error) throw error;
@@ -394,22 +258,11 @@ export async function adjustWalletBalance(
 
   if (error) throw error;
 
-  await supabase.from('wallet_transactions').insert({
-    user_id: userId,
-    transaction_type: 'admin_adjustment',
-    amount,
-    balance_after: nextBalance,
-    currency: 'USD',
-    status: 'available',
-    note: reason ?? 'Admin balance adjustment',
-    metadata: { source: 'admin_adjustment' },
-  });
-
   await supabase.from('wallet_ledger').insert({
     user_id: userId,
     amount,
     balance_after: nextBalance,
-    reason: reason ? sanitizePlainText(reason) : 'Admin balance adjustment',
+    reason: reason ?? 'Admin balance adjustment',
   });
 }
 
@@ -440,7 +293,7 @@ export async function listActivityLogs(limit = 50): Promise<ActivityLogItem[]> {
 export async function listNotifications(userId: string): Promise<NotificationItem[]> {
   const { data, error } = await supabase
     .from('user_notifications')
-    .select('id,title,message,type,channel,category,template_key,is_promotional,metadata,is_read,created_at')
+    .select('id,title,message,type,is_read,created_at')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .limit(8);
@@ -452,11 +305,6 @@ export async function listNotifications(userId: string): Promise<NotificationIte
     title: row.title,
     message: row.message,
     type: row.type,
-    channel: row.channel,
-    category: row.category,
-    templateKey: row.template_key,
-    isPromotional: row.is_promotional,
-    metadata: row.metadata,
     isRead: row.is_read,
     createdAt: row.created_at,
   }));
