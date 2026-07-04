@@ -28,7 +28,7 @@ export class ErrorBoundary extends Component<PropsWithChildren, ErrorBoundarySta
   override render(): JSX.Element {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen flex items-center justify-center px-4 py-10">
+        <div className="min-h-screen flex items-center justify-center px-4 py-10 bg-[radial-gradient(circle_at_top,rgba(201,130,78,0.08),transparent_25%),linear-gradient(180deg,#07111d_0%,#0b1422_100%)]">
           <Card className="max-w-xl w-full text-center space-y-6">
             <div className="space-y-2">
               <p className="text-sm uppercase tracking-[0.25em] text-mist">Application error</p>
@@ -42,13 +42,13 @@ export class ErrorBoundary extends Component<PropsWithChildren, ErrorBoundarySta
               <button
                 type="button"
                 onClick={this.handleReload}
-                className="inline-flex items-center justify-center px-5 py-3 rounded-lg bg-mint text-ink font-medium hover:bg-green-600 transition-colors"
+                className="inline-flex items-center justify-center rounded-xl bg-mint px-5 py-3 font-medium text-ink transition-colors hover:bg-[#74bea7]"
               >
                 Reload page
               </button>
               <a
                 href="/"
-                className="inline-flex items-center justify-center px-5 py-3 rounded-lg border border-mist/30 text-mist hover:text-ember hover:border-ember transition-colors"
+                className="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/5 px-5 py-3 text-mist transition-colors hover:border-ember/50 hover:text-ember"
               >
                 Go home
               </a>

@@ -41,25 +41,25 @@ function maxValue(series: Array<{ value: number }>): number {
   return Math.max(1, ...series.map((item) => item.value));
 }
 
-function MiniSeriesChart({ title, subtitle, series, colorClass }: { title: string; subtitle: string; series: TimeSeriesPoint[]; colorClass: string }): JSX.Element {
+function MiniSeriesChart({ title, subtitle, series, chartVar }: { title: string; subtitle: string; series: TimeSeriesPoint[]; chartVar: string }): JSX.Element {
   const max = maxValue(series);
   const tail = series.slice(-12);
 
   return (
     <Card>
-      <p className="text-sm uppercase tracking-[0.24em] text-mint/70">{title}</p>
-      <h3 className="mt-2 text-xl font-semibold text-white">{subtitle}</h3>
-      <div className="mt-4 flex h-32 items-end gap-2 rounded-xl border border-white/10 bg-white/5 p-3">
+      <p className="text-sm uppercase tracking-[0.24em] text-accent/70">{title}</p>
+      <h3 className="mt-2 text-xl font-semibold text-foreground">{subtitle}</h3>
+      <div className="mt-4 flex h-32 items-end gap-2 rounded-xl border border-border bg-surface-elevated p-3">
         {tail.map((point) => (
           <div key={point.label} className="group relative flex h-full flex-1 items-end">
-            <div className={`w-full rounded-md ${colorClass}`} style={{ height: `${Math.max(4, (point.value / max) * 100)}%` }} />
-            <span className="pointer-events-none absolute -top-7 left-1/2 -translate-x-1/2 rounded-md border border-white/20 bg-[#111827] px-2 py-1 text-[10px] text-white opacity-0 transition group-hover:opacity-100">
+            <div className="w-full rounded-md" style={{ backgroundColor: `hsl(var(${chartVar}))`, height: `${Math.max(4, (point.value / max) * 100)}%` }} />
+            <span className="pointer-events-none absolute -top-7 left-1/2 -translate-x-1/2 rounded-md border border-border bg-background/95 px-2 py-1 text-[10px] text-foreground opacity-0 transition group-hover:opacity-100">
               {point.label}: {formatNumber(point.value)}
             </span>
           </div>
         ))}
       </div>
-      <p className="mt-2 text-xs text-mist/70">Showing the latest 12 points in the selected range.</p>
+      <p className="mt-2 text-xs text-muted">Showing the latest 12 points in the selected range.</p>
     </Card>
   );
 }
@@ -69,23 +69,23 @@ function CategoryList({ title, items }: { title: string; items: CategoryMetric[]
 
   return (
     <Card>
-      <p className="text-sm uppercase tracking-[0.24em] text-mint/70">Distribution</p>
-      <h3 className="mt-2 text-xl font-semibold text-white">{title}</h3>
+      <p className="text-sm uppercase tracking-[0.24em] text-accent/70">Distribution</p>
+      <h3 className="mt-2 text-xl font-semibold text-foreground">{title}</h3>
       <div className="mt-4 space-y-3">
         {items.length ? (
           items.map((item) => (
             <div key={item.label}>
-              <div className="mb-1 flex items-center justify-between text-sm text-mist/80">
+              <div className="mb-1 flex items-center justify-between text-sm text-foreground/80">
                 <span>{item.label}</span>
                 <span>{formatNumber(item.value)}</span>
               </div>
-              <div className="h-2 rounded-full bg-white/10">
-                <div className="h-2 rounded-full bg-ember" style={{ width: `${(item.value / max) * 100}%` }} />
+              <div className="h-2 rounded-full bg-border">
+                <div className="h-2 rounded-full bg-accent" style={{ width: `${(item.value / max) * 100}%` }} />
               </div>
             </div>
           ))
         ) : (
-          <p className="text-sm text-mist/70">No data available.</p>
+          <p className="text-sm text-muted">No data available.</p>
         )}
       </div>
     </Card>
@@ -135,8 +135,8 @@ export function AnalyticsReportingPage(): JSX.Element {
     return (
       <div className="space-y-6 p-6">
         <Card>
-          <h1 className="text-3xl font-bold text-white">Analytics and reporting</h1>
-          <p className="mt-2 text-mist/80">{statusMessage}</p>
+          <h1 className="text-3xl font-bold text-foreground">Analytics and reporting</h1>
+          <p className="mt-2 text-muted">{statusMessage}</p>
         </Card>
       </div>
     );
@@ -144,18 +144,18 @@ export function AnalyticsReportingPage(): JSX.Element {
 
   return (
     <div className="space-y-6 p-6">
-      <Card className="relative overflow-hidden border border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(78,142,255,0.22),transparent_34%),linear-gradient(135deg,rgba(10,14,20,0.97),rgba(18,22,31,0.98))]">
-        <div className="absolute inset-0 bg-[linear-gradient(120deg,transparent,rgba(255,255,255,0.03),transparent)]" />
+      <Card className="relative overflow-hidden border border-border bg-[radial-gradient(circle_at_top_left,hsl(var(--chart-1)/0.18),transparent_34%),linear-gradient(135deg,hsl(var(--color-surface))_0%,hsl(var(--color-surface-elevated))_100%)]">
+        <div className="absolute inset-0 bg-[linear-gradient(120deg,transparent,hsl(var(--color-foreground)/0.03),transparent)]" />
         <div className="relative flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
           <div className="max-w-3xl space-y-4">
-            <p className="text-sm uppercase tracking-[0.35em] text-mint/80">Phase 10 analytics and reporting</p>
-            <h1 className="text-4xl font-bold text-white md:text-5xl">Business intelligence dashboard suite</h1>
-            <p className="text-base text-mist/80">
+            <p className="text-sm uppercase tracking-[0.35em] text-accent/70">Phase 10 analytics and reporting</p>
+            <h1 className="text-4xl font-semibold tracking-tight text-foreground md:text-5xl">Business intelligence dashboard suite</h1>
+            <p className="text-base text-muted">
               Monitor user growth, active users, revenue, campaign outcomes, reward and withdrawal behavior, referral velocity, geography/device/browser mix, and end-to-end conversion funnel health.
             </p>
           </div>
 
-          <div className="w-full space-y-3 rounded-2xl border border-white/10 bg-white/5 p-4 xl:w-[30rem]">
+          <div className="w-full space-y-3 rounded-2xl border border-border bg-surface-elevated p-4 xl:w-[30rem]">
             <div className="grid gap-3 sm:grid-cols-3">
               {rangeOptions.map((option) => (
                 <Button key={option.value} variant={rangeDays === option.value ? 'primary' : 'ghost'} onClick={() => setRangeDays(option.value)}>
@@ -166,7 +166,7 @@ export function AnalyticsReportingPage(): JSX.Element {
 
             <div className="grid gap-3 sm:grid-cols-[1fr_auto_auto_auto] sm:items-end">
               <label className="grid gap-2 sm:col-span-1">
-                <span className="text-xs uppercase tracking-[0.2em] text-mist/70">Export scope</span>
+                <span className="text-xs uppercase tracking-[0.2em] text-muted">Export scope</span>
                 <select className="input-base" value={exportScope} onChange={(event) => setExportScope(event.target.value as AnalyticsDatasetKey)}>
                   {exportScopes.map((scope) => (
                     <option key={scope.value} value={scope.value}>
@@ -179,50 +179,50 @@ export function AnalyticsReportingPage(): JSX.Element {
               <Button onClick={() => void handleExport('excel')}>Excel</Button>
               <Button onClick={() => void handleExport('pdf')}>PDF</Button>
             </div>
-            <p className="text-xs text-mist/70">{isLoading ? 'Refreshing analytics...' : statusMessage}</p>
+            <p className="text-xs text-muted">{isLoading ? 'Refreshing analytics...' : statusMessage}</p>
           </div>
         </div>
       </Card>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <Card>
-          <p className="text-sm text-mist/70">Total users</p>
-          <p className="mt-2 text-3xl font-bold text-white">{formatNumber(report.kpis.totalUsers)}</p>
+          <p className="text-sm text-muted">Total users</p>
+          <p className="mt-2 text-3xl font-bold text-foreground">{formatNumber(report.kpis.totalUsers)}</p>
         </Card>
         <Card>
-          <p className="text-sm text-mist/70">Active users</p>
-          <p className="mt-2 text-3xl font-bold text-white">{formatNumber(report.kpis.activeUsers)}</p>
+          <p className="text-sm text-muted">Active users</p>
+          <p className="mt-2 text-3xl font-bold text-foreground">{formatNumber(report.kpis.activeUsers)}</p>
         </Card>
         <Card>
-          <p className="text-sm text-mist/70">Revenue</p>
-          <p className="mt-2 text-3xl font-bold text-white">{formatCurrency(report.kpis.totalRevenue)}</p>
+          <p className="text-sm text-muted">Revenue</p>
+          <p className="mt-2 text-3xl font-bold text-foreground">{formatCurrency(report.kpis.totalRevenue)}</p>
         </Card>
         <Card>
-          <p className="text-sm text-mist/70">Active campaigns</p>
-          <p className="mt-2 text-3xl font-bold text-white">{formatNumber(report.kpis.activeCampaigns)}</p>
+          <p className="text-sm text-muted">Active campaigns</p>
+          <p className="mt-2 text-3xl font-bold text-foreground">{formatNumber(report.kpis.activeCampaigns)}</p>
         </Card>
         <Card>
-          <p className="text-sm text-mist/70">Rewards issued</p>
-          <p className="mt-2 text-3xl font-bold text-white">{formatNumber(report.kpis.rewardsIssued)}</p>
+          <p className="text-sm text-muted">Rewards issued</p>
+          <p className="mt-2 text-3xl font-bold text-foreground">{formatNumber(report.kpis.rewardsIssued)}</p>
         </Card>
         <Card>
-          <p className="text-sm text-mist/70">Withdrawal volume</p>
-          <p className="mt-2 text-3xl font-bold text-white">{formatCurrency(report.kpis.withdrawalsVolume)}</p>
+          <p className="text-sm text-muted">Withdrawal volume</p>
+          <p className="mt-2 text-3xl font-bold text-foreground">{formatCurrency(report.kpis.withdrawalsVolume)}</p>
         </Card>
       </div>
 
       <div className="grid gap-6 xl:grid-cols-3">
-        <MiniSeriesChart title="User growth" subtitle="New users over time" series={report.userGrowth} colorClass="bg-sky-400" />
-        <MiniSeriesChart title="Active users" subtitle="Daily active users" series={report.activeUsers} colorClass="bg-emerald-400" />
-        <MiniSeriesChart title="Revenue" subtitle="Daily recognized revenue" series={report.revenue} colorClass="bg-amber-400" />
+        <MiniSeriesChart title="User growth" subtitle="New users over time" series={report.userGrowth} chartVar="--chart-1" />
+        <MiniSeriesChart title="Active users" subtitle="Daily active users" series={report.activeUsers} chartVar="--chart-2" />
+        <MiniSeriesChart title="Revenue" subtitle="Daily recognized revenue" series={report.revenue} chartVar="--chart-3" />
       </div>
 
       <Card>
-        <p className="text-sm uppercase tracking-[0.24em] text-mint/70">Campaign performance</p>
-        <h2 className="mt-2 text-2xl font-semibold text-white">Top campaigns by spend</h2>
+        <p className="text-sm uppercase tracking-[0.24em] text-accent/70">Campaign performance</p>
+        <h2 className="mt-2 text-2xl font-semibold text-foreground">Top campaigns by spend</h2>
         <div className="mt-4 overflow-x-auto">
           <table className="min-w-full text-left text-sm">
-            <thead className="text-mist/70">
+            <thead className="text-muted">
               <tr>
                 <th className="px-3 py-2">Campaign</th>
                 <th className="px-3 py-2">Participants</th>
@@ -235,18 +235,18 @@ export function AnalyticsReportingPage(): JSX.Element {
             <tbody>
               {report.campaignPerformance.length ? (
                 report.campaignPerformance.map((campaign) => (
-                  <tr key={campaign.campaignId} className="border-t border-white/10">
-                    <td className="px-3 py-2 text-white">{campaign.campaignTitle}</td>
-                    <td className="px-3 py-2 text-mist/80">{formatNumber(campaign.participants)}</td>
-                    <td className="px-3 py-2 text-mist/80">{formatNumber(campaign.submissions)}</td>
-                    <td className="px-3 py-2 text-mist/80">{formatNumber(campaign.approvalRate)}%</td>
-                    <td className="px-3 py-2 text-mist/80">{formatNumber(campaign.rewardsIssued)}</td>
-                    <td className="px-3 py-2 text-mist/80">{formatCurrency(campaign.spend)}</td>
+                  <tr key={campaign.campaignId} className="border-t border-border">
+                    <td className="px-3 py-2 text-foreground">{campaign.campaignTitle}</td>
+                    <td className="px-3 py-2 text-foreground/80">{formatNumber(campaign.participants)}</td>
+                    <td className="px-3 py-2 text-foreground/80">{formatNumber(campaign.submissions)}</td>
+                    <td className="px-3 py-2 text-foreground/80">{formatNumber(campaign.approvalRate)}%</td>
+                    <td className="px-3 py-2 text-foreground/80">{formatNumber(campaign.rewardsIssued)}</td>
+                    <td className="px-3 py-2 text-foreground/80">{formatCurrency(campaign.spend)}</td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={6} className="px-3 py-4 text-mist/70">
+                  <td colSpan={6} className="px-3 py-4 text-muted">
                     No campaign performance data available.
                   </td>
                 </tr>
@@ -260,20 +260,20 @@ export function AnalyticsReportingPage(): JSX.Element {
         <CategoryList title="Reward distribution" items={report.rewardDistribution} />
 
         <Card>
-          <p className="text-sm uppercase tracking-[0.24em] text-mint/70">Withdrawal statistics</p>
-          <h3 className="mt-2 text-xl font-semibold text-white">Payout queue behavior</h3>
+          <p className="text-sm uppercase tracking-[0.24em] text-accent/70">Withdrawal statistics</p>
+          <h3 className="mt-2 text-xl font-semibold text-foreground">Payout queue behavior</h3>
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-              <p className="text-xs text-mist/70">Requests</p>
-              <p className="mt-1 text-xl font-semibold text-white">{formatNumber(report.withdrawalStatistics.totalRequests)}</p>
+            <div className="rounded-xl border border-border bg-surface-elevated p-3">
+              <p className="text-xs text-muted">Requests</p>
+              <p className="mt-1 text-xl font-semibold text-foreground">{formatNumber(report.withdrawalStatistics.totalRequests)}</p>
             </div>
-            <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-              <p className="text-xs text-mist/70">Volume</p>
-              <p className="mt-1 text-xl font-semibold text-white">{formatCurrency(report.withdrawalStatistics.totalVolume)}</p>
+            <div className="rounded-xl border border-border bg-surface-elevated p-3">
+              <p className="text-xs text-muted">Volume</p>
+              <p className="mt-1 text-xl font-semibold text-foreground">{formatCurrency(report.withdrawalStatistics.totalVolume)}</p>
             </div>
-            <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-              <p className="text-xs text-mist/70">Approved rate</p>
-              <p className="mt-1 text-xl font-semibold text-white">{formatNumber(report.withdrawalStatistics.approvedRate)}%</p>
+            <div className="rounded-xl border border-border bg-surface-elevated p-3">
+              <p className="text-xs text-muted">Approved rate</p>
+              <p className="mt-1 text-xl font-semibold text-foreground">{formatNumber(report.withdrawalStatistics.approvedRate)}%</p>
             </div>
           </div>
           <div className="mt-5 grid gap-4 sm:grid-cols-2">
@@ -318,7 +318,7 @@ export function AnalyticsReportingPage(): JSX.Element {
                   <span className="text-white">{formatNumber(step.users)} ({formatNumber(step.conversionFromPrevious)}%)</span>
                 </div>
                 <div className="h-3 rounded-full bg-white/10">
-                  <div className="h-3 rounded-full bg-mint" style={{ width: `${Math.max(2, (step.users / funnelMax) * 100)}%` }} />
+                  <div className="h-3 rounded-full bg-ember" style={{ width: `${Math.max(2, (step.users / funnelMax) * 100)}%` }} />
                 </div>
               </div>
             ))}

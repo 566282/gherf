@@ -1,5 +1,6 @@
 import { supabase } from '@/services/supabase/client';
-import type { AdminConsoleConfig, AdminFeatureConfig } from '@/types';
+import { defaultCustomizationConfig, mergeCustomizationConfig } from '@/lib/customization';
+import type { AdminConsoleConfig, AdminFeatureConfig, AdminThemeConfig, ThemeFont, ThemeMode, ThemePalette } from '@/types';
 
 type SettingRow = {
   key: string;
@@ -10,7 +11,17 @@ const ADMIN_CONSOLE_SETTING_KEY = 'admin_console_config';
 
 const DEFAULT_CONFIG: AdminConsoleConfig = {
   features: {},
+  theme: {
+    mode: 'auto',
+    palette: 'deep-blue',
+    fontFamily: 'Inter',
+  },
+  customization: defaultCustomizationConfig,
 };
+
+const themeModes: ThemeMode[] = ['light', 'dark', 'auto'];
+const themePalettes: ThemePalette[] = ['deep-blue', 'royal-blue', 'emerald', 'indigo'];
+const themeFonts: ThemeFont[] = ['Inter', 'Geist', 'Plus Jakarta Sans'];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -28,6 +39,18 @@ function toFeatureConfig(value: unknown): AdminFeatureConfig | null {
   return { enabled, mode, policy, scope, note };
 }
 
+function toThemeConfig(value: unknown): AdminThemeConfig {
+  if (!isRecord(value)) {
+    return DEFAULT_CONFIG.theme;
+  }
+
+  const mode = themeModes.includes(value.mode as ThemeMode) ? (value.mode as ThemeMode) : DEFAULT_CONFIG.theme.mode;
+  const palette = themePalettes.includes(value.palette as ThemePalette) ? (value.palette as ThemePalette) : DEFAULT_CONFIG.theme.palette;
+  const fontFamily = themeFonts.includes(value.fontFamily as ThemeFont) ? (value.fontFamily as ThemeFont) : DEFAULT_CONFIG.theme.fontFamily;
+
+  return { mode, palette, fontFamily };
+}
+
 function mergeAdminConsoleConfig(value: unknown): AdminConsoleConfig {
   if (!isRecord(value)) return DEFAULT_CONFIG;
 
@@ -39,7 +62,11 @@ function mergeAdminConsoleConfig(value: unknown): AdminConsoleConfig {
       }, {})
     : {};
 
-  return { features };
+  return {
+    features,
+    theme: toThemeConfig(value.theme),
+    customization: mergeCustomizationConfig(value.customization),
+  };
 }
 
 export async function listAdminConsoleConfig(): Promise<AdminConsoleConfig> {

@@ -153,7 +153,7 @@ export function RewardHistoryPage() {
 
   return (
     <div className="space-y-6 p-6">
-      <Card>
+        <Card className="bg-[linear-gradient(135deg,rgba(12,16,22,0.98),rgba(19,24,32,0.96))]">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <p className="text-sm uppercase tracking-[0.24em] text-mint">Wallet</p>
@@ -162,7 +162,7 @@ export function RewardHistoryPage() {
               Track earnings, see what is pending, and move available funds into a withdrawal request with the correct payout method.
             </p>
           </div>
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-mist/80">
+          <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-sm text-mist/80 shadow-soft">
             <p className="text-white">Base currency: {settings?.currency ?? 'USD'}</p>
             <p>Approval workflow: {settings?.approvalWorkflow ?? 'manual'}</p>
             <p>Supported methods: {supportedMethods.length}</p>
@@ -200,29 +200,29 @@ export function RewardHistoryPage() {
               <h2 className="text-2xl font-semibold text-white">Earnings breakdown</h2>
               <p className="mt-1 text-sm text-mist/70">Category totals derived from the wallet ledger.</p>
             </div>
-            <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-mist/80">
+            <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-mist/80 shadow-soft">
               Total earned: {formatCurrency(summary.earnings, summary.currency)}
             </div>
           </div>
 
           <div className="mt-4 grid gap-3 md:grid-cols-2">
-            <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+            <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4 shadow-soft">
               <p className="text-sm text-mist/60">Bonus rewards</p>
               <p className="mt-2 text-xl font-semibold text-white">{formatCurrency(summary.bonusRewards, summary.currency)}</p>
             </div>
-            <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+            <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4 shadow-soft">
               <p className="text-sm text-mist/60">Referral commissions</p>
               <p className="mt-2 text-xl font-semibold text-white">{formatCurrency(summary.referralCommissions, summary.currency)}</p>
             </div>
-            <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+            <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4 shadow-soft">
               <p className="text-sm text-mist/60">Cashback</p>
               <p className="mt-2 text-xl font-semibold text-white">{formatCurrency(summary.cashback, summary.currency)}</p>
             </div>
-            <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+            <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4 shadow-soft">
               <p className="text-sm text-mist/60">Promotional rewards</p>
               <p className="mt-2 text-xl font-semibold text-white">{formatCurrency(summary.promotionalRewards, summary.currency)}</p>
             </div>
-            <div className="rounded-xl border border-white/10 bg-white/5 p-4 md:col-span-2">
+            <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4 shadow-soft md:col-span-2">
               <p className="text-sm text-mist/60">Achievement rewards</p>
               <p className="mt-2 text-xl font-semibold text-white">{formatCurrency(summary.achievementRewards, summary.currency)}</p>
             </div>
@@ -232,7 +232,7 @@ export function RewardHistoryPage() {
             <h3 className="text-lg font-semibold text-white">Recent wallet transactions</h3>
             <div className="space-y-3">
               {transactions.length ? transactions.map((transaction) => (
-                <div key={transaction.id} className="flex flex-col gap-2 rounded-xl border border-white/10 bg-white/5 p-4 md:flex-row md:items-center md:justify-between">
+                <div key={transaction.id} className="flex flex-col gap-2 rounded-xl border border-white/10 bg-white/[0.04] p-4 shadow-soft md:flex-row md:items-center md:justify-between">
                   <div>
                     <p className="font-medium text-white">{transaction.transactionType.replace(/_/g, ' ')}</p>
                     <p className="text-sm text-mist/70">{transaction.note ?? transaction.status}</p>
@@ -287,7 +287,7 @@ export function RewardHistoryPage() {
               </label>
             </div>
 
-            <div className="mt-4 rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-mist/80">
+            <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.04] p-4 text-sm text-mist/80 shadow-soft">
               <p>Processing fee: {settings?.processingFeePercent ?? 0}%</p>
               <p>Estimated fee: {formatCurrency(feePreview.fee, settings?.currency ?? 'USD')}</p>
               <p>Estimated net payout: {formatCurrency(feePreview.net, settings?.currency ?? 'USD')}</p>
@@ -316,7 +316,7 @@ export function RewardHistoryPage() {
             <h2 className="text-2xl font-semibold text-white">Withdrawal history</h2>
             <div className="mt-4 space-y-3">
               {withdrawals.length ? withdrawals.map((request) => (
-                <div key={request.id} className="rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-mist/80">
+                <div key={request.id} className="rounded-xl border border-white/10 bg-white/[0.04] p-4 text-sm text-mist/80 shadow-soft">
                   <div className="flex items-center justify-between gap-3">
                     <p className="font-medium text-white">{withdrawalMethodLabels[request.method]}</p>
                     <span className="rounded-full border border-white/10 px-3 py-1 text-xs uppercase tracking-[0.18em] text-mist/70">
@@ -335,7 +335,7 @@ export function RewardHistoryPage() {
             <h2 className="text-2xl font-semibold text-white">Reward history</h2>
             <div className="mt-4 space-y-3 text-sm text-mist/80">
               {rewards.length ? rewards.map((item) => (
-                <div key={item.id} className="rounded-xl border border-white/10 bg-white/5 p-4">
+                <div key={item.id} className="rounded-xl border border-white/10 bg-white/[0.04] p-4 shadow-soft">
                   <p className="font-medium text-white">{item.action}</p>
                   <p>{formatCurrency(item.amount, item.currency)}</p>
                   <p>{item.reason ?? 'Reward entry recorded in the ledger.'}</p>
@@ -348,7 +348,7 @@ export function RewardHistoryPage() {
             <h2 className="text-2xl font-semibold text-white">Wallet activity</h2>
             <div className="mt-4 space-y-3 text-sm text-mist/80">
               {walletActivity.length ? walletActivity.map((item) => (
-                <div key={item.id} className="rounded-xl border border-white/10 bg-white/5 p-4">
+                <div key={item.id} className="rounded-xl border border-white/10 bg-white/[0.04] p-4 shadow-soft">
                   <p>{item.note ?? 'Wallet update'}</p>
                   <p>{formatCurrency(item.amount)} · {formatCurrency(item.balanceAfter)}</p>
                 </div>

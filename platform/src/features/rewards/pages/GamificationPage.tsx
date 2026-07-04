@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { useAuth } from '@/app/providers/AuthProvider';
 import { buildDefaultGamificationConfig, gamificationModules, listGamificationConfig, type GamificationConfig } from '@/services/api/gamification';
 
@@ -104,11 +105,61 @@ function progressValue(current: number, target: number): number {
   return Math.min(100, Math.round((current / target) * 100));
 }
 
+function AnimatedCounter({ value, className }: { value: number; className?: string }): JSX.Element {
+  const [displayValue, setDisplayValue] = useState(value);
+
+  useEffect(() => {
+    let frame = 0;
+    const startValue = displayValue;
+    const difference = value - startValue;
+    const startTime = performance.now();
+
+    const step = (timestamp: number) => {
+      const progress = Math.min(1, (timestamp - startTime) / 320);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setDisplayValue(Math.round(startValue + difference * eased));
+
+      if (progress < 1) {
+        frame = window.requestAnimationFrame(step);
+      }
+    };
+
+    frame = window.requestAnimationFrame(step);
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [displayValue, value]);
+
+  return <span className={className}>{displayValue}</span>;
+}
+
+function ConfettiBurst(): JSX.Element {
+  const pieces = [
+    ['left-[12%]', 'bg-ember', '[--confetti-x:-26px]'],
+    ['left-[22%]', 'bg-success', '[--confetti-x:16px]'],
+    ['left-[34%]', 'bg-warning', '[--confetti-x:-20px]'],
+    ['left-[46%]', 'bg-info', '[--confetti-x:24px]'],
+    ['left-[58%]', 'bg-ember', '[--confetti-x:-14px]'],
+    ['left-[70%]', 'bg-success', '[--confetti-x:22px]'],
+    ['left-[82%]', 'bg-warning', '[--confetti-x:-18px]'],
+  ] as const;
+
+  return (
+    <div className="pointer-events-none absolute inset-0 overflow-hidden">
+      {pieces.map(([position, color, offset], index) => (
+        <span key={`${position}-${index}`} className={`confetti-piece ${position} ${color} ${offset}`} style={{ top: `${12 + index * 2}%`, animationDelay: `${index * 80}ms` }} />
+      ))}
+    </div>
+  );
+}
+
 export function GamificationPage() {
   const { profile } = useAuth();
   const [config, setConfig] = useState<GamificationConfig>(buildDefaultGamificationConfig());
   const [statusMessage, setStatusMessage] = useState('Loading engagement systems...');
+  const [isLoadingConfig, setIsLoadingConfig] = useState(true);
+  const [showConfetti, setShowConfetti] = useState(false);
   const [state, setState] = useState(() => createDemoState({ xp: Math.max((profile?.levelTier ?? 1) * 120, 120), streak: Math.max(1, Math.min(14, profile?.rewardHistoryCount ?? 6)) }));
+  const confettiTimer = useRef<number | null>(null);
 
   useEffect(() => {
     const savedState = loadDemoState();
@@ -119,10 +170,12 @@ export function GamificationPage() {
     void listGamificationConfig()
       .then((nextConfig) => {
         setConfig(nextConfig);
+        setIsLoadingConfig(false);
         setStatusMessage(`${nextConfig.seasonName} is live with ${nextConfig.maxDailyWheelSpins} daily wheel spins.`);
       })
       .catch(() => {
         setConfig(buildDefaultGamificationConfig());
+        setIsLoadingConfig(false);
         setStatusMessage('Using local gamification defaults until admin settings are available.');
       });
   }, []);
@@ -130,6 +183,14 @@ export function GamificationPage() {
   useEffect(() => {
     saveDemoState(state);
   }, [state]);
+
+  useEffect(() => {
+    return () => {
+      if (confettiTimer.current) {
+        window.clearTimeout(confettiTimer.current);
+      }
+    };
+  }, []);
 
   const currentLevel = Math.max(1, Math.floor(state.xp / config.xpPerLevel) + 1);
   const xpThreshold = Math.max(1, config.xpPerLevel);
@@ -155,6 +216,17 @@ export function GamificationPage() {
 
   const enabledModules = gamificationModules.filter((module) => config.modules[module.id]?.enabled).length;
   const unlockedAchievements = state.achievements.filter((achievement) => achievement.unlocked).length;
+  const moduleCoverage = Math.round((enabledModules / gamificationModules.length) * 100);
+  const daysRemaining = Math.max(0, Math.ceil((new Date(config.seasonEndsOn).getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
+
+  const triggerConfetti = () => {
+    setShowConfetti(true);
+    if (confettiTimer.current) {
+      window.clearTimeout(confettiTimer.current);
+    }
+
+    confettiTimer.current = window.setTimeout(() => setShowConfetti(false), 1600);
+  };
 
   const handleClaimDailyLogin = () => {
     if (state.dailyClaimed) {
@@ -171,6 +243,7 @@ export function GamificationPage() {
       mysteryTokens: current.streak % 3 === 0 ? current.mysteryTokens + 1 : current.mysteryTokens,
     }));
     setStatusMessage(`Daily login claimed. +${config.dailyLoginBonus} XP and streak advanced.`);
+    triggerConfetti();
   };
 
   const handleSpinWheel = () => {
@@ -210,6 +283,7 @@ export function GamificationPage() {
       mysteryTokens: current.mysteryTokens - 1,
     }));
     setStatusMessage(`Mystery reward unlocked: ${reward}.`);
+    triggerConfetti();
   };
 
   const completeQuest = (questId: string) => {
@@ -221,6 +295,7 @@ export function GamificationPage() {
       ),
     }));
     setStatusMessage('Quest completed and XP credited.');
+    triggerConfetti();
   };
 
   const unlockAchievement = (achievementId: string) => {
@@ -232,12 +307,31 @@ export function GamificationPage() {
       ),
     }));
     setStatusMessage('Achievement unlocked.');
+    triggerConfetti();
   };
+
+  if (isLoadingConfig) {
+    return (
+      <div className="space-y-6 p-6">
+        <Skeleton className="h-56" />
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <Skeleton className="h-32" />
+          <Skeleton className="h-32" />
+          <Skeleton className="h-32" />
+          <Skeleton className="h-32" />
+        </div>
+        <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+          <Skeleton className="h-[46rem]" />
+          <Skeleton className="h-[46rem]" />
+        </div>
+      </div>
+    );
+  }
 
   if (!profile) {
     return (
       <div className="space-y-6 p-6">
-        <Card>
+        <Card className="interactive-card">
           <p className="text-sm uppercase tracking-[0.24em] text-mint">Gamification</p>
           <h1 className="mt-2 text-3xl font-bold text-white">Engagement systems</h1>
           <p className="mt-2 text-mist/80">Sign in to view daily login rewards, streaks, XP, and seasonal missions.</p>
@@ -252,9 +346,11 @@ export function GamificationPage() {
   }
 
   return (
-    <div className="space-y-6 p-6">
-      <Card className="relative overflow-hidden border border-white/10 bg-[radial-gradient(circle_at_top_right,rgba(255,140,61,0.18),transparent_34%),linear-gradient(135deg,rgba(10,12,16,0.98),rgba(24,28,36,0.96))]">
-        <div className="absolute inset-0 bg-[linear-gradient(120deg,transparent,rgba(255,255,255,0.03),transparent)]" />
+    <div className="page-transition space-y-6 p-6">
+      <Card className="relative overflow-hidden border border-white/10 bg-[linear-gradient(135deg,rgba(12,16,22,0.98),rgba(19,24,32,0.96))] interactive-card">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,140,61,0.12),transparent_32%)]" />
+        <div className="absolute inset-0 bg-[linear-gradient(120deg,transparent,rgba(255,255,255,0.025),transparent)]" />
+        {showConfetti ? <ConfettiBurst /> : null}
         <div className="relative flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
           <div className="max-w-3xl space-y-4">
             <p className="text-sm uppercase tracking-[0.35em] text-ember/80">Gamification hub</p>
@@ -266,21 +362,21 @@ export function GamificationPage() {
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 xl:w-[28rem] xl:grid-cols-2">
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 shadow-soft">
               <p className="text-sm text-mist/60">Current level</p>
-              <p className="mt-2 text-3xl font-bold text-white">{currentLevel}</p>
+              <p className="mt-2 text-3xl font-bold text-white"><AnimatedCounter value={currentLevel} /></p>
             </div>
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 shadow-soft">
               <p className="text-sm text-mist/60">XP to next level</p>
-              <p className="mt-2 text-3xl font-bold text-white">{config.xpPerLevel - xpIntoLevel}</p>
+              <p className="mt-2 text-3xl font-bold text-white"><AnimatedCounter value={config.xpPerLevel - xpIntoLevel} /></p>
             </div>
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 shadow-soft">
               <p className="text-sm text-mist/60">Streak</p>
-              <p className="mt-2 text-3xl font-bold text-white">{state.streak} days</p>
+              <p className="mt-2 text-3xl font-bold text-white"><AnimatedCounter value={state.streak} /> days</p>
             </div>
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 shadow-soft">
               <p className="text-sm text-mist/60">Daily spins</p>
-              <p className="mt-2 text-3xl font-bold text-white">{state.spinTokens}</p>
+              <p className="mt-2 text-3xl font-bold text-white"><AnimatedCounter value={state.spinTokens} /></p>
             </div>
           </div>
         </div>
@@ -301,39 +397,49 @@ export function GamificationPage() {
       {statusMessage ? <p className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-mist/80">{statusMessage}</p> : null}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Card>
+        <Card className="interactive-card">
           <p className="text-sm uppercase tracking-[0.2em] text-mint/70">XP progress</p>
           <p className="mt-3 text-3xl font-bold text-white">{state.xp} XP</p>
-          <div className="mt-4 h-2 rounded-full bg-white/10">
-            <div className="h-2 rounded-full bg-gradient-to-r from-ember to-orange-300" style={{ width: `${xpProgress}%` }} />
+          <div className="mt-4 flex items-center gap-4">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full" style={{ background: `conic-gradient(hsl(var(--color-ember)) ${xpProgress}%, rgba(255,255,255,0.12) ${xpProgress}% 100%)` }}>
+              <div className="flex h-11 w-11 items-center justify-center rounded-full bg-surface text-sm font-semibold text-white">
+                {xpProgress}%
+              </div>
+            </div>
+            <div className="flex-1">
+              <div className="progress-track">
+                <div className="progress-fill" style={{ width: `${xpProgress}%` }} />
+              </div>
+              <p className="mt-2 text-sm text-mist/70">{xpProgress}% to level {currentLevel + 1}</p>
+            </div>
           </div>
-          <p className="mt-2 text-sm text-mist/70">{xpProgress}% to level {currentLevel + 1}</p>
         </Card>
-        <Card>
+        <Card className="interactive-card">
           <p className="text-sm uppercase tracking-[0.2em] text-mint/70">Achievements</p>
           <p className="mt-3 text-3xl font-bold text-white">{unlockedAchievements}/{state.achievements.length}</p>
           <p className="mt-2 text-sm text-mist/70">Milestones unlocked this season.</p>
         </Card>
-        <Card>
+        <Card className="interactive-card">
           <p className="text-sm uppercase tracking-[0.2em] text-mint/70">Leaderboard rank</p>
           <p className="mt-3 text-3xl font-bold text-white">#{userRank}</p>
           <p className="mt-2 text-sm text-mist/70">Compared against active seasonal players.</p>
         </Card>
-        <Card>
+        <Card className="interactive-card">
           <p className="text-sm uppercase tracking-[0.2em] text-mint/70">Live modules</p>
-          <p className="mt-3 text-3xl font-bold text-white">{enabledModules}</p>
+          <p className="mt-3 text-3xl font-bold text-white"><AnimatedCounter value={enabledModules} /></p>
           <p className="mt-2 text-sm text-mist/70">Admin-enabled systems currently active.</p>
+          <p className="mt-2 text-xs uppercase tracking-[0.2em] text-mist/50">Coverage {moduleCoverage}% | {daysRemaining} days left</p>
         </Card>
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-        <Card>
+        <Card className="interactive-card">
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-sm uppercase tracking-[0.24em] text-mint/70">Engagement loop</p>
               <h2 className="mt-2 text-2xl font-semibold text-white">Daily login, streaks, and missions</h2>
             </div>
-            <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-mist/80">
+            <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-mist/80 shadow-soft">
               Reset at {String(config.dailyResetHour).padStart(2, '0')}:00
             </div>
           </div>
@@ -355,7 +461,7 @@ export function GamificationPage() {
             <h3 className="text-lg font-semibold text-white">Missions</h3>
             <div className="grid gap-3 md:grid-cols-2">
               {state.quests.map((quest) => (
-                <div key={quest.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <div key={quest.id} className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 shadow-soft">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="font-medium text-white">{quest.title}</p>
@@ -366,7 +472,7 @@ export function GamificationPage() {
                     </span>
                   </div>
                   <div className="mt-4 h-2 rounded-full bg-white/10">
-                    <div className="h-2 rounded-full bg-mint" style={{ width: `${progressValue(quest.progress, quest.target)}%` }} />
+                    <div className="h-2 rounded-full bg-mint transition-all duration-500" style={{ width: `${progressValue(quest.progress, quest.target)}%` }} />
                   </div>
                   <div className="mt-4 flex items-center justify-between gap-3 text-sm text-mist/70">
                     <span>Reward: {quest.reward}</span>
@@ -386,7 +492,7 @@ export function GamificationPage() {
             <h3 className="text-lg font-semibold text-white">Achievements</h3>
             <div className="grid gap-3 lg:grid-cols-2">
               {state.achievements.map((achievement) => (
-                <div key={achievement.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <div key={achievement.id} className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 shadow-soft">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="font-medium text-white">{achievement.title}</p>
@@ -397,7 +503,7 @@ export function GamificationPage() {
                     </span>
                   </div>
                   <div className="mt-4 h-2 rounded-full bg-white/10">
-                    <div className="h-2 rounded-full bg-ember" style={{ width: `${progressValue(achievement.progress, achievement.target)}%` }} />
+                    <div className="h-2 rounded-full bg-ember transition-all duration-500" style={{ width: `${progressValue(achievement.progress, achievement.target)}%` }} />
                   </div>
                   <div className="mt-4 flex items-center justify-between gap-3 text-sm text-mist/70">
                     <span>{achievement.progress}/{achievement.target}</span>
@@ -415,16 +521,16 @@ export function GamificationPage() {
         </Card>
 
         <div className="space-y-6">
-          <Card>
+          <Card className="interactive-card">
             <p className="text-sm uppercase tracking-[0.24em] text-mint/70">Lucky wheel and mystery rewards</p>
             <h2 className="mt-2 text-2xl font-semibold text-white">Chance-based bonuses</h2>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 shadow-soft">
                 <p className="text-sm text-mist/60">Daily spins</p>
                 <p className="mt-2 text-xl font-semibold text-white">{state.spinTokens}</p>
                 <p className="mt-1 text-sm text-mist/70">Capped by admin at {config.maxDailyWheelSpins} per day.</p>
               </div>
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 shadow-soft">
                 <p className="text-sm text-mist/60">Mystery tokens</p>
                 <p className="mt-2 text-xl font-semibold text-white">{state.mysteryTokens}</p>
                 <p className="mt-1 text-sm text-mist/70">Random rewards from the seasonal pool.</p>
@@ -451,7 +557,7 @@ export function GamificationPage() {
             </div>
           </Card>
 
-          <Card>
+          <Card className="interactive-card">
             <p className="text-sm uppercase tracking-[0.24em] text-mint/70">Seasonal event</p>
             <h2 className="mt-2 text-2xl font-semibold text-white">{config.seasonName}</h2>
             <p className="mt-2 text-sm text-mist/75">Theme: {config.seasonTheme}</p>
@@ -469,12 +575,12 @@ export function GamificationPage() {
             </div>
           </Card>
 
-          <Card>
+          <Card className="interactive-card">
             <p className="text-sm uppercase tracking-[0.24em] text-mint/70">Leaderboard</p>
             <h2 className="mt-2 text-2xl font-semibold text-white">Top players this season</h2>
             <div className="mt-4 space-y-3">
               {highlightedLeaderboard.map((entry) => (
-                <div key={`${entry.name}-${entry.xp}`} className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-mist/80">
+                <div key={`${entry.name}-${entry.xp}`} className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-sm text-mist/80 shadow-soft">
                   <div>
                     <p className="font-medium text-white">#{entry.rank} {entry.name}</p>
                     <p className="mt-1">Level {entry.level} | {entry.streak} day streak | {entry.badge}</p>
@@ -492,7 +598,7 @@ export function GamificationPage() {
                 const moduleConfig = config.modules[module.id];
 
                 return (
-                  <div key={module.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <div key={module.id} className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 shadow-soft">
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="font-medium text-white">{module.title}</p>

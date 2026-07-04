@@ -428,8 +428,164 @@ export interface AdminFeatureConfig {
   note: string;
 }
 
+export const themeModes = ['light', 'dark', 'auto'] as const;
+
+export type ThemeMode = (typeof themeModes)[number];
+
+export const themePalettes = ['deep-blue', 'royal-blue', 'emerald', 'indigo'] as const;
+
+export type ThemePalette = (typeof themePalettes)[number];
+
+export const themeFonts = ['Inter', 'Geist', 'Plus Jakarta Sans'] as const;
+
+export type ThemeFont = (typeof themeFonts)[number];
+
+export interface AdminThemeConfig {
+  mode: ThemeMode;
+  palette: ThemePalette;
+  fontFamily: ThemeFont;
+}
+
+export const themePresets = ['classic', 'editorial', 'growth', 'contrast', 'custom'] as const;
+
+export type ThemePreset = (typeof themePresets)[number];
+
+export const layoutModes = ['stacked', 'sidebar', 'split'] as const;
+
+export type LayoutMode = (typeof layoutModes)[number];
+
+export const cardStyles = ['flat', 'elevated', 'glass'] as const;
+
+export type CardStyle = (typeof cardStyles)[number];
+
+export const buttonStyles = ['rounded', 'pill', 'sharp'] as const;
+
+export type ButtonStyle = (typeof buttonStyles)[number];
+
+export const tokenDensityModes = ['compact', 'balanced', 'cozy'] as const;
+
+export type TokenDensityMode = (typeof tokenDensityModes)[number];
+
+export const tokenRadiusModes = ['sharp', 'balanced', 'soft'] as const;
+
+export type TokenRadiusMode = (typeof tokenRadiusModes)[number];
+
+export const tokenElevationModes = ['flat', 'layered', 'floating'] as const;
+
+export type TokenElevationMode = (typeof tokenElevationModes)[number];
+
+export const tokenAnimationModes = ['calm', 'polished', 'expressive'] as const;
+
+export type TokenAnimationMode = (typeof tokenAnimationModes)[number];
+
+export const tokenGridModes = ['12-column', '14-column', '16-column'] as const;
+
+export type TokenGridMode = (typeof tokenGridModes)[number];
+
+export const templateModes = ['starter', 'balanced', 'premium'] as const;
+
+export type TemplateMode = (typeof templateModes)[number];
+
+export interface AdminBrandingConfig {
+  logoMark: string;
+  logoText: string;
+  iconStyle: 'line' | 'solid' | 'duotone';
+}
+
+export interface AdminLayoutConfig {
+  mode: LayoutMode;
+  sidebar: 'expanded' | 'compact';
+  dashboardWidgets: 'stacked' | 'bento' | 'dense';
+  landingPageSections: 'full' | 'focused' | 'minimal';
+  navigation: 'top' | 'side' | 'hybrid';
+  buttonStyle: ButtonStyle;
+  cardStyle: CardStyle;
+}
+
+export interface AdminTrustConfig {
+  sslSecurityIndicators: boolean;
+  verifiedAdvertiserBadges: boolean;
+  verifiedUserBadges: boolean;
+  realTimeStatistics: boolean;
+  transparentPayoutHistory: boolean;
+  auditLogs: boolean;
+  fraudProtectionMessaging: boolean;
+  userTestimonials: boolean;
+  professionalCertifications: boolean;
+  systemStatusIndicators: boolean;
+}
+
+export interface AdminTemplateConfig {
+  campaignTemplate: TemplateMode;
+  emailTemplate: TemplateMode;
+  notificationTemplate: TemplateMode;
+  rewardRules: TemplateMode;
+}
+
+export interface AdminTokenConfig {
+  spacing: TokenDensityMode;
+  typography: ThemeFont;
+  radius: TokenRadiusMode;
+  elevation: TokenElevationMode;
+  animations: TokenAnimationMode;
+  icons: 'line' | 'solid' | 'duotone';
+  transitions: 'snappy' | 'standard' | 'slow';
+  opacity: 'subtle' | 'balanced' | 'bold';
+  gridSystem: TokenGridMode;
+  breakpoints: 'standard' | 'touch-optimized' | 'foldable-aware';
+}
+
+export interface AdminCustomizationConfig {
+  themePreset: ThemePreset;
+  customCss: string;
+  branding: AdminBrandingConfig;
+  layout: AdminLayoutConfig;
+  trust: AdminTrustConfig;
+  templates: AdminTemplateConfig;
+  tokens: AdminTokenConfig;
+}
+
 export interface AdminConsoleConfig {
   features: Record<string, AdminFeatureConfig>;
+  theme: AdminThemeConfig;
+  customization: AdminCustomizationConfig;
+}
+
+export const cmsPageKeys = [
+  'home',
+  'faqs',
+  'help-center',
+  'privacy-policy',
+  'terms',
+  'blog',
+  'landing-pages',
+  'advertiser-pages',
+  'user-guides',
+] as const;
+
+export type CmsPageKey = (typeof cmsPageKeys)[number];
+
+export interface CmsContentItem {
+  title: string;
+  body: string;
+  meta?: string;
+  href?: string;
+}
+
+export interface CmsPageContent {
+  eyebrow: string;
+  title: string;
+  summary: string;
+  body: string;
+  ctaLabel: string;
+  ctaHref: string;
+  highlights: string[];
+  items: CmsContentItem[];
+}
+
+export interface CmsConfig {
+  siteName: string;
+  pages: Record<CmsPageKey, CmsPageContent>;
 }
 
 /**

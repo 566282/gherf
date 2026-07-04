@@ -15,6 +15,7 @@ import { ResetPasswordPage } from '@/features/auth/pages/ResetPasswordPage';
 
 // Public pages
 import { HomePage } from '@/features/home/pages/HomePage';
+import { CmsPublicPage } from '@/features/content/pages/CmsPublicPage';
 import { UnauthorizedPage } from '@/features/errors/pages/UnauthorizedPage';
 import { NotFoundPage } from '@/features/errors/pages/NotFoundPage';
 
@@ -38,6 +39,7 @@ import { SubmissionReviewPage } from '@/features/admin/pages/SubmissionReviewPag
 
 // Super Admin pages
 import { AdminPanelPage } from '@/features/admin/pages/AdminPanelPage';
+import { CmsManagementPage } from '@/features/admin/pages/CmsManagementPage';
 import { UsersManagementPage } from '@/features/admin/pages/UsersManagementPage';
 import { PlatformSettingsPage } from '@/features/admin/pages/PlatformSettingsPage';
 import { AuditLogsPage } from '@/features/admin/pages/AuditLogsPage';
@@ -48,6 +50,14 @@ const routes: RouteObject[] = [
     element: <PublicLayout />,
     children: [
       { index: true, element: <HomePage /> },
+      { path: 'faqs', element: <CmsPublicPage pageKey="faqs" /> },
+      { path: 'help-center', element: <CmsPublicPage pageKey="help-center" /> },
+      { path: 'privacy-policy', element: <CmsPublicPage pageKey="privacy-policy" /> },
+      { path: 'terms', element: <CmsPublicPage pageKey="terms" /> },
+      { path: 'blog', element: <CmsPublicPage pageKey="blog" /> },
+      { path: 'landing-pages', element: <CmsPublicPage pageKey="landing-pages" /> },
+      { path: 'advertiser-pages', element: <CmsPublicPage pageKey="advertiser-pages" /> },
+      { path: 'user-guides', element: <CmsPublicPage pageKey="user-guides" /> },
       { path: 'login', element: <LoginPage /> },
       { path: 'signup', element: <SignupPage /> },
       { path: 'forgot-password', element: <ForgotPasswordPage /> },
@@ -106,6 +116,7 @@ const routes: RouteObject[] = [
     ),
     children: [
       { index: true, element: <AdminPanelPage /> },
+      { path: 'cms', element: <CmsManagementPage /> },
       { path: 'users', element: <UsersManagementPage /> },
       { path: 'settings', element: <PlatformSettingsPage /> },
       { path: 'audit-logs', element: <AuditLogsPage /> },

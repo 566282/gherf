@@ -49,9 +49,9 @@ export function CampaignManagementPage() {
     <div className="p-6 space-y-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="space-y-2">
-          <p className="text-sm uppercase tracking-[0.3em] text-mint/80">Dynamic campaign engine</p>
-          <h1 className="text-3xl font-bold text-ember">Campaign Management</h1>
-          <p className="max-w-3xl text-mist">
+          <p className="text-sm uppercase tracking-[0.3em] text-mint/70">Dynamic campaign engine</p>
+          <h1 className="text-3xl font-semibold tracking-tight text-white">Campaign management</h1>
+          <p className="max-w-3xl text-mist/80">
             Every campaign rule, restriction, approval mode, and reward setting is stored in campaign configuration so
             you can extend the engine without shipping code.
           </p>
@@ -69,19 +69,19 @@ export function CampaignManagementPage() {
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Card className="border border-white/5 bg-white/5">
-          <p className="text-sm text-mist">Total campaigns</p>
+          <p className="text-sm text-mist/70">Total campaigns</p>
           <p className="mt-3 text-3xl font-bold text-white">{campaigns.length}</p>
         </Card>
         <Card className="border border-white/5 bg-white/5">
-          <p className="text-sm text-mist">Active campaigns</p>
+          <p className="text-sm text-mist/70">Active campaigns</p>
           <p className="mt-3 text-3xl font-bold text-white">{activeCampaigns}</p>
         </Card>
         <Card className="border border-white/5 bg-white/5">
-          <p className="text-sm text-mist">Draft campaigns</p>
+          <p className="text-sm text-mist/70">Draft campaigns</p>
           <p className="mt-3 text-3xl font-bold text-white">{draftCampaigns}</p>
         </Card>
         <Card className="border border-white/5 bg-white/5">
-          <p className="text-sm text-mist">Allocated budget</p>
+          <p className="text-sm text-mist/70">Allocated budget</p>
           <p className="mt-3 text-3xl font-bold text-white">{formatMoney(totalBudget, 'USD')}</p>
         </Card>
       </div>
@@ -89,10 +89,10 @@ export function CampaignManagementPage() {
       <Card className="space-y-5">
         <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
           <div>
-            <h2 className="text-2xl font-bold text-white">Campaign templates</h2>
-            <p className="text-sm text-mist">Start from a preset, then tune the engine settings in the editor.</p>
+            <h2 className="text-2xl font-semibold text-white">Campaign templates</h2>
+            <p className="text-sm text-mist/80">Start from a preset, then tune the engine settings in the editor.</p>
           </div>
-          <Link to="/business/campaigns/new" className="text-sm text-ember hover:text-[#ffb56b]">
+            <Link to="/business/campaigns/new" className="text-sm text-ember/90 hover:text-ember">
             Open blank editor
           </Link>
         </div>

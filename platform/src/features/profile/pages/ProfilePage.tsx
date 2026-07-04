@@ -30,8 +30,8 @@ export function ProfilePage(): JSX.Element {
 
   if (!profile) {
     return (
-      <Card>
-        <h1 className="text-2xl font-bold">Profile</h1>
+      <Card className="border border-white/10 bg-white/5">
+        <h1 className="text-2xl font-semibold tracking-tight text-white">Profile</h1>
         <p className="mt-2 text-mist/80">Sign in to view your account profile.</p>
       </Card>
     );
@@ -52,11 +52,11 @@ export function ProfilePage(): JSX.Element {
 
   return (
     <div className="space-y-6">
-      <Card>
+      <Card className="border border-white/10 bg-white/5">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div>
-            <p className="text-sm uppercase tracking-[0.2em] text-mint">Account</p>
-            <h1 className="mt-2 text-3xl font-bold">{profile.fullName ?? 'Unnamed user'}</h1>
+            <p className="text-sm uppercase tracking-[0.24em] text-mint/70">Account</p>
+            <h1 className="mt-2 text-3xl font-semibold tracking-tight text-white">{profile.fullName ?? 'Unnamed user'}</h1>
             <p className="mt-2 text-mist/80">{profile.email}</p>
           </div>
           <div className="grid gap-2 text-sm text-mist/80">
@@ -80,10 +80,10 @@ export function ProfilePage(): JSX.Element {
           </div>
         </div>
         <div className="mt-4 flex flex-wrap gap-3">
-          <button className="rounded-xl bg-ember px-4 py-2 font-medium text-ink disabled:opacity-60" onClick={() => void handleSave()} disabled={saving}>
+          <button className="rounded-xl bg-ember px-4 py-2 font-medium text-ink shadow-[0_10px_30px_rgba(201,130,78,0.2)] disabled:opacity-60" onClick={() => void handleSave()} disabled={saving}>
             {saving ? 'Saving...' : 'Save profile'}
           </button>
-          <button className="rounded-xl border border-white/15 px-4 py-2 text-mist hover:bg-white/5" onClick={() => void refreshProfile()}>
+          <button className="rounded-xl border border-white/10 px-4 py-2 text-mist hover:bg-white/5" onClick={() => void refreshProfile()}>
             Refresh
           </button>
         </div>

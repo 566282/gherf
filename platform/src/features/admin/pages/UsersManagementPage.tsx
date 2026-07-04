@@ -74,8 +74,8 @@ export function UsersManagementPage(): JSX.Element {
   return (
     <div className="space-y-6 p-6">
       <Card>
-        <h1 className="text-3xl font-bold text-ember">Users management</h1>
-        <p className="mt-2 text-mist">Suspend, ban, verify, edit, and rebalance user accounts from one place.</p>
+        <h1 className="text-3xl font-semibold tracking-tight text-white">Users management</h1>
+        <p className="mt-2 text-mist/80">Suspend, ban, verify, edit, and rebalance user accounts from one place.</p>
         <div className="mt-4 grid gap-3 md:grid-cols-3">
           <input className="input-base" placeholder="Search name, email, referral code" value={query} onChange={(event) => setQuery(event.target.value)} />
           <select className="input-base" value={role} onChange={(event) => setRole(event.target.value as AppRole | 'all')}>
@@ -104,7 +104,7 @@ export function UsersManagementPage(): JSX.Element {
                 {users.map((user) => (
                   <tr key={user.id} className="border-b border-white/5 text-mist/90">
                     <td className="py-4 pr-4">
-                      <button className="text-left text-white hover:text-ember" onClick={() => setSelectedUserId(user.id)}>
+                      <button className="text-left text-white transition hover:text-ember" onClick={() => setSelectedUserId(user.id)}>
                         <div className="font-medium">{user.fullName ?? 'Unnamed user'}</div>
                         <div className="text-xs text-mist/60">{user.email}</div>
                       </button>
@@ -117,7 +117,7 @@ export function UsersManagementPage(): JSX.Element {
                         <button type="button" className="rounded-lg border border-white/10 px-3 py-1 hover:bg-white/5" onClick={() => setSelectedUserId(user.id)}>View</button>
                         <button type="button" className="rounded-lg border border-white/10 px-3 py-1 hover:bg-white/5" onClick={() => void handleAction(() => verifyUser(user.id))}>Verify</button>
                         <button type="button" className="rounded-lg border border-white/10 px-3 py-1 hover:bg-white/5" onClick={() => void handleAction(() => suspendUser(user.id, reason || 'Temporary moderation action'))}>Suspend</button>
-                        <button type="button" className="rounded-lg border border-ember/40 px-3 py-1 text-ember hover:bg-ember/10" onClick={() => void handleAction(() => banUser(user.id, reason || 'Policy violation'))}>Ban</button>
+                        <button type="button" className="rounded-lg border border-white/10 px-3 py-1 text-mist/80 hover:bg-white/5" onClick={() => void handleAction(() => banUser(user.id, reason || 'Policy violation'))}>Ban</button>
                       </div>
                     </td>
                   </tr>
@@ -128,7 +128,7 @@ export function UsersManagementPage(): JSX.Element {
         </Card>
 
         <Card>
-          <h2 className="text-2xl font-semibold">Selected user</h2>
+          <h2 className="text-2xl font-semibold text-white">Selected user</h2>
           {selectedUser ? (
             <div className="mt-4 space-y-4 text-sm text-mist/80">
               <div className="space-y-1">
@@ -156,13 +156,13 @@ export function UsersManagementPage(): JSX.Element {
                 <p>Verification: {selectedUser.isEmailVerified ? 'Verified' : 'Pending'}</p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <button type="button" className="rounded-xl bg-ember px-4 py-2 font-medium text-ink" onClick={() => void handleAction(() => updateProfile(selectedUser.id, { fullName: displayName, twoFactorEnabled: selectedUser.twoFactorEnabled }))}>
+                <button type="button" className="rounded-xl bg-ember px-4 py-2 font-medium text-ink shadow-[0_10px_30px_rgba(201,130,78,0.2)]" onClick={() => void handleAction(() => updateProfile(selectedUser.id, { fullName: displayName, twoFactorEnabled: selectedUser.twoFactorEnabled }))}>
                   Save profile
                 </button>
-                <button type="button" className="rounded-xl border border-white/15 px-4 py-2 hover:bg-white/5" onClick={() => void handleAction(() => adjustWalletBalance(selectedUser.id, Number(adjustment), reason || 'Manual balance adjustment'))}>
+                <button type="button" className="rounded-xl border border-white/10 px-4 py-2 hover:bg-white/5" onClick={() => void handleAction(() => adjustWalletBalance(selectedUser.id, Number(adjustment), reason || 'Manual balance adjustment'))}>
                   Adjust balance
                 </button>
-                <button type="button" className="rounded-xl border border-white/15 px-4 py-2 hover:bg-white/5" onClick={() => selectedUser.email ? void handleAction(() => resetUserPassword(selectedUser.email)) : undefined}>
+                <button type="button" className="rounded-xl border border-white/10 px-4 py-2 hover:bg-white/5" onClick={() => selectedUser.email ? void handleAction(() => resetUserPassword(selectedUser.email)) : undefined}>
                   Reset password
                 </button>
               </div>
