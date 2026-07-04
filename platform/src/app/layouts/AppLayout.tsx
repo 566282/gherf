@@ -272,7 +272,7 @@ export function AppLayout({ children }: PropsWithChildren): JSX.Element {
             </div>
           </header>
 
-          <main id="main-content" className="flex-1 px-4 py-6 sm:px-6 lg:px-8">
+          <main id="main-content" className="flex-1 px-4 py-6 pb-32 sm:px-6 sm:pb-28 lg:px-8 lg:pb-6">
             {children ?? <Outlet />}
           </main>
         </div>
@@ -281,7 +281,7 @@ export function AppLayout({ children }: PropsWithChildren): JSX.Element {
       {mobileDrawerOpen ? (
         <div className="fixed inset-0 z-50 lg:hidden">
           <button type="button" className="absolute inset-0 bg-background/70 backdrop-blur-sm" aria-label="Close navigation drawer" onClick={() => setMobileDrawerOpen(false)} />
-          <aside className="relative flex h-full w-[85%] max-w-sm flex-col border-r border-border bg-background/96 p-4 shadow-2xl shadow-black/30">
+          <aside className="relative flex h-full w-[min(92vw,24rem)] max-w-sm flex-col border-r border-border bg-background/96 p-4 shadow-2xl shadow-black/30">
             <div className="flex items-center justify-between gap-3 border-b border-border pb-4">
               <div>
                 <p className="text-sm font-semibold text-foreground">Go4Wealth</p>
@@ -353,8 +353,8 @@ export function AppLayout({ children }: PropsWithChildren): JSX.Element {
         </div>
       ) : null}
 
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/92 px-3 py-2 backdrop-blur-xl lg:hidden">
-        <div className="mx-auto flex max-w-7xl items-center gap-2">
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/92 px-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl sm:px-3 lg:hidden">
+        <div className="mx-auto flex max-w-7xl items-center gap-1 sm:gap-2">
           {bottomNavItems.map((item) => {
             const active = location.pathname === item.path || location.pathname.startsWith(`${item.path}/`);
 
@@ -363,7 +363,7 @@ export function AppLayout({ children }: PropsWithChildren): JSX.Element {
                 key={item.path}
                 to={item.path}
                 className={clsx(
-                  'flex flex-1 flex-col items-center justify-center rounded-2xl px-2 py-2 text-xs transition',
+                  'flex flex-1 flex-col items-center justify-center rounded-2xl px-2 py-2 text-[11px] transition sm:text-xs',
                   active ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-surface-elevated hover:text-foreground',
                 )}
               >
@@ -377,7 +377,7 @@ export function AppLayout({ children }: PropsWithChildren): JSX.Element {
 
       <Link
         to={primaryAction.path}
-        className="fixed bottom-20 right-4 z-50 grid h-14 w-14 place-items-center rounded-full bg-accent text-base font-semibold text-accent-foreground shadow-2xl shadow-black/35 transition hover:bg-accent-strong lg:hidden"
+        className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] right-4 z-50 grid h-14 w-14 place-items-center rounded-full bg-accent text-base font-semibold text-accent-foreground shadow-2xl shadow-black/35 transition hover:bg-accent-strong lg:hidden"
         aria-label={primaryAction.label}
       >
         +

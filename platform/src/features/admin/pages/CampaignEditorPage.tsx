@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, type ReactNode, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -15,6 +15,17 @@ import {
   saveCampaign,
   type CampaignEditorFormValues,
 } from '@/services/api/campaigns';
+
+type WizardStep = 'type' | 'details' | 'rewards' | 'restrictions' | 'audience' | 'preview';
+
+const WIZARD_STEPS: Array<{ id: WizardStep; label: string; description: string }> = [
+  { id: 'type', label: 'Campaign type', description: 'Choose a template or start blank' },
+  { id: 'details', label: 'Core details', description: 'Title, description, and instructions' },
+  { id: 'rewards', label: 'Rewards & limits', description: 'Budget, reward amount, and caps' },
+  { id: 'restrictions', label: 'Restrictions', description: 'Devices, locations, verification' },
+  { id: 'audience', label: 'Target audience', description: 'Demographics and scheduling' },
+  { id: 'preview', label: 'Review & launch', description: 'Preview and save campaign' },
+];
 
 function FieldGroup({
   label,
@@ -118,8 +129,12 @@ export function CampaignEditorPage() {
   const presetType = isPresetType(searchParams.get('type')) ? searchParams.get('type') : 'custom_tasks';
   const defaultValues = createDefaultCampaignForm(presetType);
 
+  const [currentStep, setCurrentStep] = useState<WizardStep>('type');
+  const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
+  const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
+
   const form = useForm<CampaignEditorFormValues>({ defaultValues });
-  const { register, handleSubmit, reset, watch, setValue } = form;
+  const { register, handleSubmit, reset, watch, setValue, formState: { isDirty } } = form;
 
   const campaignQuery = useQuery({
     queryKey: ['campaign', id],
@@ -130,6 +145,7 @@ export function CampaignEditorPage() {
   const saveMutation = useMutation({
     mutationFn: (values: CampaignEditorFormValues) => saveCampaign(values, id),
     onSuccess: (savedCampaign) => {
+      setLastSavedTime(new Date().toLocaleTimeString());
       navigate(`/business/campaigns/${savedCampaign.id}/edit`);
     },
   });
@@ -150,6 +166,18 @@ export function CampaignEditorPage() {
       setValue('verificationMethod', preset.defaultVerificationMethod, { shouldDirty: false });
     }
   }, [id, searchParams, setValue]);
+
+  // Auto-save feature
+  useEffect(() => {
+    if (!autoSaveEnabled || !isDirty || saveMutation.isPending) return;
+
+    const autoSaveTimer = setTimeout(async () => {
+      const values = form.getValues();
+      await saveMutation.mutateAsync(values);
+    }, 3000);
+
+    return () => clearTimeout(autoSaveTimer);
+  }, [isDirty, autoSaveEnabled, saveMutation, form]);
 
   const values = watch();
   const preview = buildPreview(values);
@@ -185,9 +213,313 @@ export function CampaignEditorPage() {
     );
   }
 
+  const getStepContent = () => {
+    switch (currentStep) {
+      case 'type':
+        return (
+          <Card className="space-y-5">
+            <div>
+              <h2 className="text-2xl font-bold text-white">Step 1: Choose campaign type</h2>
+              <p className="text-sm text-mist mt-2">Select from preset templates or start with a custom task.</p>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {campaignTypeOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => {
+                    setValue('campaignType', option.value, { shouldDirty: true });
+                    setValue('instructions', option.defaultInstructions, { shouldDirty: true });
+                    setValue('verificationMethod', option.defaultVerificationMethod, { shouldDirty: true });
+                    if (!values.title || values.title === defaultValues.title) {
+                      setValue('title', option.label, { shouldDirty: true });
+                    }
+                    if (!values.description || values.description === defaultValues.description) {
+                      setValue('description', option.description, { shouldDirty: true });
+                    }
+                    setCurrentStep('details');
+                  }}
+                  className={`rounded-2xl border p-4 text-left transition ${
+                    values.campaignType === option.value
+                      ? 'border-ember bg-ember/10'
+                      : 'border-white/10 bg-white/5 hover:border-ember/40'
+                  }`}
+                >
+                  <p className="text-lg font-semibold text-white">{option.label}</p>
+                  <p className="mt-2 text-sm text-mist">{option.description}</p>
+                </button>
+              ))}
+            </div>
+          </Card>
+        );
+      case 'details':
+        return (
+          <Card className="space-y-5">
+            <h2 className="text-2xl font-bold text-white">Step 2: Campaign details</h2>
+            <div className="grid gap-4 md:grid-cols-2">
+              <FieldGroup label="Campaign title" hint="Clear, action-oriented name for your campaign.">
+                <input {...register('title', { required: true })} className="input-base" placeholder="Spring referral sprint" />
+              </FieldGroup>
+              <FieldGroup label="Campaign type">
+                <select {...register('campaignType')} className="input-base" disabled>
+                  {campaignTypeOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </FieldGroup>
+              <FieldGroup label="Description" hint="Visible to campaign managers and team members.">
+                <textarea {...register('description')} className="input-base min-h-24" />
+              </FieldGroup>
+              <FieldGroup label="Banner URL" hint="Optional hero image for campaign listings.">
+                <input {...register('bannerUrl')} className="input-base" placeholder="https://..." />
+              </FieldGroup>
+            </div>
+            <FieldGroup label="Instructions" hint="Step-by-step instructions shown to participants.">
+              <textarea {...register('instructions', { required: true })} className="input-base min-h-36" />
+            </FieldGroup>
+          </Card>
+        );
+      case 'rewards':
+        return (
+          <Card className="space-y-5">
+            <h2 className="text-2xl font-bold text-white">Step 3: Rewards & limits</h2>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <FieldGroup label="Reward amount" hint="Per-completion payout.">
+                <input type="number" step="0.01" {...register('rewardAmount', { valueAsNumber: true })} className="input-base" />
+              </FieldGroup>
+              <FieldGroup label="Total budget" hint="Total campaign budget.">
+                <input type="number" step="0.01" {...register('budget', { valueAsNumber: true })} className="input-base" />
+              </FieldGroup>
+              <FieldGroup label="Currency">
+                <input {...register('budgetCurrency')} className="input-base" placeholder="USD" />
+              </FieldGroup>
+              <FieldGroup label="Completion limit" hint="Max completions per user.">
+                <input type="number" {...register('completionLimit', { valueAsNumber: true })} className="input-base" />
+              </FieldGroup>
+              <FieldGroup label="Daily limit" hint="Max completions per user per day.">
+                <input type="number" {...register('dailyLimit', { valueAsNumber: true })} className="input-base" />
+              </FieldGroup>
+              <FieldGroup label="Total participants" hint="Target audience size.">
+                <input type="number" {...register('totalParticipants', { valueAsNumber: true })} className="input-base" />
+              </FieldGroup>
+              <FieldGroup label="Priority" hint="Higher values appear first.">
+                <input type="number" {...register('priority', { valueAsNumber: true })} className="input-base" />
+              </FieldGroup>
+              <FieldGroup label="Time delay before reward (seconds)">
+                <input type="number" {...register('timeDelayBeforeReward', { valueAsNumber: true })} className="input-base" />
+              </FieldGroup>
+              <FieldGroup label="Cooldown period (seconds)">
+                <input type="number" {...register('cooldownPeriod', { valueAsNumber: true })} className="input-base" />
+              </FieldGroup>
+            </div>
+          </Card>
+        );
+      case 'restrictions':
+        return (
+          <Card className="space-y-5">
+            <h2 className="text-2xl font-bold text-white">Step 4: Restrictions & approvals</h2>
+            <div className="grid gap-4 md:grid-cols-2">
+              <FieldGroup label="Country restrictions" hint="Comma-separated country codes or names.">
+                <textarea {...register('countryRestrictions')} className="input-base min-h-24" placeholder="US, GB, NG" />
+              </FieldGroup>
+              <FieldGroup label="Device restrictions">
+                <textarea {...register('deviceRestrictions')} className="input-base min-h-24" placeholder="desktop, mobile" />
+              </FieldGroup>
+              <FieldGroup label="Browser restrictions">
+                <textarea {...register('browserRestrictions')} className="input-base min-h-24" placeholder="chrome, safari" />
+              </FieldGroup>
+              <FieldGroup label="Verification method">
+                <select {...register('verificationMethod')} className="input-base">
+                  {campaignVerificationOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </FieldGroup>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <FieldGroup label="Auto approval" hint="Approve submissions instantly when validation rules pass.">
+                <div className="flex gap-3 pt-1">
+                  <TogglePill active={values.autoApproval} onClick={() => setValue('autoApproval', true, { shouldDirty: true })}>
+                    Enabled
+                  </TogglePill>
+                  <TogglePill active={!values.autoApproval} onClick={() => setValue('autoApproval', false, { shouldDirty: true })}>
+                    Disabled
+                  </TogglePill>
+                </div>
+              </FieldGroup>
+              <FieldGroup label="Manual approval" hint="Route submissions to a reviewer queue.">
+                <div className="flex gap-3 pt-1">
+                  <TogglePill active={values.manualApproval} onClick={() => setValue('manualApproval', true, { shouldDirty: true })}>
+                    Enabled
+                  </TogglePill>
+                  <TogglePill active={!values.manualApproval} onClick={() => setValue('manualApproval', false, { shouldDirty: true })}>
+                    Disabled
+                  </TogglePill>
+                </div>
+              </FieldGroup>
+              <FieldGroup label="Required screenshots">
+                <input type="number" {...register('requiredScreenshots', { valueAsNumber: true })} className="input-base" />
+              </FieldGroup>
+              <FieldGroup label="Required proof" hint="Text or proof template such as URL or receipt reference.">
+                <input {...register('requiredProof')} className="input-base" />
+              </FieldGroup>
+            </div>
+          </Card>
+        );
+      case 'audience':
+        return (
+          <Card className="space-y-5">
+            <h2 className="text-2xl font-bold text-white">Step 5: Target audience & schedule</h2>
+            <div className="grid gap-4 md:grid-cols-2">
+              <FieldGroup label="Age range" hint="e.g. 18-35 or 25-55">
+                <input {...register('targetAgeRange')} className="input-base" placeholder="18-35" />
+              </FieldGroup>
+              <FieldGroup label="Interests" hint="Comma-separated audience interests.">
+                <textarea {...register('targetInterests')} className="input-base min-h-24" placeholder="crypto, gaming, fintech" />
+              </FieldGroup>
+              <FieldGroup label="Regions" hint="Geographic regions or continents.">
+                <textarea {...register('targetRegions')} className="input-base min-h-24" placeholder="Africa, Europe" />
+              </FieldGroup>
+              <FieldGroup label="Languages">
+                <textarea {...register('targetLanguages')} className="input-base min-h-24" placeholder="en, fr" />
+              </FieldGroup>
+              <FieldGroup label="Tags" hint="Internal categorization tags.">
+                <textarea {...register('targetTags')} className="input-base min-h-24" placeholder="high-intent, web3" />
+              </FieldGroup>
+              <FieldGroup label="Audience notes" hint="Additional targeting context.">
+                <textarea {...register('targetNotes')} className="input-base min-h-24" />
+              </FieldGroup>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <FieldGroup label="Active from">
+                <input type="datetime-local" {...register('activeFrom')} className="input-base" />
+              </FieldGroup>
+              <FieldGroup label="Active to">
+                <input type="datetime-local" {...register('activeTo')} className="input-base" />
+              </FieldGroup>
+            </div>
+          </Card>
+        );
+      case 'preview':
+        return (
+          <div className="grid gap-6 xl:grid-cols-[1fr_350px]">
+            <Card className="space-y-5">
+              <div>
+                <h2 className="text-2xl font-bold text-white">Step 6: Review & launch</h2>
+                <p className="text-sm text-mist mt-2">Review your campaign configuration below, then save to publish.</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <h3 className="text-lg font-semibold text-white">Campaign summary</h3>
+                <div className="mt-4 space-y-2 text-sm">
+                  <p><span className="text-mist/70">Title:</span> <span className="text-white font-medium">{values.title}</span></p>
+                  <p><span className="text-mist/70">Type:</span> <span className="text-white font-medium">{values.campaignType.replace(/_/g, ' ')}</span></p>
+                  <p><span className="text-mist/70">Reward:</span> <span className="text-white font-medium">${values.rewardAmount.toFixed(2)}</span></p>
+                  <p><span className="text-mist/70">Budget:</span> <span className="text-white font-medium">${values.budget.toFixed(0)} {values.budgetCurrency}</span></p>
+                  <p><span className="text-mist/70">Participants:</span> <span className="text-white font-medium">{values.totalParticipants}</span></p>
+                  <p><span className="text-mist/70">Status:</span> <span className={`font-medium ${values.status === 'draft' ? 'text-mint' : 'text-amber-300'}`}>{values.status}</span></p>
+                </div>
+              </div>
+            </Card>
+
+            <Card className="sticky top-6">
+              <div>
+                <h2 className="text-2xl font-bold text-white">Live preview</h2>
+                <p className="text-sm text-mist mt-2">Exact configuration stored in database.</p>
+              </div>
+              <pre className="mt-4 max-h-[34rem] overflow-auto rounded-2xl border border-white/10 bg-ink/80 p-3 text-xs leading-relaxed text-mist">
+                {JSON.stringify(preview, null, 2)}
+              </pre>
+            </Card>
+          </div>
+        );
+    }
+  };
+
+  const currentStepIndex = WIZARD_STEPS.findIndex((s) => s.id === currentStep);
+
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+    <div className="space-y-6 p-6">
+      {/* Wizard progress */}
+      <div>
+        <div className="flex items-center justify-between gap-2 mb-4">
+          <div>
+            <p className="text-sm uppercase tracking-[0.24em] text-mint/70">Campaign wizard</p>
+            <h1 className="text-3xl font-bold text-white">{id ? 'Edit campaign' : 'Create new campaign'}</h1>
+          </div>
+          <div className="text-sm text-mist">
+            {lastSavedTime && <span className="text-mint">✓ Saved at {lastSavedTime}</span>}
+            {isDirty && autoSaveEnabled && <span className="text-blue-400">Saving...</span>}
+          </div>
+        </div>
+
+        {/* Step indicators */}
+        <div className="flex gap-2 overflow-x-auto">
+          {WIZARD_STEPS.map((step, idx) => (
+            <button
+              key={step.id}
+              onClick={() => setCurrentStep(step.id)}
+              className={`flex flex-col gap-1 rounded-xl border px-4 py-3 text-left whitespace-nowrap transition ${
+                currentStep === step.id
+                  ? 'border-ember bg-ember/10'
+                  : idx < currentStepIndex
+                  ? 'border-mint/30 bg-mint/10'
+                  : 'border-white/10 bg-white/5 hover:border-white/20'
+              }`}
+            >
+              <span className="text-xs uppercase tracking-[0.18em] text-mist/70">{step.label}</span>
+              <span className="text-xs text-mist/60">{step.description}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Step content */}
+      {getStepContent()}
+
+      {/* Navigation buttons */}
+      <div className="flex flex-wrap gap-3 justify-between sticky bottom-6">
+        <div className="flex gap-3">
+          {currentStepIndex > 0 && (
+            <Button variant="ghost" onClick={() => setCurrentStep(WIZARD_STEPS[currentStepIndex - 1].id)}>
+              ← Previous
+            </Button>
+          )}
+          {currentStepIndex < WIZARD_STEPS.length - 1 && (
+            <Button onClick={() => setCurrentStep(WIZARD_STEPS[currentStepIndex + 1].id)}>
+              Next →
+            </Button>
+          )}
+        </div>
+
+        <div className="flex gap-3">
+          {currentStepIndex === WIZARD_STEPS.length - 1 && (
+            <>
+              <label className="flex items-center gap-2 text-sm text-mist">
+                <input
+                  type="checkbox"
+                  checked={autoSaveEnabled}
+                  onChange={(e) => setAutoSaveEnabled(e.target.checked)}
+                  className="rounded border border-white/20"
+                />
+                Auto-save enabled
+              </label>
+              <Button variant="ghost" onClick={() => navigate('/business/campaigns')}>
+                Cancel
+              </Button>
+              <Button onClick={onSubmit} disabled={saveMutation.isPending}>
+                {saveMutation.isPending ? 'Saving...' : 'Save & launch campaign'}
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
         <div className="space-y-2">
           <p className="text-sm uppercase tracking-[0.3em] text-mint/80">Campaign engine editor</p>
           <h1 className="text-3xl font-bold text-ember">{id ? 'Edit campaign' : 'Create campaign'}</h1>

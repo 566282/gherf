@@ -1,6 +1,8 @@
 # investment_pwa
 
-A new Flutter project.
+A starter Flutter project.
+
+This root Flutter tree is a demo scaffold, not the production application. Use the `platform/` app for the production web release path unless this Flutter app is explicitly reworked to use a real backend auth and data layer.
 
 ## Getting Started
 

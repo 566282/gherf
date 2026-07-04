@@ -1,3 +1,6 @@
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import type { AnalyticsReport } from '@/services/api/analytics';
 
 export type AnalyticsDatasetKey =
@@ -151,8 +154,7 @@ function exportCsv(report: AnalyticsReport, dataset: AnalyticsDatasetKey): void 
   triggerDownload(new Blob([csv], { type: 'text/csv;charset=utf-8;' }), `analytics-${dataset}-${report.rangeDays}d.csv`);
 }
 
-async function exportExcel(report: AnalyticsReport, dataset: AnalyticsDatasetKey): Promise<void> {
-  const XLSX = await import('xlsx');
+function exportExcel(report: AnalyticsReport, dataset: AnalyticsDatasetKey): void {
   const workbook = XLSX.utils.book_new();
 
   if (dataset === 'all') {
@@ -170,8 +172,7 @@ async function exportExcel(report: AnalyticsReport, dataset: AnalyticsDatasetKey
   triggerDownload(new Blob([output], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `analytics-report-${report.rangeDays}d.xlsx`);
 }
 
-async function exportPdf(report: AnalyticsReport, dataset: AnalyticsDatasetKey): Promise<void> {
-  const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')]);
+function exportPdf(report: AnalyticsReport, dataset: AnalyticsDatasetKey): void {
   const doc = new jsPDF({ orientation: 'landscape' });
   const generatedAt = new Date(report.generatedAt).toLocaleString();
 
@@ -208,16 +209,16 @@ async function exportPdf(report: AnalyticsReport, dataset: AnalyticsDatasetKey):
   doc.save(`analytics-report-${report.rangeDays}d.pdf`);
 }
 
-export async function exportAnalyticsReport(report: AnalyticsReport, format: ExportFormat, dataset: AnalyticsDatasetKey): Promise<void> {
+export function exportAnalyticsReport(report: AnalyticsReport, format: ExportFormat, dataset: AnalyticsDatasetKey): void {
   if (format === 'csv') {
     exportCsv(report, dataset);
     return;
   }
 
   if (format === 'excel') {
-    await exportExcel(report, dataset);
+    exportExcel(report, dataset);
     return;
   }
 
-  await exportPdf(report, dataset);
+  exportPdf(report, dataset);
 }

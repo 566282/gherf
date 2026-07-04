@@ -1,29 +1,33 @@
-import { useAuthStore } from '@/stores/auth';
+import { useAuth as useAuthContext } from '@/app/providers/AuthProvider';
 import { UserRole } from '@/types';
 
 /**
  * Hook to access current user profile and auth state.
  */
 export function useAuth() {
-  const { user, loading, error } = useAuthStore();
-  return { user, loading, error };
+  const { isLoading, profile } = useAuthContext();
+
+  return { user: profile, loading: isLoading, error: null };
 }
 
 /**
  * Hook to check if user has any of the specified roles.
  */
 export function useHasRole(...roles: UserRole[]): boolean {
-  const { user } = useAuthStore();
-  if (!user) return false;
-  return roles.includes(user.role);
+  const { profile } = useAuthContext();
+
+  if (!profile) return false;
+
+  return roles.includes(profile.role as UserRole);
 }
 
 /**
  * Hook to check if user is authenticated.
  */
 export function useIsAuthenticated(): boolean {
-  const { user, loading } = useAuthStore();
-  return !loading && user !== null;
+  const { isLoading, isAuthenticated } = useAuthContext();
+
+  return !isLoading && isAuthenticated;
 }
 
 /**
@@ -51,14 +55,14 @@ export function useCanModerate(): boolean {
  * Hook to get permission level for UI decisions.
  */
 export function usePermissions() {
-  const user = useAuthStore((state) => state.user);
+  const { profile } = useAuthContext();
 
   return {
-    isAdmin: user?.role === UserRole.SUPER_ADMIN,
-    isCampaignManager: user?.role === UserRole.CAMPAIGN_MANAGER,
-    isAdvertiser: user?.role === UserRole.ADVERTISER,
-    isModerator: user?.role === UserRole.MODERATOR,
-    isUser: user?.role === UserRole.REGISTERED_USER,
-    isGuest: user?.role === UserRole.GUEST,
+    isAdmin: profile?.role === UserRole.SUPER_ADMIN,
+    isCampaignManager: profile?.role === UserRole.CAMPAIGN_MANAGER,
+    isAdvertiser: profile?.role === UserRole.ADVERTISER,
+    isModerator: profile?.role === UserRole.MODERATOR,
+    isUser: profile?.role === UserRole.REGISTERED_USER,
+    isGuest: profile?.role === UserRole.GUEST,
   };
 }

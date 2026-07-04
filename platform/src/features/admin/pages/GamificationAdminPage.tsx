@@ -1,23 +1,113 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { buildDefaultGamificationConfig, gamificationModules, listGamificationConfig, updateGamificationConfig, type GamificationConfig } from '@/services/api/gamification';
+
+function AnimatedCounter({ value, className }: { value: number; className?: string }): JSX.Element {
+  const [displayValue, setDisplayValue] = useState(value);
+
+  useEffect(() => {
+    let frame = 0;
+    const startValue = displayValue;
+    const difference = value - startValue;
+    const startTime = performance.now();
+
+    const step = (timestamp: number) => {
+      const progress = Math.min(1, (timestamp - startTime) / 320);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setDisplayValue(Math.round(startValue + difference * eased));
+
+      if (progress < 1) {
+        frame = window.requestAnimationFrame(step);
+      }
+    };
+
+    frame = window.requestAnimationFrame(step);
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [displayValue, value]);
+
+  return <span className={className}>{displayValue}</span>;
+}
+
+function ConfettiBurst(): JSX.Element {
+  const pieces = [
+    ['left-[10%]', 'bg-ember', '[--confetti-x:-30px]'],
+    ['left-[18%]', 'bg-success', '[--confetti-x:16px]'],
+    ['left-[28%]', 'bg-warning', '[--confetti-x:-18px]'],
+    ['left-[40%]', 'bg-info', '[--confetti-x:24px]'],
+    ['left-[52%]', 'bg-ember', '[--confetti-x:-12px]'],
+    ['left-[64%]', 'bg-success', '[--confetti-x:26px]'],
+    ['left-[76%]', 'bg-warning', '[--confetti-x:-22px]'],
+    ['left-[86%]', 'bg-info', '[--confetti-x:14px]'],
+  ] as const;
+
+  return (
+    <div className="pointer-events-none absolute inset-0 overflow-hidden">
+      {pieces.map(([position, color, offset], index) => (
+        <span key={`${position}-${index}`} className={`confetti-piece ${position} ${color} ${offset}`} style={{ top: `${8 + index * 2}%`, animationDelay: `${index * 80}ms` }} />
+      ))}
+    </div>
+  );
+}
 
 export function GamificationAdminPage() {
   const [config, setConfig] = useState<GamificationConfig>(buildDefaultGamificationConfig());
   const [statusMessage, setStatusMessage] = useState('Loading gamification configuration...');
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoadingConfig, setIsLoadingConfig] = useState(true);
+  const [showConfetti, setShowConfetti] = useState(false);
+  const lastSavedSnapshot = useRef('');
 
   useEffect(() => {
     void listGamificationConfig()
       .then((nextConfig) => {
         setConfig(nextConfig);
+        lastSavedSnapshot.current = JSON.stringify(nextConfig);
+        setIsLoadingConfig(false);
         setStatusMessage('Gamification settings loaded from platform settings.');
       })
-      .catch(() => setStatusMessage('Using local defaults until gamification settings are available.'));
+      .catch(() => {
+        setIsLoadingConfig(false);
+        setStatusMessage('Using local defaults until gamification settings are available.');
+      });
   }, []);
 
   const activeModules = useMemo(() => gamificationModules.filter((module) => config.modules[module.id]?.enabled).length, [config]);
+  const moduleCoverage = Math.round((activeModules / gamificationModules.length) * 100);
+  const daysRemaining = useMemo(() => {
+    const endDate = new Date(config.seasonEndsOn).getTime();
+    const difference = Number.isFinite(endDate) ? endDate - Date.now() : 0;
+    return Math.max(0, Math.ceil(difference / (1000 * 60 * 60 * 24)));
+  }, [config.seasonEndsOn]);
+
+  const validationErrors = useMemo(() => {
+    const nextErrors: string[] = [];
+
+    if (!config.seasonName.trim()) {
+      nextErrors.push('Season name is required.');
+    }
+
+    if (!config.seasonTheme.trim()) {
+      nextErrors.push('Season theme is required.');
+    }
+
+    if (!config.seasonEndsOn.trim()) {
+      nextErrors.push('Season end date is required.');
+    }
+
+    if (config.xpPerLevel < 50) {
+      nextErrors.push('XP per level must be at least 50.');
+    }
+
+    return nextErrors;
+  }, [config.seasonEndsOn, config.seasonName, config.seasonTheme, config.xpPerLevel]);
+
+  const triggerConfetti = useCallback(() => {
+    setShowConfetti(true);
+    window.setTimeout(() => setShowConfetti(false), 1700);
+  }, []);
 
   const updateModule = (moduleId: string, patch: Partial<GamificationConfig['modules'][keyof GamificationConfig['modules']]> ) => {
     setConfig((current) => ({
@@ -32,16 +122,42 @@ export function GamificationAdminPage() {
     }));
   };
 
-  const handleSave = async () => {
+  const persistConfig = useCallback(async (nextConfig: GamificationConfig, successMessage: string) => {
     setIsSaving(true);
-    setStatusMessage(null);
+    setStatusMessage('Saving gamification controls...');
 
     try {
-      await updateGamificationConfig(config);
-      setStatusMessage('Gamification controls saved.');
+      await updateGamificationConfig(nextConfig);
+      lastSavedSnapshot.current = JSON.stringify(nextConfig);
+      setStatusMessage(successMessage);
+      triggerConfetti();
+    } catch {
+      setStatusMessage('Unable to save gamification settings right now.');
     } finally {
       setIsSaving(false);
     }
+  }, [triggerConfetti]);
+
+  useEffect(() => {
+    if (isLoadingConfig) {
+      return;
+    }
+
+    const snapshot = JSON.stringify(config);
+    if (snapshot === lastSavedSnapshot.current) {
+      return;
+    }
+
+    setStatusMessage('Auto-saving gamification controls...');
+    const timeout = window.setTimeout(() => {
+      void persistConfig(config, 'Gamification controls auto-saved.');
+    }, 650);
+
+    return () => window.clearTimeout(timeout);
+  }, [config, isLoadingConfig, persistConfig]);
+
+  const handleSave = async () => {
+    await persistConfig(config, 'Gamification controls saved.');
   };
 
   const handleReset = () => {
@@ -49,10 +165,32 @@ export function GamificationAdminPage() {
     setStatusMessage('Gamification controls reset to defaults.');
   };
 
+  if (isLoadingConfig) {
+    return (
+      <div className="space-y-6 p-6">
+        <Card className="space-y-4">
+          <Skeleton className="h-4 w-40" />
+          <Skeleton className="h-10 w-3/5" />
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <Skeleton className="h-24" />
+            <Skeleton className="h-24" />
+            <Skeleton className="h-24" />
+            <Skeleton className="h-24" />
+          </div>
+        </Card>
+        <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+          <Skeleton className="h-[42rem]" />
+          <Skeleton className="h-[42rem]" />
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-6 p-6">
+    <div className="page-transition space-y-6 p-6">
       <Card className="relative overflow-hidden border border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(51,196,255,0.16),transparent_32%),linear-gradient(135deg,rgba(12,16,22,0.96),rgba(22,27,36,0.98))]">
         <div className="absolute inset-0 bg-[linear-gradient(120deg,transparent,rgba(255,255,255,0.03),transparent)]" />
+        {showConfetti ? <ConfettiBurst /> : null}
         <div className="relative flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
           <div className="max-w-3xl space-y-4">
             <p className="text-sm uppercase tracking-[0.35em] text-mint/80">Admin controls</p>
@@ -60,24 +198,38 @@ export function GamificationAdminPage() {
             <p className="text-base text-mist/80">
               Admin owns the daily login rules, streak tuning, XP growth, leaderboards, wheel bonuses, mystery rewards, missions, and seasonal event cadence.
             </p>
+            {validationErrors.length ? <p className="rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">{validationErrors.join(' ')}</p> : null}
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 xl:w-[28rem] xl:grid-cols-2">
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
               <p className="text-sm text-mist/60">Active modules</p>
-              <p className="mt-2 text-3xl font-bold text-white">{activeModules}</p>
+              <div className="mt-2 flex items-center gap-4">
+                <div className="flex h-16 w-16 items-center justify-center rounded-full" style={{ background: `conic-gradient(hsl(var(--color-success)) ${moduleCoverage}%, rgba(255,255,255,0.12) ${moduleCoverage}% 100%)` }}>
+                  <div className="flex h-11 w-11 items-center justify-center rounded-full bg-surface text-lg font-bold text-white">
+                    <AnimatedCounter value={moduleCoverage} />
+                  </div>
+                </div>
+                <div>
+                  <p className="text-3xl font-bold text-white">
+                    <AnimatedCounter value={activeModules} />
+                  </p>
+                  <p className="text-xs uppercase tracking-[0.2em] text-mist/50">of {gamificationModules.length}</p>
+                </div>
+              </div>
             </div>
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
               <p className="text-sm text-mist/60">XP per level</p>
-              <p className="mt-2 text-3xl font-bold text-white">{config.xpPerLevel}</p>
+              <p className="mt-2 text-3xl font-bold text-white"><AnimatedCounter value={config.xpPerLevel} /></p>
             </div>
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
               <p className="text-sm text-mist/60">Wheel spins per day</p>
-              <p className="mt-2 text-3xl font-bold text-white">{config.maxDailyWheelSpins}</p>
+              <p className="mt-2 text-3xl font-bold text-white"><AnimatedCounter value={config.maxDailyWheelSpins} /></p>
             </div>
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
               <p className="text-sm text-mist/60">Season end</p>
-              <p className="mt-2 text-3xl font-bold text-white">{config.seasonEndsOn}</p>
+              <p className="mt-2 text-3xl font-bold text-white">{daysRemaining}d</p>
+              <p className="text-xs uppercase tracking-[0.2em] text-mist/50">Countdown to wrap-up</p>
             </div>
           </div>
         </div>
@@ -101,10 +253,12 @@ export function GamificationAdminPage() {
             <label className="grid gap-2 md:col-span-2">
               <span className="text-sm text-mist/70">Season name</span>
               <input className="input-base" value={config.seasonName} onChange={(event) => setConfig((current) => ({ ...current, seasonName: event.target.value }))} />
+              <p className="form-hint">Use a concise label users will see in the app and leaderboards.</p>
             </label>
             <label className="grid gap-2 md:col-span-2">
               <span className="text-sm text-mist/70">Season theme</span>
               <input className="input-base" value={config.seasonTheme} onChange={(event) => setConfig((current) => ({ ...current, seasonTheme: event.target.value }))} />
+              <p className="form-hint">This frames missions, badges, and rewards for the current season.</p>
             </label>
             <label className="grid gap-2">
               <span className="text-sm text-mist/70">Season ends on</span>

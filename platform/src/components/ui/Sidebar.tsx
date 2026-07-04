@@ -27,11 +27,11 @@ export function Sidebar({ open, onToggle }: SidebarProps) {
       aria-label="App navigation"
       className={clsx(
         open ? 'w-64' : 'w-20',
-        'bg-slate/50 border-r border-mist/20 transition-all duration-300 overflow-y-auto flex flex-col',
+        'flex flex-col overflow-y-auto border-r border-border bg-surface/80 transition-all duration-300',
       )}
     >
       <div className="flex items-center justify-between p-4">
-        <span className="font-bold text-ember text-xl" aria-hidden={!open || undefined}>
+        <span className="text-xl font-bold text-accent" aria-hidden={!open || undefined}>
           {open ? 'CR Platform' : 'CR'}
         </span>
         {onToggle && (
@@ -39,7 +39,7 @@ export function Sidebar({ open, onToggle }: SidebarProps) {
             type="button"
             onClick={onToggle}
             aria-label={open ? 'Collapse sidebar' : 'Expand sidebar'}
-            className="ml-auto text-mist hover:text-ember focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember rounded"
+            className="ml-auto rounded text-muted transition hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
             {open ? '←' : '→'}
           </button>
@@ -56,10 +56,10 @@ export function Sidebar({ open, onToggle }: SidebarProps) {
               aria-label={!open ? item.label : undefined}
               aria-current={active ? 'page' : undefined}
               className={clsx(
-                'block px-4 py-3 text-sm rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember',
+                'block rounded-lg px-4 py-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
                 active
-                  ? 'bg-ember/20 text-ember font-medium'
-                  : 'text-mist hover:bg-mist/10 hover:text-ember',
+                  ? 'bg-accent-soft text-accent font-medium'
+                  : 'text-foreground hover:bg-surface-elevated hover:text-accent',
               )}
             >
               {open ? item.label : <span aria-hidden="true">{item.label.charAt(0)}</span>}
