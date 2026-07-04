@@ -3,15 +3,101 @@
 @tailwind utilities;
 
 :root {
-  font-family: 'Space Grotesk', 'Manrope', 'Segoe UI', sans-serif;
-  color: #e7edf6;
-  background: #0b1020;
+  --color-background: 221 47% 8%;
+  --color-foreground: 210 40% 96%;
+  --color-surface: 221 38% 12%;
+  --color-surface-elevated: 221 31% 16%;
+  --color-muted: 215 18% 66%;
+  --color-border: 219 25% 22%;
+  --color-accent: 214 92% 62%;
+  --color-accent-soft: 214 80% 18%;
+  --color-accent-strong: 214 92% 68%;
+  --color-accent-foreground: 223 52% 10%;
+  --color-success: 151 61% 53%;
+  --color-warning: 38 92% 60%;
+  --color-error: 0 84% 68%;
+  --color-info: 199 89% 58%;
+  --color-surface-glow: 221 38% 15%;
+  --chart-1: 214 90% 66%;
+  --chart-2: 199 89% 61%;
+  --chart-3: 158 72% 58%;
+  --chart-4: 252 84% 71%;
+  --chart-5: 38 92% 63%;
+  --chart-6: 0 84% 69%;
+  --font-sans: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  --focus-ring: 214 92% 62%;
+  --custom-spacing-unit: 1rem;
+  --custom-radius-card: 1rem;
+  --custom-radius-pill: 999rem;
+  --custom-shadow-depth: 0 24px 70px hsl(var(--color-background) / 0.24);
+  --custom-animation-duration: 260ms;
+  --custom-transition-duration: 200ms;
+  --custom-opacity-muted: 0.72;
+  --custom-grid-columns: 12;
+  --custom-sidebar-width: 21rem;
+  --custom-layout-mode: sidebar;
+  font-family: var(--font-sans);
+  color: hsl(var(--color-foreground));
+  background: hsl(var(--color-background));
+  color-scheme: dark;
+}
+
+html {
+  font-family: var(--font-sans);
+  background: hsl(var(--color-background));
+  color: hsl(var(--color-foreground));
 }
 
 body {
   margin: 0;
   min-height: 100vh;
-  background: #0b1020;
+  background:
+    radial-gradient(circle at top left, hsl(var(--color-accent) / 0.12), transparent 28%),
+    radial-gradient(circle at top right, hsl(var(--color-success) / 0.1), transparent 24%),
+    linear-gradient(180deg, hsl(var(--color-background)) 0%, hsl(var(--color-surface)) 48%, hsl(var(--color-background)) 100%);
+  color: hsl(var(--color-foreground));
+}
+
+:root[data-theme='light'] [class*='text-white'] {
+  color: hsl(var(--color-foreground)) !important;
+}
+
+:root[data-theme='light'] .text-ink {
+  color: hsl(var(--color-foreground)) !important;
+}
+
+:root[data-theme='light'] [class*='bg-white'] {
+  background-color: hsl(var(--color-surface-elevated)) !important;
+}
+
+:root[data-theme='light'] [class*='border-white'] {
+  border-color: hsl(var(--color-border)) !important;
+}
+
+[data-contrast='high'] {
+  --focus-ring: 45 100% 60%;
+}
+
+[data-contrast='high'] [class*='bg-white/5'],
+[data-contrast='high'] [class*='bg-white/6'],
+[data-contrast='high'] [class*='bg-white/8'],
+[data-contrast='high'] [class*='bg-white/10'] {
+  background-color: hsl(var(--color-surface-elevated)) !important;
+}
+
+[data-contrast='high'] [class*='border-white/5'],
+[data-contrast='high'] [class*='border-white/10'] {
+  border-color: hsl(var(--color-foreground) / 0.24) !important;
+}
+
+[data-contrast='high'] .input-base {
+  background: hsl(var(--color-background)) !important;
+  border-color: hsl(var(--color-foreground) / 0.34) !important;
+}
+
+[data-contrast='high'] button,
+[data-contrast='high'] a {
+  text-decoration-thickness: 0.14em;
 }
 
 a,
@@ -23,8 +109,8 @@ textarea {
 }
 
 :focus-visible {
-  outline: 2px solid #fb923c;
-  outline-offset: 2px;
+  outline: 2px solid hsl(var(--focus-ring) / 0.75);
+  outline-offset: 3px;
 }
 
 .skip-link {
@@ -34,16 +120,70 @@ textarea {
   z-index: 50;
   transform: translateY(-160%);
   border-radius: 0.5rem;
-  background: #111827;
-  color: #e7edf6;
+  background: hsl(var(--color-surface) / 0.96);
+  color: hsl(var(--color-foreground));
   padding: 0.5rem 0.75rem;
   text-decoration: none;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid hsl(var(--color-border) / 0.65);
   transition: transform 0.2s ease;
 }
 
 .skip-link:focus-visible {
   transform: translateY(0);
+}
+
+:root[data-layout-mode='stacked'] [data-admin-shell='true'] {
+  flex-direction: column;
+}
+
+:root[data-layout-mode='stacked'] [data-admin-shell='true'] aside {
+  width: 100%;
+  max-height: 4.5rem;
+}
+
+:root[data-layout-mode='split'] [data-admin-main='true'] {
+  max-width: 1280px;
+  margin-inline: auto;
+  padding-inline: 0.75rem;
+}
+
+:root[data-sidebar-style='expanded'] {
+  --custom-sidebar-width: 21rem;
+}
+
+:root[data-sidebar-style='compact'] {
+  --custom-sidebar-width: 17rem;
+}
+
+:root[data-card-style='flat'] .glass-card {
+  box-shadow: none;
+  backdrop-filter: none;
+  background: hsl(var(--color-surface));
+}
+
+:root[data-card-style='elevated'] .glass-card {
+  box-shadow: 0 30px 80px hsl(var(--color-background) / 0.32);
+  background: hsl(var(--color-surface-elevated));
+}
+
+:root[data-card-style='glass'] .glass-card {
+  box-shadow: var(--custom-shadow-depth);
+  background: hsl(var(--color-surface) / 0.86);
+}
+
+:root[data-button-style='sharp'] button,
+:root[data-button-style='sharp'] a[role='button'] {
+  border-radius: 0.6rem;
+}
+
+:root[data-button-style='rounded'] button,
+:root[data-button-style='rounded'] a[role='button'] {
+  border-radius: 999rem;
+}
+
+:root[data-button-style='pill'] button,
+:root[data-button-style='pill'] a[role='button'] {
+  border-radius: 1rem;
 }
 
 img {
@@ -68,6 +208,139 @@ img {
 
 @layer components {
   .glass-card {
-    @apply rounded-card border border-white/10 bg-white/5 shadow-depth backdrop-blur-md;
+    border-radius: var(--custom-radius-card);
+    @apply border border-border bg-surface/90 backdrop-blur-md transition-transform ease-out;
+    box-shadow: var(--custom-shadow-depth);
+    transition-duration: var(--custom-transition-duration);
+  }
+
+  .surface-card {
+    border-radius: var(--custom-radius-card);
+    @apply border border-border bg-surface transition-transform ease-out;
+    box-shadow: var(--custom-shadow-depth);
+    transition-duration: var(--custom-transition-duration);
+  }
+
+  .input-base {
+    border-radius: var(--custom-radius-card);
+    @apply w-full border border-border bg-surface px-4 py-3 text-foreground placeholder:text-muted shadow-sm transition ease-out focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30 hover:border-accent/50 hover:shadow-md;
+    transition-duration: var(--custom-transition-duration);
+  }
+
+  .badge {
+    border-radius: var(--custom-radius-pill);
+    @apply inline-flex items-center px-3 py-1 text-sm font-medium;
+  }
+
+  .admin-sidebar {
+    width: var(--custom-sidebar-width);
+    max-width: var(--custom-sidebar-width);
+  }
+
+  .admin-sidebar.admin-sidebar-collapsed {
+    width: 5rem;
+    max-width: 5rem;
+  }
+
+  .badge-primary {
+    @apply badge bg-accent-soft text-accent;
+  }
+
+  .badge-success {
+    @apply badge bg-success/15 text-success;
+  }
+
+  .badge-muted {
+    @apply badge bg-surface-elevated text-muted;
+  }
+
+  .semantic-chip {
+    border-radius: var(--custom-radius-pill);
+    @apply inline-flex items-center border border-border bg-surface-elevated px-3 py-1 text-xs font-medium uppercase tracking-[0.2em] text-muted;
+  }
+
+  .page-transition {
+    animation: page-fade-in var(--custom-animation-duration) ease-out both;
+  }
+
+  .interactive-card:hover {
+    transform: translateY(-0.25rem);
+  }
+
+  .skeleton {
+    position: relative;
+    overflow: hidden;
+    background: hsl(var(--color-surface-elevated));
+  }
+
+  .skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, hsl(var(--color-foreground) / 0.08), transparent);
+    animation: skeleton-shimmer 1.4s infinite;
+  }
+
+  .progress-track {
+    @apply h-2 overflow-hidden rounded-full bg-white/10;
+  }
+
+  .progress-fill {
+    @apply h-full rounded-full bg-gradient-to-r from-ember to-orange-300 transition-all duration-500 ease-out;
+  }
+
+  .form-hint {
+    @apply text-xs text-mist/60;
+  }
+
+  .form-error {
+    @apply text-xs text-error;
+  }
+
+  .form-success {
+    @apply text-sm text-success;
+  }
+
+  .confetti-piece {
+    position: absolute;
+    width: 0.5rem;
+    height: 1rem;
+    border-radius: 999px;
+    animation: confetti-fall 1.8s ease-out forwards;
+  }
+}
+
+@keyframes page-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes skeleton-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes confetti-fall {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) rotate(0deg) scale(0.85);
+  }
+
+  15% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate3d(var(--confetti-x, 0), 160px, 0) rotate(720deg) scale(1);
   }
 }

@@ -3,7 +3,9 @@ import { Link } from 'react-router-dom';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { listAdminConsoleConfig, updateAdminConsoleConfig } from '@/services/api/admin';
-import type { AdminFeatureConfig } from '@/types';
+import { defaultCustomizationConfig, themePresetOptions } from '@/lib/customization';
+import { getThemePresetTheme, themeFontOptions, themeModeOptions, themePaletteOptions, themeStorageEvent } from '@/lib/theme';
+import type { AdminCustomizationConfig, AdminFeatureConfig, AdminThemeConfig } from '@/types';
 
 type FeatureModule = {
   id: string;
@@ -129,12 +131,12 @@ const featureModules: FeatureModule[] = [
     title: 'CMS',
     section: 'Content',
     category: 'Publishing',
-    description: 'Control page publishing, draft approvals, and content ownership.',
+    description: 'Edit the Go4Wealth homepage, FAQs, help center, legal pages, blog, landing pages, advertiser pages, and user guides.',
     risk: 'Medium',
     owner: 'Content',
     modes: ['Draft only', 'Editorial review', 'Instant publish'],
     policies: ['Preview required', 'Scheduled release', 'Localization gate'],
-    scopeOptions: ['Landing pages', 'Blog', 'Help center'],
+    scopeOptions: ['Homepage', 'Legal pages', 'Campaign content'],
     noteLabel: 'Publishing note',
   },
   {
@@ -229,6 +231,9 @@ const sectionAnchors = [
 
 type FeatureState = AdminFeatureConfig;
 
+type ThemeState = AdminThemeConfig;
+type CustomizationState = AdminCustomizationConfig;
+
 const defaultFeatureState = (feature: FeatureModule): FeatureState => ({
   enabled: feature.id !== 'maintenance',
   mode: feature.modes[0],
@@ -242,8 +247,16 @@ const featureGroups = sectionAnchors.map((section) => ({
   features: featureModules.filter((feature) => feature.section === section.label),
 }));
 
+const defaultThemeState: ThemeState = {
+  mode: 'auto',
+  palette: 'deep-blue',
+  fontFamily: 'Inter',
+};
+
 export function AdminPanelPage() {
   const [savedMessage, setSavedMessage] = useState('All admin modules are editable in this console.');
+  const [themeState, setThemeState] = useState<ThemeState>(defaultThemeState);
+  const [customizationState, setCustomizationState] = useState<CustomizationState>(defaultCustomizationConfig);
   const [featureStates, setFeatureStates] = useState<Record<string, FeatureState>>(() =>
     Object.fromEntries(featureModules.map((feature) => [feature.id, defaultFeatureState(feature)])),
   );
@@ -259,6 +272,8 @@ export function AdminPanelPage() {
             ]),
           ),
         );
+        setThemeState(config.theme ?? defaultThemeState);
+        setCustomizationState(config.customization ?? defaultCustomizationConfig);
         setSavedMessage('Loaded saved admin configuration.');
       })
       .catch(() => setSavedMessage('Using local defaults until admin settings are available.'));
@@ -294,8 +309,17 @@ export function AdminPanelPage() {
   };
 
   const handleSave = async () => {
-    await updateAdminConsoleConfig({ features: featureStates });
+    const nextConfig = { features: featureStates, theme: themeState, customization: customizationState };
+    await updateAdminConsoleConfig(nextConfig);
+    window.dispatchEvent(new CustomEvent(themeStorageEvent, { detail: { theme: themeState } }));
     setSavedMessage('Configuration saved to platform settings.');
+  };
+
+  const updateCustomization = (patch: Partial<CustomizationState>) => {
+    setCustomizationState((current) => ({
+      ...current,
+      ...patch,
+    }));
   };
 
   return (
@@ -304,30 +328,30 @@ export function AdminPanelPage() {
         <div className="absolute inset-0 bg-[linear-gradient(120deg,transparent,rgba(255,255,255,0.03),transparent)]" />
         <div className="relative flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
           <div className="max-w-4xl space-y-4">
-            <p className="text-sm uppercase tracking-[0.35em] text-ember/80">Phase 7 admin console</p>
-            <h1 className="text-4xl font-bold text-white md:text-5xl">Professional admin panel</h1>
-            <p className="max-w-3xl text-base text-mist/80">
+            <p className="text-sm uppercase tracking-[0.35em] text-accent/80">Phase 7 admin console</p>
+            <h1 className="text-4xl font-bold text-foreground md:text-5xl">Professional admin panel</h1>
+            <p className="max-w-3xl text-base text-muted">
               Configure every operational surface from one control center: users, campaigns, finance, reports, analytics,
               fraud, support, content, templates, site settings, theme, feature flags, and maintenance mode.
             </p>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 xl:w-[28rem] xl:grid-cols-2">
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-              <p className="text-sm text-mist/60">Modules enabled</p>
-              <p className="mt-2 text-3xl font-bold text-white">{summary.enabledCount}</p>
+            <div className="rounded-2xl border border-border bg-surface-elevated p-4">
+              <p className="text-sm text-muted">Modules enabled</p>
+              <p className="mt-2 text-3xl font-bold text-foreground">{summary.enabledCount}</p>
             </div>
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-              <p className="text-sm text-mist/60">Modules locked</p>
-              <p className="mt-2 text-3xl font-bold text-white">{summary.disabledCount}</p>
+            <div className="rounded-2xl border border-border bg-surface-elevated p-4">
+              <p className="text-sm text-muted">Modules locked</p>
+              <p className="mt-2 text-3xl font-bold text-foreground">{summary.disabledCount}</p>
             </div>
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-              <p className="text-sm text-mist/60">High-risk controls</p>
-              <p className="mt-2 text-3xl font-bold text-white">{summary.highRiskCount}</p>
+            <div className="rounded-2xl border border-border bg-surface-elevated p-4">
+              <p className="text-sm text-muted">High-risk controls</p>
+              <p className="mt-2 text-3xl font-bold text-foreground">{summary.highRiskCount}</p>
             </div>
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-              <p className="text-sm text-mist/60">Maintenance mode</p>
-              <p className="mt-2 text-3xl font-bold text-white">{summary.maintenanceState}</p>
+            <div className="rounded-2xl border border-border bg-surface-elevated p-4">
+              <p className="text-sm text-muted">Maintenance mode</p>
+              <p className="mt-2 text-3xl font-bold text-foreground">{summary.maintenanceState}</p>
             </div>
           </div>
         </div>
@@ -337,7 +361,7 @@ export function AdminPanelPage() {
             <a
               key={anchor.id}
               href={`#${anchor.id}`}
-              className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-mist/80 transition hover:border-ember/50 hover:text-white"
+              className="rounded-full border border-border bg-surface-elevated px-4 py-2 text-sm text-muted transition hover:border-accent/50 hover:text-foreground"
             >
               {anchor.label}
             </a>
@@ -346,31 +370,31 @@ export function AdminPanelPage() {
       </Card>
 
       <div id="overview" className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Card className="border border-white/5 bg-white/5">
-          <p className="text-sm text-mist/60">User governance</p>
-          <p className="mt-3 text-2xl font-bold text-white">Verification, roles, and wallet access</p>
-          <p className="mt-2 text-sm text-mist/70">Policy gates, suspension controls, and admin actions are configurable.</p>
+        <Card className="border border-border bg-surface-elevated">
+          <p className="text-sm text-muted">User governance</p>
+          <p className="mt-3 text-2xl font-bold text-foreground">Verification, roles, and wallet access</p>
+          <p className="mt-2 text-sm text-muted">Policy gates, suspension controls, and admin actions are configurable.</p>
         </Card>
-        <Card className="border border-white/5 bg-white/5">
-          <p className="text-sm text-mist/60">Growth operations</p>
-          <p className="mt-3 text-2xl font-bold text-white">Campaign review and budget controls</p>
-          <p className="mt-2 text-sm text-mist/70">Approve campaign structure, spend limits, and rule presets.</p>
+        <Card className="border border-border bg-surface-elevated">
+          <p className="text-sm text-muted">Growth operations</p>
+          <p className="mt-3 text-2xl font-bold text-foreground">Campaign review and budget controls</p>
+          <p className="mt-2 text-sm text-muted">Approve campaign structure, spend limits, and rule presets.</p>
         </Card>
-        <Card className="border border-white/5 bg-white/5">
-          <p className="text-sm text-mist/60">Payout safety</p>
-          <p className="mt-3 text-2xl font-bold text-white">Withdrawal approvals and treasury policies</p>
-          <p className="mt-2 text-sm text-mist/70">Manual, hybrid, and automatic payout paths remain switchable.</p>
+        <Card className="border border-border bg-surface-elevated">
+          <p className="text-sm text-muted">Payout safety</p>
+          <p className="mt-3 text-2xl font-bold text-foreground">Withdrawal approvals and treasury policies</p>
+          <p className="mt-2 text-sm text-muted">Manual, hybrid, and automatic payout paths remain switchable.</p>
         </Card>
-        <Card className="border border-white/5 bg-white/5">
-          <p className="text-sm text-mist/60">Release control</p>
-          <p className="mt-3 text-2xl font-bold text-white">Feature flags and maintenance switches</p>
-          <p className="mt-2 text-sm text-mist/70">Ship safely with staged rollout and emergency off-ramps.</p>
+        <Card className="border border-border bg-surface-elevated">
+          <p className="text-sm text-muted">Release control</p>
+          <p className="mt-3 text-2xl font-bold text-foreground">Feature flags and maintenance switches</p>
+          <p className="mt-2 text-sm text-muted">Ship safely with staged rollout and emergency off-ramps.</p>
         </Card>
-        <Card className="border border-white/5 bg-white/5">
-          <p className="text-sm text-mist/60">Engagement systems</p>
-          <p className="mt-3 text-2xl font-bold text-white">Daily login, streaks, XP, and rewards</p>
-          <p className="mt-2 text-sm text-mist/70">Tune progression loops, lucky wheel odds, missions, and seasonal events.</p>
-          <Link to="/admin/gamification" className="mt-4 inline-block text-sm text-ember hover:underline">
+        <Card className="border border-border bg-surface-elevated">
+          <p className="text-sm text-muted">Engagement systems</p>
+          <p className="mt-3 text-2xl font-bold text-foreground">Daily login, streaks, XP, and rewards</p>
+          <p className="mt-2 text-sm text-muted">Tune progression loops, lucky wheel odds, missions, and seasonal events.</p>
+          <Link to="/admin/gamification" className="mt-4 inline-block text-sm text-accent hover:underline">
             Open gamification controls
           </Link>
         </Card>
@@ -379,15 +403,18 @@ export function AdminPanelPage() {
       <Card>
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="text-sm uppercase tracking-[0.24em] text-ember/70">Command layer</p>
-            <h2 className="mt-2 text-3xl font-semibold text-white">Configurable feature matrix</h2>
-            <p className="mt-2 max-w-3xl text-mist/75">
+            <p className="text-sm uppercase tracking-[0.24em] text-accent/70">Command layer</p>
+            <h2 className="mt-2 text-3xl font-semibold text-foreground">Configurable feature matrix</h2>
+            <p className="mt-2 max-w-3xl text-muted">
               Every admin capability is editable from the module cards below. Toggle access, choose a mode, assign a policy,
               and stamp a note for auditability.
             </p>
           </div>
 
           <div className="flex flex-wrap gap-3">
+            <Link to="/admin/cms" className="rounded-xl border border-border bg-surface-elevated px-4 py-2 text-sm text-foreground transition hover:border-accent/50 hover:text-accent">
+              Open CMS editor
+            </Link>
             <Button variant="ghost" onClick={resetAll}>
               Reset defaults
             </Button>
@@ -395,17 +422,500 @@ export function AdminPanelPage() {
           </div>
         </div>
 
-        <p className="mt-4 text-sm text-mist/70">{savedMessage}</p>
+        <p className="mt-4 text-sm text-muted">{savedMessage}</p>
+      </Card>
+
+      <Card className="border border-border bg-surface-elevated">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-sm uppercase tracking-[0.24em] text-accent/70">Theme studio</p>
+            <h2 className="mt-2 text-3xl font-semibold text-foreground">Color system and typography</h2>
+            <p className="mt-2 max-w-3xl text-muted">
+              Configure light, dark, or auto mode, then choose a palette and type family. The selected theme updates semantic tokens, charts, and shared components across the app.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <span className="semantic-chip">Accessible charts</span>
+            <span className="semantic-chip">Semantic tokens</span>
+            <span className="semantic-chip">Reusable primitives</span>
+          </div>
+        </div>
+
+        <div className="mt-6 grid gap-4 lg:grid-cols-3">
+          <label className="grid gap-2">
+            <span className="text-sm text-muted">Theme mode</span>
+            <select className="input-base" value={themeState.mode} onChange={(event) => setThemeState((current) => ({ ...current, mode: event.target.value as ThemeState['mode'] }))}>
+              {themeModeOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="grid gap-2">
+            <span className="text-sm text-muted">Primary palette</span>
+            <select className="input-base" value={themeState.palette} onChange={(event) => setThemeState((current) => ({ ...current, palette: event.target.value as ThemeState['palette'] }))}>
+              {themePaletteOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="grid gap-2">
+            <span className="text-sm text-muted">Font family</span>
+            <select className="input-base" value={themeState.fontFamily} onChange={(event) => setThemeState((current) => ({ ...current, fontFamily: event.target.value as ThemeState['fontFamily'] }))}>
+              {themeFontOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div className="mt-6 grid gap-4 md:grid-cols-3">
+          <div className="rounded-2xl border border-border bg-background p-4">
+            <p className="text-xs uppercase tracking-[0.24em] text-muted">Surface preview</p>
+            <div className="mt-3 rounded-xl border border-border bg-surface p-4">
+              <p className="text-sm text-muted">Body copy</p>
+              <p className="mt-2 text-lg font-semibold text-foreground">Card, form, and shell surfaces are token driven.</p>
+            </div>
+          </div>
+          <div className="rounded-2xl border border-border bg-background p-4">
+            <p className="text-xs uppercase tracking-[0.24em] text-muted">Accent preview</p>
+            <div className="mt-3 flex items-center gap-2">
+              <span className="h-10 w-10 rounded-full bg-accent" />
+              <span className="h-10 w-10 rounded-full bg-success" />
+              <span className="h-10 w-10 rounded-full bg-warning" />
+              <span className="h-10 w-10 rounded-full bg-info" />
+            </div>
+          </div>
+          <div className="rounded-2xl border border-border bg-background p-4">
+            <p className="text-xs uppercase tracking-[0.24em] text-muted">Chart palette</p>
+            <div className="mt-3 grid grid-cols-6 gap-2">
+              <span className="h-8 rounded-full bg-chart-1" />
+              <span className="h-8 rounded-full bg-chart-2" />
+              <span className="h-8 rounded-full bg-chart-3" />
+              <span className="h-8 rounded-full bg-chart-4" />
+              <span className="h-8 rounded-full bg-chart-5" />
+              <span className="h-8 rounded-full bg-chart-6" />
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      <Card className="border border-border bg-surface-elevated">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-sm uppercase tracking-[0.24em] text-accent/70">Customization engine</p>
+            <h2 className="mt-2 text-3xl font-semibold text-foreground">Reusable tokens, branding, and trust controls</h2>
+            <p className="mt-2 max-w-3xl text-muted">
+              Use presets for the fast path, then refine branding, layout density, trust elements, and template families without touching code.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <span className="semantic-chip">Design tokens</span>
+            <span className="semantic-chip">Trust elements</span>
+            <span className="semantic-chip">Template presets</span>
+          </div>
+        </div>
+
+        <div className="mt-6 grid gap-4 lg:grid-cols-3">
+          <label className="grid gap-2">
+            <span className="text-sm text-muted">Layout mode</span>
+            <select
+              className="input-base"
+              value={customizationState.layout.mode}
+              onChange={(event) => updateCustomization({ layout: { ...customizationState.layout, mode: event.target.value as CustomizationState['layout']['mode'] } })}
+            >
+              <option value="stacked">Stacked</option>
+              <option value="sidebar">Sidebar</option>
+              <option value="split">Split</option>
+            </select>
+          </label>
+
+          <label className="grid gap-2">
+            <span className="text-sm text-muted">Theme preset</span>
+            <select
+              className="input-base"
+              value={customizationState.themePreset}
+              onChange={(event) => {
+                const preset = event.target.value as CustomizationState['themePreset'];
+                const presetTheme = getThemePresetTheme(preset);
+                setCustomizationState((current) => ({ ...current, themePreset: preset }));
+                setThemeState(preset === 'custom' ? themeState : presetTheme);
+              }}
+            >
+              {themePresetOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-muted">Fast path for common brand directions.</p>
+          </label>
+
+          <label className="grid gap-2">
+            <span className="text-sm text-muted">Logo mark</span>
+            <input
+              className="input-base"
+              value={customizationState.branding.logoMark}
+              onChange={(event) => updateCustomization({ branding: { ...customizationState.branding, logoMark: event.target.value } })}
+            />
+          </label>
+
+          <label className="grid gap-2">
+            <span className="text-sm text-muted">Logo text</span>
+            <input
+              className="input-base"
+              value={customizationState.branding.logoText}
+              onChange={(event) => updateCustomization({ branding: { ...customizationState.branding, logoText: event.target.value } })}
+            />
+          </label>
+
+          <label className="grid gap-2">
+            <span className="text-sm text-muted">Logo & icon style</span>
+            <select
+              className="input-base"
+              value={customizationState.branding.iconStyle}
+              onChange={(event) => updateCustomization({ branding: { ...customizationState.branding, iconStyle: event.target.value as CustomizationState['branding']['iconStyle'] } })}
+            >
+              <option value="line">Line</option>
+              <option value="solid">Solid</option>
+              <option value="duotone">Duotone</option>
+            </select>
+          </label>
+
+          <label className="grid gap-2">
+            <span className="text-sm text-muted">Sidebar</span>
+            <select
+              className="input-base"
+              value={customizationState.layout.sidebar}
+              onChange={(event) => updateCustomization({ layout: { ...customizationState.layout, sidebar: event.target.value as CustomizationState['layout']['sidebar'] } })}
+            >
+              <option value="expanded">Expanded</option>
+              <option value="compact">Compact</option>
+            </select>
+          </label>
+
+          <label className="grid gap-2">
+            <span className="text-sm text-muted">Dashboard widgets</span>
+            <select
+              className="input-base"
+              value={customizationState.layout.dashboardWidgets}
+              onChange={(event) => updateCustomization({ layout: { ...customizationState.layout, dashboardWidgets: event.target.value as CustomizationState['layout']['dashboardWidgets'] } })}
+            >
+              <option value="stacked">Stacked</option>
+              <option value="bento">Bento</option>
+              <option value="dense">Dense</option>
+            </select>
+          </label>
+
+          <label className="grid gap-2">
+            <span className="text-sm text-muted">Navigation</span>
+            <select
+              className="input-base"
+              value={customizationState.layout.navigation}
+              onChange={(event) => updateCustomization({ layout: { ...customizationState.layout, navigation: event.target.value as CustomizationState['layout']['navigation'] } })}
+            >
+              <option value="top">Top</option>
+              <option value="side">Side</option>
+              <option value="hybrid">Hybrid</option>
+            </select>
+          </label>
+
+          <label className="grid gap-2">
+            <span className="text-sm text-muted">Homepage and landing sections</span>
+            <select
+              className="input-base"
+              value={customizationState.layout.landingPageSections}
+              onChange={(event) => updateCustomization({ layout: { ...customizationState.layout, landingPageSections: event.target.value as CustomizationState['layout']['landingPageSections'] } })}
+            >
+              <option value="full">Full sections</option>
+              <option value="focused">Focused sections</option>
+              <option value="minimal">Minimal sections</option>
+            </select>
+          </label>
+
+          <label className="grid gap-2">
+            <span className="text-sm text-muted">Button style</span>
+            <select
+              className="input-base"
+              value={customizationState.layout.buttonStyle}
+              onChange={(event) => updateCustomization({ layout: { ...customizationState.layout, buttonStyle: event.target.value as CustomizationState['layout']['buttonStyle'] } })}
+            >
+              <option value="rounded">Rounded</option>
+              <option value="pill">Pill</option>
+              <option value="sharp">Sharp</option>
+            </select>
+          </label>
+
+          <label className="grid gap-2">
+            <span className="text-sm text-muted">Card style</span>
+            <select
+              className="input-base"
+              value={customizationState.layout.cardStyle}
+              onChange={(event) => updateCustomization({ layout: { ...customizationState.layout, cardStyle: event.target.value as CustomizationState['layout']['cardStyle'] } })}
+            >
+              <option value="flat">Flat</option>
+              <option value="elevated">Elevated</option>
+              <option value="glass">Glass</option>
+            </select>
+          </label>
+        </div>
+
+        <div className="mt-6 grid gap-4 lg:grid-cols-2">
+          <div className="rounded-2xl border border-border bg-background p-4">
+            <p className="text-xs uppercase tracking-[0.24em] text-muted">Trust elements</p>
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              {([
+                ['sslSecurityIndicators', 'SSL/security indicators'],
+                ['verifiedAdvertiserBadges', 'Verified advertiser badges'],
+                ['verifiedUserBadges', 'Verified user badges'],
+                ['realTimeStatistics', 'Real-time statistics'],
+                ['transparentPayoutHistory', 'Transparent payout history'],
+                ['auditLogs', 'Audit logs'],
+                ['fraudProtectionMessaging', 'Fraud protection messaging'],
+                ['userTestimonials', 'User testimonials'],
+                ['professionalCertifications', 'Professional certifications'],
+                ['systemStatusIndicators', 'System status indicators'],
+              ] as const).map(([key, label]) => (
+                <label key={key} className="flex items-center gap-3 rounded-2xl border border-border bg-surface-elevated px-4 py-3 text-sm text-foreground">
+                  <input
+                    type="checkbox"
+                    checked={customizationState.trust[key]}
+                    onChange={(event) =>
+                      updateCustomization({
+                        trust: {
+                          ...customizationState.trust,
+                          [key]: event.target.checked,
+                        },
+                      })
+                    }
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-border bg-background p-4">
+            <p className="text-xs uppercase tracking-[0.24em] text-muted">Token families</p>
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <label className="grid gap-2">
+                <span className="text-sm text-muted">Spacing</span>
+                <select
+                  className="input-base"
+                  value={customizationState.tokens.spacing}
+                  onChange={(event) => updateCustomization({ tokens: { ...customizationState.tokens, spacing: event.target.value as CustomizationState['tokens']['spacing'] } })}
+                >
+                  <option value="compact">Compact</option>
+                  <option value="balanced">Balanced</option>
+                  <option value="cozy">Cozy</option>
+                </select>
+              </label>
+
+              <label className="grid gap-2">
+                <span className="text-sm text-muted">Radius</span>
+                <select
+                  className="input-base"
+                  value={customizationState.tokens.radius}
+                  onChange={(event) => updateCustomization({ tokens: { ...customizationState.tokens, radius: event.target.value as CustomizationState['tokens']['radius'] } })}
+                >
+                  <option value="sharp">Sharp</option>
+                  <option value="balanced">Balanced</option>
+                  <option value="soft">Soft</option>
+                </select>
+              </label>
+
+              <label className="grid gap-2">
+                <span className="text-sm text-muted">Elevation</span>
+                <select
+                  className="input-base"
+                  value={customizationState.tokens.elevation}
+                  onChange={(event) => updateCustomization({ tokens: { ...customizationState.tokens, elevation: event.target.value as CustomizationState['tokens']['elevation'] } })}
+                >
+                  <option value="flat">Flat</option>
+                  <option value="layered">Layered</option>
+                  <option value="floating">Floating</option>
+                </select>
+              </label>
+
+              <label className="grid gap-2">
+                <span className="text-sm text-muted">Transitions</span>
+                <select
+                  className="input-base"
+                  value={customizationState.tokens.transitions}
+                  onChange={(event) => updateCustomization({ tokens: { ...customizationState.tokens, transitions: event.target.value as CustomizationState['tokens']['transitions'] } })}
+                >
+                  <option value="snappy">Snappy</option>
+                  <option value="standard">Standard</option>
+                  <option value="slow">Slow</option>
+                </select>
+              </label>
+
+              <label className="grid gap-2">
+                <span className="text-sm text-muted">Animations</span>
+                <select
+                  className="input-base"
+                  value={customizationState.tokens.animations}
+                  onChange={(event) => updateCustomization({ tokens: { ...customizationState.tokens, animations: event.target.value as CustomizationState['tokens']['animations'] } })}
+                >
+                  <option value="calm">Calm</option>
+                  <option value="polished">Polished</option>
+                  <option value="expressive">Expressive</option>
+                </select>
+              </label>
+
+              <label className="grid gap-2">
+                <span className="text-sm text-muted">Opacity</span>
+                <select
+                  className="input-base"
+                  value={customizationState.tokens.opacity}
+                  onChange={(event) => updateCustomization({ tokens: { ...customizationState.tokens, opacity: event.target.value as CustomizationState['tokens']['opacity'] } })}
+                >
+                  <option value="subtle">Subtle</option>
+                  <option value="balanced">Balanced</option>
+                  <option value="bold">Bold</option>
+                </select>
+              </label>
+
+              <label className="grid gap-2">
+                <span className="text-sm text-muted">Grid system</span>
+                <select
+                  className="input-base"
+                  value={customizationState.tokens.gridSystem}
+                  onChange={(event) => updateCustomization({ tokens: { ...customizationState.tokens, gridSystem: event.target.value as CustomizationState['tokens']['gridSystem'] } })}
+                >
+                  <option value="12-column">12-column</option>
+                  <option value="14-column">14-column</option>
+                  <option value="16-column">16-column</option>
+                </select>
+              </label>
+
+              <label className="grid gap-2">
+                <span className="text-sm text-muted">Breakpoints</span>
+                <select
+                  className="input-base"
+                  value={customizationState.tokens.breakpoints}
+                  onChange={(event) => updateCustomization({ tokens: { ...customizationState.tokens, breakpoints: event.target.value as CustomizationState['tokens']['breakpoints'] } })}
+                >
+                  <option value="standard">Standard</option>
+                  <option value="touch-optimized">Touch optimized</option>
+                  <option value="foldable-aware">Foldable aware</option>
+                </select>
+              </label>
+
+              <label className="grid gap-2">
+                <span className="text-sm text-muted">Typography</span>
+                <select
+                  className="input-base"
+                  value={customizationState.tokens.typography}
+                  onChange={(event) => updateCustomization({ tokens: { ...customizationState.tokens, typography: event.target.value as CustomizationState['tokens']['typography'] } })}
+                >
+                  {themeFontOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="grid gap-2">
+                <span className="text-sm text-muted">Icons</span>
+                <select
+                  className="input-base"
+                  value={customizationState.tokens.icons}
+                  onChange={(event) => updateCustomization({ tokens: { ...customizationState.tokens, icons: event.target.value as CustomizationState['tokens']['icons'] } })}
+                >
+                  <option value="line">Line</option>
+                  <option value="solid">Solid</option>
+                  <option value="duotone">Duotone</option>
+                </select>
+              </label>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-border bg-background p-4 lg:col-span-2">
+            <p className="text-xs uppercase tracking-[0.24em] text-muted">Template presets and custom CSS</p>
+            <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <label className="grid gap-2">
+                <span className="text-sm text-muted">Campaign templates</span>
+                <select
+                  className="input-base"
+                  value={customizationState.templates.campaignTemplate}
+                  onChange={(event) => updateCustomization({ templates: { ...customizationState.templates, campaignTemplate: event.target.value as CustomizationState['templates']['campaignTemplate'] } })}
+                >
+                  <option value="starter">Starter</option>
+                  <option value="balanced">Balanced</option>
+                  <option value="premium">Premium</option>
+                </select>
+              </label>
+
+              <label className="grid gap-2">
+                <span className="text-sm text-muted">Email templates</span>
+                <select
+                  className="input-base"
+                  value={customizationState.templates.emailTemplate}
+                  onChange={(event) => updateCustomization({ templates: { ...customizationState.templates, emailTemplate: event.target.value as CustomizationState['templates']['emailTemplate'] } })}
+                >
+                  <option value="starter">Starter</option>
+                  <option value="balanced">Balanced</option>
+                  <option value="premium">Premium</option>
+                </select>
+              </label>
+
+              <label className="grid gap-2">
+                <span className="text-sm text-muted">Notification templates</span>
+                <select
+                  className="input-base"
+                  value={customizationState.templates.notificationTemplate}
+                  onChange={(event) => updateCustomization({ templates: { ...customizationState.templates, notificationTemplate: event.target.value as CustomizationState['templates']['notificationTemplate'] } })}
+                >
+                  <option value="starter">Starter</option>
+                  <option value="balanced">Balanced</option>
+                  <option value="premium">Premium</option>
+                </select>
+              </label>
+
+              <label className="grid gap-2">
+                <span className="text-sm text-muted">Reward rules</span>
+                <select
+                  className="input-base"
+                  value={customizationState.templates.rewardRules}
+                  onChange={(event) => updateCustomization({ templates: { ...customizationState.templates, rewardRules: event.target.value as CustomizationState['templates']['rewardRules'] } })}
+                >
+                  <option value="starter">Starter</option>
+                  <option value="balanced">Balanced</option>
+                  <option value="premium">Premium</option>
+                </select>
+              </label>
+
+              <label className="grid gap-2 md:col-span-2 xl:col-span-4">
+                <span className="text-sm text-muted">Custom CSS</span>
+                <textarea
+                  className="input-base min-h-28"
+                  value={customizationState.customCss}
+                  onChange={(event) => updateCustomization({ customCss: event.target.value })}
+                  placeholder="Optional CSS overrides for advanced brand work."
+                />
+              </label>
+            </div>
+          </div>
+        </div>
       </Card>
 
       {featureGroups.map((group) => (
         <section key={group.id} id={group.id} className="space-y-4 scroll-mt-24">
           <div className="flex items-end justify-between gap-4">
             <div>
-              <p className="text-sm uppercase tracking-[0.24em] text-ember/70">{group.label}</p>
-              <h3 className="mt-1 text-2xl font-semibold text-white">{group.label} controls</h3>
+              <p className="text-sm uppercase tracking-[0.24em] text-accent/70">{group.label}</p>
+              <h3 className="mt-1 text-2xl font-semibold text-foreground">{group.label} controls</h3>
             </div>
-            <p className="text-sm text-mist/60">{group.features.length} configurable modules</p>
+            <p className="text-sm text-muted">{group.features.length} configurable modules</p>
           </div>
 
           <div className="grid gap-4 xl:grid-cols-2">
@@ -413,14 +923,14 @@ export function AdminPanelPage() {
               const state = featureStates[feature.id];
 
               return (
-                <Card key={feature.id} className="border border-white/5 bg-white/5">
+                <Card key={feature.id} className="border border-border bg-surface-elevated">
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <p className="text-xs uppercase tracking-[0.24em] text-mist/50">{feature.category}</p>
-                      <h4 className="mt-2 text-2xl font-semibold text-white">{feature.title}</h4>
-                      <p className="mt-2 text-sm text-mist/75">{feature.description}</p>
+                      <p className="text-xs uppercase tracking-[0.24em] text-muted">{feature.category}</p>
+                      <h4 className="mt-2 text-2xl font-semibold text-foreground">{feature.title}</h4>
+                      <p className="mt-2 text-sm text-muted">{feature.description}</p>
                     </div>
-                    <label className="flex cursor-pointer items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm text-mist/80">
+                    <label className="flex cursor-pointer items-center gap-2 rounded-full border border-border bg-surface px-3 py-2 text-sm text-foreground">
                       <input
                         type="checkbox"
                         checked={state.enabled}
@@ -432,7 +942,7 @@ export function AdminPanelPage() {
 
                   <div className="mt-4 grid gap-3 md:grid-cols-2">
                     <label className="grid gap-2">
-                      <span className="text-sm text-mist/70">Mode</span>
+                      <span className="text-sm text-muted">Mode</span>
                       <select
                         className="input-base"
                         value={state.mode}
@@ -447,7 +957,7 @@ export function AdminPanelPage() {
                     </label>
 
                     <label className="grid gap-2">
-                      <span className="text-sm text-mist/70">Scope</span>
+                      <span className="text-sm text-muted">Scope</span>
                       <select
                         className="input-base"
                         value={state.scope}
@@ -462,7 +972,7 @@ export function AdminPanelPage() {
                     </label>
 
                     <label className="grid gap-2 md:col-span-2">
-                      <span className="text-sm text-mist/70">Policy</span>
+                      <span className="text-sm text-muted">Policy</span>
                       <select
                         className="input-base"
                         value={state.policy}
@@ -477,7 +987,7 @@ export function AdminPanelPage() {
                     </label>
 
                     <label className="grid gap-2 md:col-span-2">
-                      <span className="text-sm text-mist/70">{feature.noteLabel}</span>
+                      <span className="text-sm text-muted">{feature.noteLabel}</span>
                       <textarea
                         className="input-base min-h-24"
                         value={state.note}
@@ -486,10 +996,10 @@ export function AdminPanelPage() {
                     </label>
                   </div>
 
-                  <div className="mt-4 flex flex-wrap items-center gap-2 text-xs uppercase tracking-[0.2em] text-mist/60">
-                    <span className="rounded-full border border-white/10 px-3 py-1">Owner: {feature.owner}</span>
-                    <span className="rounded-full border border-white/10 px-3 py-1">Risk: {feature.risk}</span>
-                    <span className="rounded-full border border-white/10 px-3 py-1">State: {state.enabled ? 'Active' : 'Disabled'}</span>
+                  <div className="mt-4 flex flex-wrap items-center gap-2 text-xs uppercase tracking-[0.2em] text-muted">
+                    <span className="rounded-full border border-border px-3 py-1">Owner: {feature.owner}</span>
+                    <span className="rounded-full border border-border px-3 py-1">Risk: {feature.risk}</span>
+                    <span className="rounded-full border border-border px-3 py-1">State: {state.enabled ? 'Active' : 'Disabled'}</span>
                   </div>
                 </Card>
               );

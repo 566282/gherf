@@ -7,14 +7,14 @@ export function AdminLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   return (
-    <div className="flex h-screen bg-ink text-white">
+    <div data-admin-shell="true" className="flex h-screen bg-background text-foreground">
       <a href="#main-content" className="skip-link">
         Skip to main content
       </a>
       <AdminSidebar open={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} />
       <div className="flex-1 flex flex-col overflow-hidden">
         <AdminNavigation onSidebarToggle={() => setSidebarOpen(!sidebarOpen)} />
-        <main id="main-content" className="flex-1 overflow-auto" role="main">
+        <main id="main-content" data-admin-main="true" className="flex-1 overflow-auto" role="main">
           <Outlet />
         </main>
       </div>

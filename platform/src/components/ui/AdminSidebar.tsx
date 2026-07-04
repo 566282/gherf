@@ -21,6 +21,7 @@ export function AdminSidebar({ open, onToggle }: AdminSidebarProps) {
     { label: 'Trust',          path: '/admin', hash: 'trust' },
     { label: 'Content',        path: '/admin', hash: 'content' },
     { label: 'Platform',       path: '/admin', hash: 'platform' },
+    { label: 'CMS',            path: '/admin/cms' },
     { label: 'Gamification',   path: '/admin/gamification' },
     { label: 'Communications', path: '/admin/communications' },
     { label: 'Analytics',      path: '/admin/analytics' },
@@ -34,12 +35,13 @@ export function AdminSidebar({ open, onToggle }: AdminSidebarProps) {
     <aside
       aria-label="Admin navigation"
       className={clsx(
-        open ? 'w-64' : 'w-20',
-        'bg-slate/50 border-r border-ember/30 transition-all duration-300 overflow-y-auto flex flex-col',
+        'admin-sidebar',
+        !open && 'admin-sidebar-collapsed',
+        'flex flex-col overflow-y-auto border-r border-border bg-surface/80 transition-all duration-300',
       )}
     >
       <div className="flex items-center justify-between p-4">
-        <span className="font-bold text-ember text-xl" aria-hidden={!open || undefined}>
+        <span className="text-xl font-bold text-accent" aria-hidden={!open || undefined}>
           {open ? 'Admin' : 'A'}
         </span>
         {onToggle && (
@@ -47,7 +49,7 @@ export function AdminSidebar({ open, onToggle }: AdminSidebarProps) {
             type="button"
             onClick={onToggle}
             aria-label={open ? 'Collapse sidebar' : 'Expand sidebar'}
-            className="ml-auto text-ember hover:text-mint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember rounded"
+            className="ml-auto rounded text-accent transition hover:text-success focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
             {open ? '←' : '→'}
           </button>
@@ -68,10 +70,10 @@ export function AdminSidebar({ open, onToggle }: AdminSidebarProps) {
               aria-label={!open ? item.label : undefined}
               aria-current={active ? 'page' : undefined}
               className={clsx(
-                'block px-4 py-3 text-sm rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember',
+                'block rounded-lg px-4 py-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
                 active
-                  ? 'bg-ember/20 text-ember font-medium'
-                  : 'text-mist hover:bg-ember/10 hover:text-ember',
+                  ? 'bg-accent-soft text-accent font-medium'
+                  : 'text-foreground hover:bg-accent-soft hover:text-accent',
               )}
             >
               {open ? item.label : <span aria-hidden="true">{item.label.charAt(0)}</span>}
