@@ -4,7 +4,9 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { formatCurrency } from '@/lib/auth';
+import { defaultFraudThresholds, describeFraudRiskChecks, fraudRiskChecks } from '@/services/api/fraud';
 import { campaignToFormValues, listCampaigns, saveCampaign } from '@/services/api/campaigns';
+import { sendAdminPaymentNotification } from '@/services/api/communications';
 import type { Campaign } from '@/types';
 
 type ActivityTone = 'info' | 'success' | 'warning';
@@ -241,9 +243,9 @@ function createEngineConfig(campaignType: Campaign['campaignType']): Campaign['e
     verificationPolicy: {
       primaryMethod: campaignType === 'referral_campaigns' ? 'api_verification' : 'manual_review',
       requiredEvidence: campaignType === 'social_media_follows' ? ['screenshot_upload'] : [],
-      riskChecks: ['fraud_detection', 'duplicate_detection', 'vpn_detection', 'proxy_detection', 'bot_detection'],
+      riskChecks: [...fraudRiskChecks],
       randomAuditRate: 5,
-      fraudThreshold: 70,
+      fraudThreshold: defaultFraudThresholds.block,
       appealWindowHours: 72,
     },
     timeDelayBeforeReward: 0,
@@ -557,6 +559,11 @@ export function BusinessDashboardPage() {
     return calculateMetrics(selectedCampaign);
   }, [selectedCampaign]);
 
+  const selectedFraudReasons = useMemo(
+    () => describeFraudRiskChecks(selectedCampaign?.engineConfig.verificationPolicy.riskChecks ?? []),
+    [selectedCampaign],
+  );
+
   const conversionFeed = useMemo(() => {
     return (filteredCampaignRows.length > 0 ? filteredCampaignRows : campaignRows)
       .map(({ campaign, metrics }) => ({
@@ -658,6 +665,19 @@ export function BusinessDashboardPage() {
     pushActivity('Deposit posted', `${formatCurrency(amount, 'USD')} added to the advertiser reserve.`, 'success');
     setDepositAmount('');
     setStatusMessage(`${formatCurrency(amount, 'USD')} deposited into the business reserve.`);
+
+    void sendAdminPaymentNotification({
+      amount,
+      currency: 'USD',
+      source: 'deposit',
+      title: 'Business deposit posted',
+      message: `${businessName} posted a ${formatCurrency(amount, 'USD')} reserve deposit.`,
+      metadata: {
+        businessName,
+        businessId: selectedCampaign?.businessId ?? null,
+        sourcePage: 'business_dashboard',
+      },
+    }).catch(() => undefined);
   };
 
   const updateCampaignInState = (campaignId: string, updater: (campaign: Campaign) => Campaign) => {
@@ -1402,6 +1422,24 @@ export function BusinessDashboardPage() {
                   <div className="rounded-xl border border-white/10 bg-ink/40 p-3">
                     <p className="text-xs uppercase tracking-[0.18em] text-mist/60">ROI</p>
                     <p className="mt-1 text-lg font-semibold text-white">{formatPercent(selectedMetrics.roi)}</p>
+                  </div>
+                </div>
+
+                <div className="mt-4 rounded-2xl border border-white/10 bg-ink/40 p-4">
+                  <p className="text-sm font-medium text-white">Blocked reasons</p>
+                  <p className="mt-1 text-xs text-mist/70">These reasons are reused when the campaign verification policy refuses a submission.</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {selectedFraudReasons.length ? (
+                      selectedFraudReasons.map((reason) => (
+                        <span key={reason} className="rounded-full border border-rose-500/20 bg-rose-500/10 px-3 py-1 text-xs text-rose-300">
+                          {reason}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-300">
+                        No fraud checks selected
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>

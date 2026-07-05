@@ -8,6 +8,8 @@ export type AnalyticsDatasetKey =
   | 'userGrowth'
   | 'activeUsers'
   | 'revenue'
+  | 'taskCompletion'
+  | 'retention'
   | 'campaignPerformance'
   | 'rewardDistribution'
   | 'withdrawalStatistics'
@@ -25,6 +27,8 @@ const DATASET_LABELS: Record<Exclude<AnalyticsDatasetKey, 'all'>, string> = {
   userGrowth: 'User Growth',
   activeUsers: 'Active Users',
   revenue: 'Revenue',
+  taskCompletion: 'Task Completion',
+  retention: 'Retention',
   campaignPerformance: 'Campaign Performance',
   rewardDistribution: 'Reward Distribution',
   withdrawalStatistics: 'Withdrawal Statistics',
@@ -76,6 +80,10 @@ function toDatasetRows(report: AnalyticsReport, dataset: Exclude<AnalyticsDatase
       return report.activeUsers.map((point) => ({ date: point.label, active_users: point.value }));
     case 'revenue':
       return report.revenue.map((point) => ({ date: point.label, revenue: point.value }));
+    case 'taskCompletion':
+      return report.taskCompletion.map((point) => ({ date: point.label, task_completion_rate_percent: point.value }));
+    case 'retention':
+      return report.retention.map((point) => ({ date: point.label, retention_rate_percent: point.value }));
     case 'campaignPerformance':
       return report.campaignPerformance.map((campaign) => ({
         campaign_id: campaign.campaignId,

@@ -16,6 +16,20 @@ import { supabase } from '@/services/supabase/client';
 
 type OAuthProvider = 'google' | 'facebook' | 'apple';
 
+export interface ReferralSignupRequest {
+  email: string;
+  password: string;
+  options: {
+    emailRedirectTo: string;
+    data: {
+      full_name: string;
+      referral_code: string;
+      referred_by_code: string | null;
+      role: AppRole;
+    };
+  };
+}
+
 type LockStatusRow = {
   is_locked: boolean;
   locked_until: string | null;
@@ -139,6 +153,29 @@ async function signInWithOAuthProvider(provider: OAuthProvider, rememberLogin = 
   }
 }
 
+export function buildReferralSignupRequest(
+  email: string,
+  password: string,
+  fullName: string,
+  referralCode?: string,
+  role: AppRole = 'registered_user',
+  redirectOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost',
+): ReferralSignupRequest {
+  return {
+    email,
+    password,
+    options: {
+      emailRedirectTo: `${redirectOrigin}/login`,
+      data: {
+        full_name: fullName,
+        referral_code: generateReferralCode(fullName, email),
+        referred_by_code: referralCode || null,
+        role,
+      },
+    },
+  };
+}
+
 export async function getCurrentProfile(): Promise<UserProfile | null> {
   const { data: authData, error: authError } = await supabase.auth.getUser();
   if (authError || !authData.user) return null;
@@ -250,19 +287,7 @@ export async function signUp(
   referralCode?: string,
   role: AppRole = 'registered_user',
 ): Promise<void> {
-  const { error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      emailRedirectTo: `${window.location.origin}/login`,
-      data: {
-        full_name: fullName,
-        referral_code: generateReferralCode(fullName, email),
-        referred_by_code: referralCode || null,
-        role,
-      },
-    },
-  });
+  const { error } = await supabase.auth.signUp(buildReferralSignupRequest(email, password, fullName, referralCode, role));
 
   if (error) throw error;
 }
@@ -515,25 +540,17 @@ export async function adjustWalletBalance(
   amount: number,
   reason?: string,
 ): Promise<void> {
-  const { data: currentProfile, error: profileError } = await supabase
-    .from('profiles')
-    .select('wallet_balance')
-    .eq('id', userId)
-    .single<{ wallet_balance: number | null }>();
-
-  if (profileError) throw profileError;
-
-  const nextBalance = (currentProfile.wallet_balance ?? 0) + amount;
-  const { error } = await supabase.from('profiles').update({ wallet_balance: nextBalance }).eq('id', userId);
+  const { error } = await supabase.rpc('record_wallet_adjustment', {
+    p_user_id: userId,
+    p_wallet_type: 'main',
+    p_amount: amount,
+    p_currency: 'USD',
+    p_transaction_type: 'admin_adjustment',
+    p_reason: reason ?? 'Admin balance adjustment',
+    p_performed_by: null,
+  });
 
   if (error) throw error;
-
-  await supabase.from('wallet_ledger').insert({
-    user_id: userId,
-    amount,
-    balance_after: nextBalance,
-    reason: reason ?? 'Admin balance adjustment',
-  });
 }
 
 export async function resetUserPassword(email: string): Promise<void> {
@@ -560,13 +577,13 @@ export async function listActivityLogs(limit = 50): Promise<ActivityLogItem[]> {
   }));
 }
 
-export async function listNotifications(userId: string): Promise<NotificationItem[]> {
+export async function listNotifications(userId: string, limit = 8, offset = 0): Promise<NotificationItem[]> {
   const { data, error } = await supabase
     .from('user_notifications')
     .select('id,title,message,type,is_read,created_at')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
-    .limit(8);
+    .range(offset, offset + limit - 1);
 
   if (error) throw error;
 
@@ -578,6 +595,28 @@ export async function listNotifications(userId: string): Promise<NotificationIte
     isRead: row.is_read,
     createdAt: row.created_at,
   }));
+}
+
+export async function markNotificationAsRead(userId: string, notificationId: string): Promise<void> {
+  const { error } = await supabase
+    .from('user_notifications')
+    .update({ is_read: true })
+    .eq('id', notificationId)
+    .eq('user_id', userId);
+
+  if (error) throw error;
+}
+
+export async function markNotificationsAsRead(userId: string, notificationIds: string[]): Promise<void> {
+  if (!notificationIds.length) return;
+
+  const { error } = await supabase
+    .from('user_notifications')
+    .update({ is_read: true })
+    .eq('user_id', userId)
+    .in('id', notificationIds);
+
+  if (error) throw error;
 }
 
 export async function listRewardLedger(userId: string): Promise<RewardLedgerItem[]> {
@@ -603,8 +642,8 @@ export async function listRewardLedger(userId: string): Promise<RewardLedgerItem
 
 export async function listWalletActivity(userId: string): Promise<WalletActivity[]> {
   const { data, error } = await supabase
-    .from('wallet_ledger')
-    .select('id,amount,balance_after,note,created_at')
+    .from('wallet_audit_logs')
+    .select('id,amount,balance_after,note,wallet_type,event_type,currency,status,created_at')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .limit(8);
@@ -614,8 +653,13 @@ export async function listWalletActivity(userId: string): Promise<WalletActivity
   return (data ?? []).map((row) => ({
     id: row.id,
     amount: Number(row.amount),
-    balanceAfter: Number(row.balance_after),
+    balanceAfter: Number(row.balance_after ?? 0),
+    entryType: row.event_type,
     note: row.note,
+    walletType: row.wallet_type,
+    transactionType: row.event_type,
+    currency: row.currency,
+    status: row.status,
     createdAt: row.created_at,
   }));
 }

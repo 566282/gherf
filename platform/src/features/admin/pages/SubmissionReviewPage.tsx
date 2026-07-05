@@ -1,4 +1,5 @@
 import { Card } from '@/components/ui/Card';
+import { defaultFraudThresholds, describeFraudRiskChecks, explainFraudAssessment, evaluateFraudProfile, fraudRiskChecks, type FraudUserProfile } from '@/services/api/fraud';
 import type { TaskVerificationCase, TaskVerificationStatus } from '@/types';
 
 const verificationCases: TaskVerificationCase[] = [
@@ -108,12 +109,43 @@ function formatDate(value: string) {
   });
 }
 
+function buildFraudProfile(item: TaskVerificationCase): FraudUserProfile {
+  return {
+    id: item.id,
+    name: item.taskTitle,
+    email: `${item.userId}@example.com`,
+    campaign: item.campaignTitle,
+    country: 'US',
+    device: item.verificationMethod,
+    ipGroup: 'review-queue',
+    watchTimeMinutes: item.verificationScore / 10,
+    clicksPerMinute: item.riskFlags.includes('rapid_clicking') ? 12 : 2,
+    refreshesPerMinute: item.riskFlags.includes('auto_refresh') ? 5 : 0,
+    automationConfidence: item.riskFlags.includes('bot_detection') ? 95 : 20,
+    sharedIpAccounts: item.riskFlags.includes('duplicate_detection') ? 3 : 1,
+    deviceReuseCount: item.riskFlags.includes('duplicate_detection') ? 2 : 1,
+    linkedAccounts: item.riskFlags.includes('multiple_accounts') ? 4 : 1,
+    referralLoopScore: item.riskFlags.includes('suspicious_referrals') ? 84 : 12,
+    vpn: item.riskFlags.includes('vpn_detection'),
+    proxy: item.riskFlags.includes('proxy_detection'),
+    emulator: item.riskFlags.includes('device_fingerprint'),
+    bot: item.riskFlags.includes('bot_detection'),
+    suspiciousReferrals: item.riskFlags.includes('suspicious_referrals'),
+    lastSeen: item.reviewedAt ?? item.submittedAt,
+  };
+}
+
+function explainVerificationCase(item: TaskVerificationCase) {
+  return explainFraudAssessment(evaluateFraudProfile(buildFraudProfile(item), defaultFraudThresholds), defaultFraudThresholds);
+}
+
 export function SubmissionReviewPage() {
   const pendingApprovals = verificationCases.filter((item) => item.status === 'pending_approval');
   const approvedTasks = verificationCases.filter((item) => item.status === 'approved');
   const rejectedTasks = verificationCases.filter((item) => item.status === 'rejected');
   const fraudAlerts = verificationCases.filter((item) => item.status === 'fraud_alert');
   const appeals = verificationCases.filter((item) => item.appealStatus === 'open');
+  const explainedFraudCases = [...fraudAlerts, ...rejectedTasks].map((item) => ({ item, explanation: explainVerificationCase(item) }));
 
   return (
     <div className="space-y-6 p-6">
@@ -173,9 +205,9 @@ export function SubmissionReviewPage() {
             ))}
           </div>
           <div className="grid gap-3 md:grid-cols-3">
-            {['fraud detection', 'duplicate detection', 'vpn detection', 'proxy detection', 'bot detection'].map((item) => (
+            {fraudRiskChecks.map((item) => (
               <div key={item} className="rounded-2xl border border-ember/20 bg-ember/5 px-4 py-3 text-sm text-mist">
-                {item}
+                {item.split('_').join(' ')}
               </div>
             ))}
           </div>
@@ -264,6 +296,31 @@ export function SubmissionReviewPage() {
           </div>
         </Card>
       </div>
+
+      <Card className="space-y-4 overflow-hidden">
+        <div>
+          <h2 className="text-2xl font-bold text-white">Decision explanations</h2>
+          <p className="text-sm text-mist">Fraud alerts and rejections reuse the shared threshold logic so reviewers see the same reasons the engine uses.</p>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2">
+          {explainedFraudCases.map(({ item, explanation }) => (
+            <div key={item.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="font-semibold text-white">{item.taskTitle}</p>
+                <span className={`rounded-full px-3 py-1 text-xs font-medium ${statusTone(item.status)}`}>{pretty(item.status)}</span>
+              </div>
+              <p className="mt-2 text-sm text-mist">{explanation.summary}</p>
+              <div className="mt-3 flex flex-wrap gap-2 text-xs text-mist">
+                {describeFraudRiskChecks(item.riskFlags).map((reason) => (
+                  <span key={reason} className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-amber-200">
+                    {reason}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
 
       <Card className="space-y-4 overflow-hidden">
         <div>

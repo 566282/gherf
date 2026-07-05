@@ -54,6 +54,10 @@ const faqs = [
     question: 'Does the experience work well on mobile?',
     answer: 'The layout is responsive, touch-friendly, and built to keep the primary actions visible without extra tapping.',
   },
+  {
+    question: 'What content can the CMS manage?',
+    answer: 'The CMS now covers the homepage, about, FAQ, contact, news, announcements, help center, legal pages, blog, SEO metadata, sitemap rules, robots rules, custom URLs, landing pages, advertiser pages, and user guides.',
+  },
 ];
 
 const pricingTiers = [
@@ -534,23 +538,70 @@ export function HomePage(): JSX.Element {
       </main>
 
       <footer className="border-t border-border/60 bg-background/90 px-4 py-8 sm:px-6 lg:px-8">
-        <div className="mx-auto grid max-w-7xl gap-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-start">
+        <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-start">
           <div>
             <p className="text-sm font-semibold text-foreground">{siteName}</p>
             <p className="mt-2 max-w-2xl text-sm leading-7 text-muted">
               A secure, easy-to-navigate platform for advertisers and users, with public pages designed to lower friction and build trust quickly.
             </p>
           </div>
-          <div className="flex flex-wrap gap-3 lg:justify-end">
-            <Link to="/privacy-policy" className="rounded-full border border-border bg-surface-elevated px-4 py-2 text-sm text-foreground transition hover:border-accent/40 hover:text-accent">
-              Privacy
-            </Link>
-            <Link to="/terms" className="rounded-full border border-border bg-surface-elevated px-4 py-2 text-sm text-foreground transition hover:border-accent/40 hover:text-accent">
-              Terms
-            </Link>
-            <Link to="/help-center" className="rounded-full border border-border bg-surface-elevated px-4 py-2 text-sm text-foreground transition hover:border-accent/40 hover:text-accent">
-              Help center
-            </Link>
+          <div className="grid gap-5 sm:grid-cols-2 lg:justify-end">
+            <div>
+              <p className="text-xs uppercase tracking-[0.24em] text-muted">Company</p>
+              <div className="mt-3 flex flex-wrap gap-3">
+                <Link to="/about" className="rounded-full border border-border bg-surface-elevated px-4 py-2 text-sm text-foreground transition hover:border-accent/40 hover:text-accent">
+                  About
+                </Link>
+                <Link to="/contact" className="rounded-full border border-border bg-surface-elevated px-4 py-2 text-sm text-foreground transition hover:border-accent/40 hover:text-accent">
+                  Contact
+                </Link>
+                <Link to="/news" className="rounded-full border border-border bg-surface-elevated px-4 py-2 text-sm text-foreground transition hover:border-accent/40 hover:text-accent">
+                  News
+                </Link>
+                <Link to="/announcements" className="rounded-full border border-border bg-surface-elevated px-4 py-2 text-sm text-foreground transition hover:border-accent/40 hover:text-accent">
+                  Announcements
+                </Link>
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs uppercase tracking-[0.24em] text-muted">SEO and routing</p>
+              <div className="mt-3 flex flex-wrap gap-3">
+                <Link to="/seo" className="rounded-full border border-border bg-surface-elevated px-4 py-2 text-sm text-foreground transition hover:border-accent/40 hover:text-accent">
+                  SEO
+                </Link>
+                <Link to="/meta-tags" className="rounded-full border border-border bg-surface-elevated px-4 py-2 text-sm text-foreground transition hover:border-accent/40 hover:text-accent">
+                  Meta Tags
+                </Link>
+                <Link to="/open-graph" className="rounded-full border border-border bg-surface-elevated px-4 py-2 text-sm text-foreground transition hover:border-accent/40 hover:text-accent">
+                  Open Graph
+                </Link>
+                <Link to="/sitemap" className="rounded-full border border-border bg-surface-elevated px-4 py-2 text-sm text-foreground transition hover:border-accent/40 hover:text-accent">
+                  Sitemap
+                </Link>
+                <Link to="/robots" className="rounded-full border border-border bg-surface-elevated px-4 py-2 text-sm text-foreground transition hover:border-accent/40 hover:text-accent">
+                  Robots
+                </Link>
+                <Link to="/custom-urls" className="rounded-full border border-border bg-surface-elevated px-4 py-2 text-sm text-foreground transition hover:border-accent/40 hover:text-accent">
+                  Custom URLs
+                </Link>
+              </div>
+            </div>
+
+            <div className="sm:col-span-2 flex flex-wrap gap-3 lg:justify-end">
+              <Link to="/privacy-policy" className="rounded-full border border-border bg-surface-elevated px-4 py-2 text-sm text-foreground transition hover:border-accent/40 hover:text-accent">
+                Privacy
+              </Link>
+              <Link to="/terms" className="rounded-full border border-border bg-surface-elevated px-4 py-2 text-sm text-foreground transition hover:border-accent/40 hover:text-accent">
+                Terms
+              </Link>
+              <Link to="/help-center" className="rounded-full border border-border bg-surface-elevated px-4 py-2 text-sm text-foreground transition hover:border-accent/40 hover:text-accent">
+                Help center
+              </Link>
+              <Link to="/blog" className="rounded-full border border-border bg-surface-elevated px-4 py-2 text-sm text-foreground transition hover:border-accent/40 hover:text-accent">
+                Blog
+              </Link>
+            </div>
           </div>
         </div>
       </footer>

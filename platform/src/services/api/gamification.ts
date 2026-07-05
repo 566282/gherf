@@ -47,7 +47,39 @@ export interface GamificationConfig {
   modules: Record<GamificationModuleId, GamificationModuleConfig>;
 }
 
+export interface GamificationQuestState {
+  id: string;
+  title: string;
+  description: string;
+  reward: string;
+  xp: number;
+  progress: number;
+  target: number;
+  completed: boolean;
+}
+
+export interface GamificationAchievementState {
+  id: string;
+  title: string;
+  description: string;
+  xp: number;
+  unlocked: boolean;
+  progress: number;
+  target: number;
+}
+
+export interface GamificationPlayerState {
+  xp: number;
+  streak: number;
+  dailyClaimed: boolean;
+  spinTokens: number;
+  mysteryTokens: number;
+  quests: GamificationQuestState[];
+  achievements: GamificationAchievementState[];
+}
+
 const GAMIFICATION_SETTING_KEY = 'gamification_config';
+const GAMIFICATION_STATE_TABLE = 'user_gamification_state';
 
 export const gamificationModules: GamificationModuleDefinition[] = [
   {
@@ -148,6 +180,33 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((entry) => typeof entry === 'string');
 }
 
+function isGamificationQuestState(value: unknown): value is GamificationQuestState {
+  return (
+    isRecord(value) &&
+    typeof value.id === 'string' &&
+    typeof value.title === 'string' &&
+    typeof value.description === 'string' &&
+    typeof value.reward === 'string' &&
+    typeof value.xp === 'number' &&
+    typeof value.progress === 'number' &&
+    typeof value.target === 'number' &&
+    typeof value.completed === 'boolean'
+  );
+}
+
+function isGamificationAchievementState(value: unknown): value is GamificationAchievementState {
+  return (
+    isRecord(value) &&
+    typeof value.id === 'string' &&
+    typeof value.title === 'string' &&
+    typeof value.description === 'string' &&
+    typeof value.xp === 'number' &&
+    typeof value.unlocked === 'boolean' &&
+    typeof value.progress === 'number' &&
+    typeof value.target === 'number'
+  );
+}
+
 function buildDefaultModuleConfig(definition: GamificationModuleDefinition): GamificationModuleConfig {
   return {
     enabled: true,
@@ -175,6 +234,70 @@ export function buildDefaultGamificationConfig(): GamificationConfig {
       GamificationModuleConfig
     >,
   };
+}
+
+export function buildDefaultGamificationState(seed?: { xp: number; streak: number }): GamificationPlayerState {
+  return {
+    xp: seed?.xp ?? 860,
+    streak: seed?.streak ?? 6,
+    dailyClaimed: false,
+    spinTokens: 2,
+    mysteryTokens: 1,
+    quests: [
+      { id: 'open-app', title: 'Open the app', description: 'Visit the platform and check your feed.', reward: '1 wheel spin', xp: 20, progress: 0, target: 1, completed: false },
+      { id: 'complete-task', title: 'Complete a task', description: 'Finish one task or campaign action.', reward: 'Bonus XP', xp: 35, progress: 0, target: 1, completed: false },
+      { id: 'visit-profile', title: 'Review your profile', description: 'Update a profile field or review your level.', reward: 'Mystery reward', xp: 25, progress: 0, target: 1, completed: false },
+    ],
+    achievements: [
+      { id: 'first-win', title: 'First win', description: 'Claim your first reward.', xp: 50, unlocked: true, progress: 1, target: 1 },
+      { id: 'streak-seven', title: 'Seven-day streak', description: 'Maintain a seven-day login streak.', xp: 120, unlocked: false, progress: 4, target: 7 },
+      { id: 'mission-master', title: 'Mission master', description: 'Finish five missions in a season.', xp: 150, unlocked: false, progress: 2, target: 5 },
+      { id: 'wheel-winner', title: 'Wheel winner', description: 'Trigger a high-value lucky wheel prize.', xp: 90, unlocked: false, progress: 0, target: 1 },
+    ],
+  };
+}
+
+function mergeGamificationPlayerState(value: unknown, fallback: GamificationPlayerState): GamificationPlayerState {
+  if (!isRecord(value)) {
+    return fallback;
+  }
+
+  return {
+    xp: typeof value.xp === 'number' && Number.isFinite(value.xp) ? value.xp : fallback.xp,
+    streak: typeof value.streak === 'number' && Number.isFinite(value.streak) ? value.streak : fallback.streak,
+    dailyClaimed: typeof value.dailyClaimed === 'boolean' ? value.dailyClaimed : fallback.dailyClaimed,
+    spinTokens: typeof value.spinTokens === 'number' && Number.isFinite(value.spinTokens) ? Math.max(0, Math.round(value.spinTokens)) : fallback.spinTokens,
+    mysteryTokens: typeof value.mysteryTokens === 'number' && Number.isFinite(value.mysteryTokens) ? Math.max(0, Math.round(value.mysteryTokens)) : fallback.mysteryTokens,
+    quests: Array.isArray(value.quests) ? value.quests.filter(isGamificationQuestState) : fallback.quests,
+    achievements: Array.isArray(value.achievements) ? value.achievements.filter(isGamificationAchievementState) : fallback.achievements,
+  };
+}
+
+export async function listGamificationPlayerState(userId: string, fallback?: GamificationPlayerState): Promise<GamificationPlayerState | null> {
+  const { data, error } = await supabase
+    .from(GAMIFICATION_STATE_TABLE)
+    .select('state')
+    .eq('user_id', userId)
+    .single();
+
+  if (error || !data) {
+    return null;
+  }
+
+  return mergeGamificationPlayerState((data as { state: unknown }).state, fallback ?? buildDefaultGamificationState());
+}
+
+export async function upsertGamificationPlayerState(userId: string, state: GamificationPlayerState, updatedBy?: string): Promise<void> {
+  const { error } = await supabase.from(GAMIFICATION_STATE_TABLE).upsert(
+    {
+      user_id: userId,
+      state,
+      updated_by: updatedBy ?? null,
+    },
+    { onConflict: 'user_id' },
+  );
+
+  if (error) throw error;
 }
 
 function mergeModuleConfig(definition: GamificationModuleDefinition, value: unknown): GamificationModuleConfig {

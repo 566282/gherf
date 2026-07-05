@@ -2,9 +2,17 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { listAdminConsoleConfig, updateAdminConsoleConfig } from '@/services/api/admin';
+import { listAdminConsoleConfig, listAdminModuleCatalog, updateAdminConsoleConfig } from '@/services/api/admin';
+import { listUsers, listActivityLogs } from '@/services/api/auth';
+import { listCampaigns } from '@/services/api/campaigns';
 import { defaultCustomizationConfig, themePresetOptions } from '@/lib/customization';
 import { getThemePresetTheme, themeFontOptions, themeModeOptions, themePaletteOptions, themeStorageEvent } from '@/lib/theme';
+import { gamificationModules, listGamificationConfig } from '@/services/api/gamification';
+import { getReferralEngineSummary } from '@/services/api/referrals';
+import { listCampaignTasks } from '@/services/api/tasks';
+import { listSupportTickets } from '@/services/api/support';
+import { listNotificationQueue } from '@/services/api/communications';
+import { listWalletAccounts, listWalletTransactions } from '@/services/api/wallet';
 import type { AdminCustomizationConfig, AdminFeatureConfig, AdminThemeConfig } from '@/types';
 
 type FeatureModule = {
@@ -131,7 +139,7 @@ const featureModules: FeatureModule[] = [
     title: 'CMS',
     section: 'Content',
     category: 'Publishing',
-    description: 'Edit the Go4Wealth homepage, FAQs, help center, legal pages, blog, landing pages, advertiser pages, and user guides.',
+    description: 'Edit the Go4Wealth homepage, about page, FAQ, contact, news, announcements, help center, legal pages, blog, SEO surfaces, landing pages, advertiser pages, and user guides.',
     risk: 'Medium',
     owner: 'Content',
     modes: ['Draft only', 'Editorial review', 'Instant publish'],
@@ -229,10 +237,157 @@ const sectionAnchors = [
   { label: 'Platform', id: 'platform' },
 ];
 
+const enterpriseDashboardModules = [
+  {
+    moduleKey: 'dashboard-analytics',
+    title: 'Dashboard Analytics',
+    section: 'Insights',
+    path: '/admin/dashboard-analytics',
+    description: 'Executive reporting, trend monitoring, and export-ready operational views.',
+  },
+  {
+    moduleKey: 'users',
+    title: 'User Management',
+    section: 'Operations',
+    path: '/admin/users',
+    description: 'Identity governance, verification gates, moderation, and role controls.',
+  },
+  {
+    moduleKey: 'campaigns',
+    title: 'Campaign Management',
+    section: 'Operations',
+    path: '/admin/campaigns',
+    description: 'Campaign approvals, spend limits, workflow rules, and launch controls.',
+  },
+  {
+    moduleKey: 'ad-management',
+    title: 'Ad Management',
+    section: 'Operations',
+    path: '/admin/ad-management',
+    description: 'Ad format control, targeting, optimization, and fraud-aware delivery.',
+  },
+  {
+    moduleKey: 'video-management',
+    title: 'Video Management',
+    section: 'Content',
+    path: '/admin/video-management',
+    description: 'Video creative review, publishing windows, lifecycle states, and moderation.',
+  },
+  {
+    moduleKey: 'reward-settings',
+    title: 'Reward Settings',
+    section: 'Finance',
+    path: '/admin/reward-settings',
+    description: 'Reward policies, multipliers, payout thresholds, and incentive rules.',
+  },
+  {
+    moduleKey: 'referral-settings',
+    title: 'Referral Settings',
+    section: 'Operations',
+    path: '/admin/referral-settings',
+    description: 'Referral links, commissions, milestones, leaderboard rules, and anti-abuse.',
+  },
+  {
+    moduleKey: 'fraud-detection',
+    title: 'Fraud Detection',
+    section: 'Trust',
+    path: '/admin/fraud-detection',
+    description: 'Risk scoring, quarantines, watchlists, and threshold tuning.',
+  },
+  {
+    moduleKey: 'reports',
+    title: 'Reports',
+    section: 'Insights',
+    path: '/admin/reports',
+    description: 'Scheduled exports, governed distribution, and offline review packs.',
+  },
+  {
+    moduleKey: 'withdrawal-approval',
+    title: 'Withdrawal Approval',
+    section: 'Finance',
+    path: '/admin/withdrawal-approval',
+    description: 'Approval queue, escalation rules, payout routing, and auditability.',
+  },
+  {
+    moduleKey: 'wallet-management',
+    title: 'Wallet Management',
+    section: 'Finance',
+    path: '/admin/wallet',
+    description: 'Balances, reserves, reconciliation, and treasury health.',
+  },
+  {
+    moduleKey: 'system-settings',
+    title: 'System Settings',
+    section: 'Platform',
+    path: '/admin/system-settings',
+    description: 'Runtime flags, maintenance windows, and environment-level controls.',
+  },
+  {
+    moduleKey: 'email-templates',
+    title: 'Email Templates',
+    section: 'Content',
+    path: '/admin/email-templates',
+    description: 'Transactional templates, sender rules, and approval flows.',
+  },
+  {
+    moduleKey: 'notification-center',
+    title: 'Notification Center',
+    section: 'Content',
+    path: '/admin/notification-center',
+    description: 'Omnichannel alerts, queueing, retries, and scheduled notifications.',
+  },
+  {
+    moduleKey: 'support-tickets',
+    title: 'Support Tickets',
+    section: 'Trust',
+    path: '/admin/support-tickets',
+    description: 'Ticket queue oversight, SLA tracking, escalations, and resolution control.',
+  },
+  {
+    moduleKey: 'audit-logs',
+    title: 'Audit Logs',
+    section: 'Trust',
+    path: '/admin/audit-logs',
+    description: 'Administrative and system event history with exportable activity trails.',
+  },
+  {
+    moduleKey: 'permissions',
+    title: 'Permissions',
+    section: 'Platform',
+    path: '/admin/permissions',
+    description: 'Role permissions, route ownership, and access boundaries.',
+  },
+] as const;
+
 type FeatureState = AdminFeatureConfig;
 
 type ThemeState = AdminThemeConfig;
 type CustomizationState = AdminCustomizationConfig;
+type LivePlatformStats = {
+  users: number;
+  campaigns: number;
+  supportTickets: number;
+  auditLogs: number;
+  walletAccounts: number;
+  walletTransactions: number;
+  notificationQueued: number;
+  notificationFailed: number;
+};
+
+type LiveOperationalStats = {
+  engagementActiveModules: number;
+  engagementTotalModules: number;
+  engagementSeason: string;
+  taskCount: number;
+  referralPrograms: number;
+  referralAttributions: number;
+  referralFraudFlags: number;
+};
+
+type MetricStatus = {
+  label: 'Healthy' | 'Attention needed' | 'Review required';
+  tone: 'success' | 'warning' | 'error';
+};
 
 const defaultFeatureState = (feature: FeatureModule): FeatureState => ({
   enabled: feature.id !== 'maintenance',
@@ -253,15 +408,79 @@ const defaultThemeState: ThemeState = {
   fontFamily: 'Inter',
 };
 
+const defaultLivePlatformStats: LivePlatformStats = {
+  users: 0,
+  campaigns: 0,
+  supportTickets: 0,
+  auditLogs: 0,
+  walletAccounts: 0,
+  walletTransactions: 0,
+  notificationQueued: 0,
+  notificationFailed: 0,
+};
+
+const defaultLiveOperationalStats: LiveOperationalStats = {
+  engagementActiveModules: 0,
+  engagementTotalModules: gamificationModules.length,
+  engagementSeason: 'Loading season...',
+  taskCount: 0,
+  referralPrograms: 0,
+  referralAttributions: 0,
+  referralFraudFlags: 0,
+};
+
+function getMetricStatus(value: number, thresholds: { healthy: number; warning: number }): MetricStatus {
+  if (value >= thresholds.healthy) {
+    return { label: 'Healthy', tone: 'success' };
+  }
+
+  if (value >= thresholds.warning) {
+    return { label: 'Attention needed', tone: 'warning' };
+  }
+
+  return { label: 'Review required', tone: 'error' };
+}
+
+function statusBadgeClass(tone: MetricStatus['tone']): string {
+  if (tone === 'success') return 'border-success/20 bg-success/10 text-success';
+  if (tone === 'warning') return 'border-warning/20 bg-warning/10 text-warning';
+  return 'border-error/20 bg-error/10 text-error';
+}
+
+function getModuleStatus(records: number, activity: number): MetricStatus {
+  if (records > 0 && activity > 0) {
+    return { label: 'Healthy', tone: 'success' };
+  }
+
+  if (records > 0 || activity > 0) {
+    return { label: 'Attention needed', tone: 'warning' };
+  }
+
+  return { label: 'Review required', tone: 'error' };
+}
+
 export function AdminPanelPage() {
   const [savedMessage, setSavedMessage] = useState('All admin modules are editable in this console.');
   const [themeState, setThemeState] = useState<ThemeState>(defaultThemeState);
   const [customizationState, setCustomizationState] = useState<CustomizationState>(defaultCustomizationConfig);
+  const [moduleCatalog, setModuleCatalog] = useState<Record<string, { records: number; activity: number }>>({});
+  const [livePlatformStats, setLivePlatformStats] = useState<LivePlatformStats>(defaultLivePlatformStats);
+  const [liveOperationalStats, setLiveOperationalStats] = useState<LiveOperationalStats>(defaultLiveOperationalStats);
   const [featureStates, setFeatureStates] = useState<Record<string, FeatureState>>(() =>
     Object.fromEntries(featureModules.map((feature) => [feature.id, defaultFeatureState(feature)])),
   );
 
   useEffect(() => {
+    void listAdminModuleCatalog()
+      .then((catalog) => {
+        setModuleCatalog(
+          Object.fromEntries(
+            Object.entries(catalog).map(([moduleKey, entry]) => [moduleKey, { records: entry.records.length, activity: entry.activity.length }]),
+          ),
+        );
+      })
+      .catch(() => setModuleCatalog({}));
+
     void listAdminConsoleConfig()
       .then((config) => {
         setFeatureStates((current) =>
@@ -277,20 +496,63 @@ export function AdminPanelPage() {
         setSavedMessage('Loaded saved admin configuration.');
       })
       .catch(() => setSavedMessage('Using local defaults until admin settings are available.'));
+
+    void Promise.all([
+      listUsers(),
+      listCampaigns(),
+      listSupportTickets(undefined, 50),
+      listActivityLogs(50),
+      listWalletAccounts(undefined),
+      listWalletTransactions(undefined, 50),
+      listNotificationQueue(50),
+    ])
+      .then(([users, campaigns, supportTickets, auditLogs, walletAccounts, walletTransactions, notificationQueue]) => {
+        setLivePlatformStats({
+          users: users.length,
+          campaigns: campaigns.length,
+          supportTickets: supportTickets.length,
+          auditLogs: auditLogs.length,
+          walletAccounts: walletAccounts.length,
+          walletTransactions: walletTransactions.length,
+          notificationQueued: notificationQueue.filter((row) => row.status === 'queued').length,
+          notificationFailed: notificationQueue.filter((row) => row.status === 'failed').length,
+        });
+      })
+      .catch(() => setLivePlatformStats(defaultLivePlatformStats));
+
+    void Promise.all([listGamificationConfig(), listCampaignTasks(), getReferralEngineSummary()])
+      .then(([gamificationConfig, campaignTasks, referralSummary]) => {
+        const engagementActiveModules = Object.values(gamificationConfig.modules).filter((module) => module.enabled).length;
+
+        setLiveOperationalStats({
+          engagementActiveModules,
+          engagementTotalModules: gamificationModules.length,
+          engagementSeason: gamificationConfig.seasonName,
+          taskCount: campaignTasks.length,
+          referralPrograms: referralSummary.programs.length,
+          referralAttributions: referralSummary.attributions.length,
+          referralFraudFlags: referralSummary.fraudFlags.length,
+        });
+      })
+      .catch(() => setLiveOperationalStats(defaultLiveOperationalStats));
   }, []);
 
   const summary = useMemo(() => {
     const enabledCount = Object.values(featureStates).filter((state) => state.enabled).length;
     const maintenanceState = featureStates.maintenance;
     const highRiskCount = featureModules.filter((feature) => feature.risk === 'High').length;
+    const liveRecords = Object.values(moduleCatalog).reduce((total, entry) => total + entry.records, 0);
+    const liveActivity = Object.values(moduleCatalog).reduce((total, entry) => total + entry.activity, 0);
 
     return {
       enabledCount,
       disabledCount: featureModules.length - enabledCount,
       maintenanceState: maintenanceState?.mode ?? 'Off',
       highRiskCount,
+      liveRecords,
+      liveActivity,
     };
-  }, [featureStates]);
+  }, [featureStates, moduleCatalog]);
 
   const updateFeature = (id: string, patch: Partial<FeatureState>) => {
     setFeatureStates((current) => ({
@@ -369,34 +631,208 @@ export function AdminPanelPage() {
         </div>
       </Card>
 
+      <Card className="border border-border bg-surface-elevated">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-sm uppercase tracking-[0.24em] text-accent/70">Live platform metrics</p>
+            <h2 className="mt-2 text-3xl font-semibold text-foreground">Current operational snapshots</h2>
+            <p className="mt-2 max-w-3xl text-muted">
+              These counts are pulled from Supabase-backed admin datasets so the index reflects current platform activity.
+            </p>
+          </div>
+          <p className="text-sm text-muted">Updated on page load</p>
+        </div>
+
+        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+          <div className="rounded-2xl border border-border bg-background p-4">
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-xs uppercase tracking-[0.2em] text-muted">Users</p>
+              <span className={`rounded-full border px-2 py-1 text-[10px] uppercase tracking-[0.18em] ${statusBadgeClass(getMetricStatus(livePlatformStats.users, { healthy: 1, warning: 1 }).tone)}`}>
+                {getMetricStatus(livePlatformStats.users, { healthy: 1, warning: 1 }).label}
+              </span>
+            </div>
+            <p className="mt-2 text-3xl font-bold text-foreground">{livePlatformStats.users}</p>
+          </div>
+          <div className="rounded-2xl border border-border bg-background p-4">
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-xs uppercase tracking-[0.2em] text-muted">Campaigns</p>
+              <span className={`rounded-full border px-2 py-1 text-[10px] uppercase tracking-[0.18em] ${statusBadgeClass(getMetricStatus(livePlatformStats.campaigns, { healthy: 1, warning: 1 }).tone)}`}>
+                {getMetricStatus(livePlatformStats.campaigns, { healthy: 1, warning: 1 }).label}
+              </span>
+            </div>
+            <p className="mt-2 text-3xl font-bold text-foreground">{livePlatformStats.campaigns}</p>
+          </div>
+          <div className="rounded-2xl border border-border bg-background p-4">
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-xs uppercase tracking-[0.2em] text-muted">Support tickets</p>
+              <span className={`rounded-full border px-2 py-1 text-[10px] uppercase tracking-[0.18em] ${statusBadgeClass(getMetricStatus(livePlatformStats.supportTickets, { healthy: 1, warning: 6 }).tone)}`}>
+                {getMetricStatus(livePlatformStats.supportTickets, { healthy: 1, warning: 6 }).label}
+              </span>
+            </div>
+            <p className="mt-2 text-3xl font-bold text-foreground">{livePlatformStats.supportTickets}</p>
+          </div>
+          <div className="rounded-2xl border border-border bg-background p-4">
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-xs uppercase tracking-[0.2em] text-muted">Audit logs</p>
+              <span className={`rounded-full border px-2 py-1 text-[10px] uppercase tracking-[0.18em] ${statusBadgeClass(getMetricStatus(livePlatformStats.auditLogs, { healthy: 1, warning: 10 }).tone)}`}>
+                {getMetricStatus(livePlatformStats.auditLogs, { healthy: 1, warning: 10 }).label}
+              </span>
+            </div>
+            <p className="mt-2 text-3xl font-bold text-foreground">{livePlatformStats.auditLogs}</p>
+          </div>
+          <div className="rounded-2xl border border-border bg-background p-4">
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-xs uppercase tracking-[0.2em] text-muted">Wallet accounts</p>
+              <span className={`rounded-full border px-2 py-1 text-[10px] uppercase tracking-[0.18em] ${statusBadgeClass(getMetricStatus(livePlatformStats.walletAccounts, { healthy: 1, warning: 1 }).tone)}`}>
+                {getMetricStatus(livePlatformStats.walletAccounts, { healthy: 1, warning: 1 }).label}
+              </span>
+            </div>
+            <p className="mt-2 text-3xl font-bold text-foreground">{livePlatformStats.walletAccounts}</p>
+          </div>
+          <div className="rounded-2xl border border-border bg-background p-4">
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-xs uppercase tracking-[0.2em] text-muted">Wallet activity</p>
+              <span className={`rounded-full border px-2 py-1 text-[10px] uppercase tracking-[0.18em] ${statusBadgeClass(getMetricStatus(livePlatformStats.walletTransactions, { healthy: 1, warning: 1 }).tone)}`}>
+                {getMetricStatus(livePlatformStats.walletTransactions, { healthy: 1, warning: 1 }).label}
+              </span>
+            </div>
+            <p className="mt-2 text-3xl font-bold text-foreground">{livePlatformStats.walletTransactions}</p>
+          </div>
+        </div>
+      </Card>
+
+      <Card className="border border-border bg-surface-elevated p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-sm uppercase tracking-[0.24em] text-accent/70">Ops metric</p>
+            <h2 className="mt-2 text-2xl font-semibold text-foreground">Notification queue health</h2>
+            <p className="mt-2 text-sm text-muted">A lightweight signal for backlog and recent failures, updated from the live queue.</p>
+          </div>
+          <div className="flex flex-wrap gap-3 text-sm text-muted">
+            <span className="rounded-full border border-border bg-surface px-3 py-1.5">Queued: {livePlatformStats.notificationQueued}</span>
+            <span className="rounded-full border border-border bg-surface px-3 py-1.5">Failed: {livePlatformStats.notificationFailed}</span>
+            <Link to="/admin/notification-center" className="rounded-full border border-border bg-surface px-3 py-1.5 text-foreground transition hover:border-accent/40 hover:text-accent">
+              Open notification center
+            </Link>
+          </div>
+        </div>
+      </Card>
+
+      <Card className="border border-border bg-surface-elevated">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-sm uppercase tracking-[0.24em] text-accent/70">Enterprise module index</p>
+            <h2 className="mt-2 text-3xl font-semibold text-foreground">Independent admin modules</h2>
+            <p className="mt-2 max-w-3xl text-muted">
+              Every requested module opens a dedicated workspace with its own search, filters, bulk actions, CSV export,
+              pagination, sorting, and activity logs.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-border bg-background px-4 py-3 text-sm text-muted">
+            <p>{enterpriseDashboardModules.length} independent modules</p>
+            <p className="mt-1 text-xs uppercase tracking-[0.18em] text-accent/70">
+              {summary.liveRecords} live records · {summary.liveActivity} activity entries
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {enterpriseDashboardModules.map((module) => {
+            const moduleSnapshot = module.moduleKey ? moduleCatalog[module.moduleKey] : null;
+            const moduleStatus = moduleSnapshot ? getModuleStatus(moduleSnapshot.records, moduleSnapshot.activity) : getMetricStatus(0, { healthy: 1, warning: 1 });
+
+            return (
+              <Link
+                key={module.title}
+                to={module.path}
+                className="group rounded-2xl border border-border bg-surface p-4 transition hover:-translate-y-0.5 hover:border-accent/50 hover:bg-surface-elevated"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.2em] text-muted">{module.section}</p>
+                    <h3 className="mt-2 text-xl font-semibold text-foreground group-hover:text-accent">{module.title}</h3>
+                  </div>
+                  <span className={`rounded-full border px-3 py-1 text-xs ${statusBadgeClass(moduleStatus.tone)}`}>
+                    {moduleStatus.label}
+                  </span>
+                </div>
+                <p className="mt-3 text-sm text-muted">{module.description}</p>
+                <p className="mt-4 text-xs uppercase tracking-[0.18em] text-accent/70">
+                  {module.moduleKey && moduleCatalog[module.moduleKey]
+                    ? `${moduleCatalog[module.moduleKey].records} records · ${moduleCatalog[module.moduleKey].activity} activity entries`
+                    : 'Open workflow editor'}
+                </p>
+              </Link>
+            );
+          })}
+        </div>
+      </Card>
+
       <div id="overview" className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Card className="border border-border bg-surface-elevated">
-          <p className="text-sm text-muted">User governance</p>
-          <p className="mt-3 text-2xl font-bold text-foreground">Verification, roles, and wallet access</p>
-          <p className="mt-2 text-sm text-muted">Policy gates, suspension controls, and admin actions are configurable.</p>
+          <p className="text-sm text-muted">Live users</p>
+          <p className="mt-3 text-2xl font-bold text-foreground">{livePlatformStats.users}</p>
+          <p className="mt-2 text-sm text-muted">Accounts loaded from the profiles table.</p>
         </Card>
         <Card className="border border-border bg-surface-elevated">
-          <p className="text-sm text-muted">Growth operations</p>
-          <p className="mt-3 text-2xl font-bold text-foreground">Campaign review and budget controls</p>
-          <p className="mt-2 text-sm text-muted">Approve campaign structure, spend limits, and rule presets.</p>
+          <p className="text-sm text-muted">Live campaigns</p>
+          <p className="mt-3 text-2xl font-bold text-foreground">{livePlatformStats.campaigns}</p>
+          <p className="mt-2 text-sm text-muted">Active records pulled from the campaigns table.</p>
         </Card>
         <Card className="border border-border bg-surface-elevated">
-          <p className="text-sm text-muted">Payout safety</p>
-          <p className="mt-3 text-2xl font-bold text-foreground">Withdrawal approvals and treasury policies</p>
-          <p className="mt-2 text-sm text-muted">Manual, hybrid, and automatic payout paths remain switchable.</p>
+          <p className="text-sm text-muted">Support queue</p>
+          <p className="mt-3 text-2xl font-bold text-foreground">{livePlatformStats.supportTickets}</p>
+          <p className="mt-2 text-sm text-muted">Tickets currently tracked in Supabase.</p>
         </Card>
         <Card className="border border-border bg-surface-elevated">
-          <p className="text-sm text-muted">Release control</p>
-          <p className="mt-3 text-2xl font-bold text-foreground">Feature flags and maintenance switches</p>
-          <p className="mt-2 text-sm text-muted">Ship safely with staged rollout and emergency off-ramps.</p>
+          <p className="text-sm text-muted">Audit volume</p>
+          <p className="mt-3 text-2xl font-bold text-foreground">{livePlatformStats.auditLogs}</p>
+          <p className="mt-2 text-sm text-muted">Recent admin activity log entries available for review.</p>
         </Card>
         <Card className="border border-border bg-surface-elevated">
           <p className="text-sm text-muted">Engagement systems</p>
-          <p className="mt-3 text-2xl font-bold text-foreground">Daily login, streaks, XP, and rewards</p>
-          <p className="mt-2 text-sm text-muted">Tune progression loops, lucky wheel odds, missions, and seasonal events.</p>
+          <p className="mt-3 text-2xl font-bold text-foreground">
+            {liveOperationalStats.engagementActiveModules}/{liveOperationalStats.engagementTotalModules} live modules
+          </p>
+          <span className={`mt-3 inline-flex rounded-full border px-2 py-1 text-[10px] uppercase tracking-[0.18em] ${statusBadgeClass(getMetricStatus(liveOperationalStats.engagementActiveModules, { healthy: liveOperationalStats.engagementTotalModules, warning: Math.max(1, liveOperationalStats.engagementTotalModules - 1) }).tone)}`}>
+            {getMetricStatus(liveOperationalStats.engagementActiveModules, { healthy: liveOperationalStats.engagementTotalModules, warning: Math.max(1, liveOperationalStats.engagementTotalModules - 1) }).label}
+          </span>
+          <p className="mt-2 text-sm text-muted">{liveOperationalStats.engagementSeason} is the active season.</p>
           <Link to="/admin/gamification" className="mt-4 inline-block text-sm text-accent hover:underline">
             Open gamification controls
           </Link>
+        </Card>
+        <Card className="border border-border bg-surface-elevated">
+          <p className="text-sm text-muted">Task engine</p>
+          <p className="mt-3 text-2xl font-bold text-foreground">{liveOperationalStats.taskCount} configured tasks</p>
+          <span className={`mt-3 inline-flex rounded-full border px-2 py-1 text-[10px] uppercase tracking-[0.18em] ${statusBadgeClass(getMetricStatus(liveOperationalStats.taskCount, { healthy: 1, warning: 1 }).tone)}`}>
+            {getMetricStatus(liveOperationalStats.taskCount, { healthy: 1, warning: 1 }).label}
+          </span>
+          <p className="mt-2 text-sm text-muted">Campaign task records pulled from Supabase.</p>
+          <Link to="/admin/task-engine" className="mt-4 inline-block text-sm text-accent hover:underline">
+            Open task engine
+          </Link>
+        </Card>
+        <Card className="border border-border bg-surface-elevated">
+          <p className="text-sm text-muted">Referral engine</p>
+          <p className="mt-3 text-2xl font-bold text-foreground">{liveOperationalStats.referralPrograms} programs</p>
+          <span className={`mt-3 inline-flex rounded-full border px-2 py-1 text-[10px] uppercase tracking-[0.18em] ${statusBadgeClass(getMetricStatus(liveOperationalStats.referralPrograms, { healthy: 1, warning: 1 }).tone)}`}>
+            {getMetricStatus(liveOperationalStats.referralPrograms, { healthy: 1, warning: 1 }).label}
+          </span>
+          <p className="mt-2 text-sm text-muted">
+            {liveOperationalStats.referralAttributions} attributions and {liveOperationalStats.referralFraudFlags} fraud flags.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-3 text-sm">
+            <Link to="/admin/referral-settings" className="text-accent hover:underline">
+              Open referral settings
+            </Link>
+            <Link to="/admin/referral-ops" className="text-accent hover:underline">
+              Open referral ops
+            </Link>
+            <Link to="/admin/fraud-detection" className="text-accent hover:underline">
+              Open fraud detection
+            </Link>
+          </div>
         </Card>
       </div>
 

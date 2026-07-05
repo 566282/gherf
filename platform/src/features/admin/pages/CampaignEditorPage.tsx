@@ -1,9 +1,9 @@
-import { useEffect, type ReactNode, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import {
   buildCampaignEngineConfig,
   campaignTypeOptions,
@@ -11,7 +11,8 @@ import {
   campaignToFormValues,
   createDefaultCampaignForm,
   getCampaign,
-  getCampaignPreset,
+  listCampaignCategories,
+  listCampaignTypes,
   saveCampaign,
   type CampaignEditorFormValues,
 } from '@/services/api/campaigns';
@@ -20,22 +21,14 @@ type WizardStep = 'type' | 'details' | 'rewards' | 'restrictions' | 'audience' |
 
 const WIZARD_STEPS: Array<{ id: WizardStep; label: string; description: string }> = [
   { id: 'type', label: 'Campaign type', description: 'Choose a template or start blank' },
-  { id: 'details', label: 'Core details', description: 'Title, description, and instructions' },
+  { id: 'details', label: 'Core details', description: 'Title, description, and assets' },
   { id: 'rewards', label: 'Rewards & limits', description: 'Budget, reward amount, and caps' },
-  { id: 'restrictions', label: 'Restrictions', description: 'Devices, locations, verification' },
-  { id: 'audience', label: 'Target audience', description: 'Demographics and scheduling' },
+  { id: 'restrictions', label: 'Restrictions', description: 'Devices, locations, approval' },
+  { id: 'audience', label: 'Target audience', description: 'Demographics, categories, and schedule' },
   { id: 'preview', label: 'Review & launch', description: 'Preview and save campaign' },
 ];
 
-function FieldGroup({
-  label,
-  hint,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  children: ReactNode;
-}) {
+function FieldGroup({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return (
     <label className="space-y-2">
       <div>
@@ -47,22 +40,12 @@ function FieldGroup({
   );
 }
 
-function TogglePill({
-  active,
-  children,
-  onClick,
-}: {
-  active: boolean;
-  children: ReactNode;
-  onClick: () => void;
-}) {
+function TogglePill({ active, children, onClick }: { active: boolean; children: ReactNode; onClick: () => void }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-full border px-4 py-2 text-sm transition ${
-        active ? 'border-ember bg-ember/15 text-ember' : 'border-white/10 bg-white/5 text-mist hover:border-ember/40'
-      }`}
+      className={`rounded-full border px-4 py-2 text-sm transition ${active ? 'border-ember bg-ember/15 text-ember' : 'border-white/10 bg-white/5 text-mist hover:border-ember/40'}`}
     >
       {children}
     </button>
@@ -75,6 +58,9 @@ function buildPreview(values: CampaignEditorFormValues) {
     title: values.title,
     description: values.description,
     bannerUrl: values.bannerUrl,
+    campaignImageUrl: values.campaignImageUrl,
+    videoUrl: values.videoUrl,
+    landingUrl: values.landingUrl,
     status: values.status,
     campaignType: values.campaignType,
     instructions: values.instructions,
@@ -89,6 +75,8 @@ function buildPreview(values: CampaignEditorFormValues) {
       countries: values.countryRestrictions,
       devices: values.deviceRestrictions,
       browsers: values.browserRestrictions,
+      ageMin: values.ageRestrictionMin,
+      ageMax: values.ageRestrictionMax,
     },
     verificationMethod: values.verificationMethod,
     approval: {
@@ -97,9 +85,18 @@ function buildPreview(values: CampaignEditorFormValues) {
     },
     budget: values.budget,
     totalParticipants: values.totalParticipants,
+    campaignCategories: values.campaignCategories,
     activeDates: {
       from: values.activeFrom,
       to: values.activeTo,
+    },
+    recurring: {
+      enabled: values.recurringEnabled,
+      frequency: values.recurringFrequency,
+      interval: values.recurringInterval,
+      daysOfWeek: values.recurringDaysOfWeek,
+      timezone: values.recurringTimezone,
+      endsAt: values.recurringEndsAt,
     },
     priority: values.priority,
     requiredScreenshots: values.requiredScreenshots,
@@ -118,23 +115,42 @@ function buildPreview(values: CampaignEditorFormValues) {
   };
 }
 
-function isPresetType(value: string | null): value is CampaignEditorFormValues['campaignType'] {
-  return Boolean(value && campaignTypeOptions.some((option) => option.value === value));
+function hasType(value: string | null, options: Array<{ value: string }>) {
+  return Boolean(value && options.some((option) => option.value === value));
 }
 
 export function CampaignEditorPage() {
   const navigate = useNavigate();
   const { id } = useParams();
   const [searchParams] = useSearchParams();
-  const presetType = isPresetType(searchParams.get('type')) ? searchParams.get('type') : 'custom_tasks';
-  const defaultValues = createDefaultCampaignForm(presetType);
-
   const [currentStep, setCurrentStep] = useState<WizardStep>('type');
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
   const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
+  const [presetApplied, setPresetApplied] = useState(false);
 
-  const form = useForm<CampaignEditorFormValues>({ defaultValues });
-  const { register, handleSubmit, reset, watch, setValue, formState: { isDirty } } = form;
+  const { data: campaignTypes = [] } = useQuery({
+    queryKey: ['campaign-types'],
+    queryFn: listCampaignTypes,
+  });
+
+  const { data: campaignCategories = [] } = useQuery({
+    queryKey: ['campaign-categories'],
+    queryFn: listCampaignCategories,
+  });
+
+  const availableCampaignTypes = campaignTypes.length ? campaignTypes : campaignTypeOptions;
+  const availableCampaignCategories = campaignCategories.length ? campaignCategories : [];
+  const selectedType = hasType(searchParams.get('type'), availableCampaignTypes) ? searchParams.get('type') : null;
+
+  const form = useForm<CampaignEditorFormValues>({ defaultValues: createDefaultCampaignForm('custom_tasks') });
+  const {
+    register,
+    handleSubmit,
+    reset,
+    watch,
+    setValue,
+    formState: { isDirty },
+  } = form;
 
   const campaignQuery = useQuery({
     queryKey: ['campaign', id],
@@ -153,31 +169,32 @@ export function CampaignEditorPage() {
   useEffect(() => {
     if (campaignQuery.data) {
       reset(campaignToFormValues(campaignQuery.data));
+      setPresetApplied(true);
     }
   }, [campaignQuery.data, reset]);
 
   useEffect(() => {
-    if (!id && isPresetType(searchParams.get('type'))) {
-      const preset = getCampaignPreset(searchParams.get('type') as CampaignEditorFormValues['campaignType']);
-      setValue('campaignType', preset.value, { shouldDirty: false });
-      setValue('title', preset.label, { shouldDirty: false });
-      setValue('description', preset.description, { shouldDirty: false });
-      setValue('instructions', preset.defaultInstructions, { shouldDirty: false });
-      setValue('verificationMethod', preset.defaultVerificationMethod, { shouldDirty: false });
-    }
-  }, [id, searchParams, setValue]);
+    if (id || presetApplied) return;
 
-  // Auto-save feature
+    const preset = selectedType
+      ? availableCampaignTypes.find((option) => option.value === selectedType)
+      : availableCampaignTypes[0];
+
+    if (preset) {
+      reset(createDefaultCampaignForm(preset));
+      setPresetApplied(true);
+    }
+  }, [id, selectedType, availableCampaignTypes, presetApplied, reset]);
+
   useEffect(() => {
     if (!autoSaveEnabled || !isDirty || saveMutation.isPending) return;
 
     const autoSaveTimer = setTimeout(async () => {
-      const values = form.getValues();
-      await saveMutation.mutateAsync(values);
+      await saveMutation.mutateAsync(form.getValues());
     }, 3000);
 
     return () => clearTimeout(autoSaveTimer);
-  }, [isDirty, autoSaveEnabled, saveMutation, form]);
+  }, [autoSaveEnabled, form, isDirty, saveMutation]);
 
   const values = watch();
   const preview = buildPreview(values);
@@ -213,17 +230,19 @@ export function CampaignEditorPage() {
     );
   }
 
-  const getStepContent = () => {
+  const currentStepIndex = WIZARD_STEPS.findIndex((step) => step.id === currentStep);
+
+  const stepContent = (() => {
     switch (currentStep) {
       case 'type':
         return (
           <Card className="space-y-5">
             <div>
-              <h2 className="text-2xl font-bold text-white">Step 1: Choose campaign type</h2>
-              <p className="text-sm text-mist mt-2">Select from preset templates or start with a custom task.</p>
+              <h2 className="text-2xl font-bold text-white">Choose campaign type</h2>
+              <p className="mt-2 text-sm text-mist">Select a database-backed type or use the blank custom task template.</p>
             </div>
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {campaignTypeOptions.map((option) => (
+              {availableCampaignTypes.map((option) => (
                 <button
                   key={option.value}
                   type="button"
@@ -231,19 +250,15 @@ export function CampaignEditorPage() {
                     setValue('campaignType', option.value, { shouldDirty: true });
                     setValue('instructions', option.defaultInstructions, { shouldDirty: true });
                     setValue('verificationMethod', option.defaultVerificationMethod, { shouldDirty: true });
-                    if (!values.title || values.title === defaultValues.title) {
+                    if (!values.title || values.title === createDefaultCampaignForm('custom_tasks').title) {
                       setValue('title', option.label, { shouldDirty: true });
                     }
-                    if (!values.description || values.description === defaultValues.description) {
+                    if (!values.description || values.description === createDefaultCampaignForm('custom_tasks').description) {
                       setValue('description', option.description, { shouldDirty: true });
                     }
                     setCurrentStep('details');
                   }}
-                  className={`rounded-2xl border p-4 text-left transition ${
-                    values.campaignType === option.value
-                      ? 'border-ember bg-ember/10'
-                      : 'border-white/10 bg-white/5 hover:border-ember/40'
-                  }`}
+                  className={`rounded-2xl border p-4 text-left transition ${values.campaignType === option.value ? 'border-ember bg-ember/10' : 'border-white/10 bg-white/5 hover:border-ember/40'}`}
                 >
                   <p className="text-lg font-semibold text-white">{option.label}</p>
                   <p className="mt-2 text-sm text-mist">{option.description}</p>
@@ -255,25 +270,47 @@ export function CampaignEditorPage() {
       case 'details':
         return (
           <Card className="space-y-5">
-            <h2 className="text-2xl font-bold text-white">Step 2: Campaign details</h2>
+            <h2 className="text-2xl font-bold text-white">Campaign details</h2>
             <div className="grid gap-4 md:grid-cols-2">
-              <FieldGroup label="Campaign title" hint="Clear, action-oriented name for your campaign.">
+              <FieldGroup label="Business ID" hint="Reference the business that owns this campaign.">
+                <input {...register('businessId')} className="input-base" placeholder="business-uuid-or-slug" />
+              </FieldGroup>
+              <FieldGroup label="Status">
+                <select {...register('status')} className="input-base">
+                  <option value="draft">Draft</option>
+                  <option value="scheduled">Scheduled</option>
+                  <option value="active">Active</option>
+                  <option value="paused">Paused</option>
+                  <option value="completed">Completed</option>
+                  <option value="archived">Archived</option>
+                </select>
+              </FieldGroup>
+              <FieldGroup label="Campaign title">
                 <input {...register('title', { required: true })} className="input-base" placeholder="Spring referral sprint" />
               </FieldGroup>
               <FieldGroup label="Campaign type">
-                <select {...register('campaignType')} className="input-base" disabled>
-                  {campaignTypeOptions.map((option) => (
+                <select {...register('campaignType')} className="input-base">
+                  {availableCampaignTypes.map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
                     </option>
                   ))}
                 </select>
               </FieldGroup>
-              <FieldGroup label="Description" hint="Visible to campaign managers and team members.">
-                <textarea {...register('description')} className="input-base min-h-24" />
+              <FieldGroup label="Description" hint="Visible to the campaign team and often shown to participants.">
+                <textarea {...register('description')} className="input-base min-h-28" />
               </FieldGroup>
-              <FieldGroup label="Banner URL" hint="Optional hero image for campaign listings.">
+              <FieldGroup label="Campaign image" hint="Primary image used in campaign cards and previews.">
+                <input {...register('campaignImageUrl')} className="input-base" placeholder="https://..." />
+              </FieldGroup>
+              <FieldGroup label="Banner URL" hint="Optional hero image used in campaign listings.">
                 <input {...register('bannerUrl')} className="input-base" placeholder="https://..." />
+              </FieldGroup>
+              <FieldGroup label="Video URL" hint="Optional video asset shown with the campaign.">
+                <input {...register('videoUrl')} className="input-base" placeholder="https://..." />
+              </FieldGroup>
+              <FieldGroup label="Landing URL" hint="Destination URL opened when participants start the campaign.">
+                <input {...register('landingUrl')} className="input-base" placeholder="https://..." />
               </FieldGroup>
             </div>
             <FieldGroup label="Instructions" hint="Step-by-step instructions shown to participants.">
@@ -284,27 +321,27 @@ export function CampaignEditorPage() {
       case 'rewards':
         return (
           <Card className="space-y-5">
-            <h2 className="text-2xl font-bold text-white">Step 3: Rewards & limits</h2>
+            <h2 className="text-2xl font-bold text-white">Rewards & limits</h2>
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               <FieldGroup label="Reward amount" hint="Per-completion payout.">
                 <input type="number" step="0.01" {...register('rewardAmount', { valueAsNumber: true })} className="input-base" />
               </FieldGroup>
-              <FieldGroup label="Total budget" hint="Total campaign budget.">
+              <FieldGroup label="Budget" hint="Total campaign budget.">
                 <input type="number" step="0.01" {...register('budget', { valueAsNumber: true })} className="input-base" />
               </FieldGroup>
-              <FieldGroup label="Currency">
+              <FieldGroup label="Budget currency">
                 <input {...register('budgetCurrency')} className="input-base" placeholder="USD" />
               </FieldGroup>
-              <FieldGroup label="Completion limit" hint="Max completions per user.">
+              <FieldGroup label="Completion limit">
                 <input type="number" {...register('completionLimit', { valueAsNumber: true })} className="input-base" />
               </FieldGroup>
-              <FieldGroup label="Daily limit" hint="Max completions per user per day.">
+              <FieldGroup label="Daily limit">
                 <input type="number" {...register('dailyLimit', { valueAsNumber: true })} className="input-base" />
               </FieldGroup>
-              <FieldGroup label="Total participants" hint="Target audience size.">
+              <FieldGroup label="Total participants">
                 <input type="number" {...register('totalParticipants', { valueAsNumber: true })} className="input-base" />
               </FieldGroup>
-              <FieldGroup label="Priority" hint="Higher values appear first.">
+              <FieldGroup label="Priority" hint="Higher values bubble the campaign above lower-priority items.">
                 <input type="number" {...register('priority', { valueAsNumber: true })} className="input-base" />
               </FieldGroup>
               <FieldGroup label="Time delay before reward (seconds)">
@@ -319,7 +356,7 @@ export function CampaignEditorPage() {
       case 'restrictions':
         return (
           <Card className="space-y-5">
-            <h2 className="text-2xl font-bold text-white">Step 4: Restrictions & approvals</h2>
+            <h2 className="text-2xl font-bold text-white">Restrictions & approvals</h2>
             <div className="grid gap-4 md:grid-cols-2">
               <FieldGroup label="Country restrictions" hint="Comma-separated country codes or names.">
                 <textarea {...register('countryRestrictions')} className="input-base min-h-24" placeholder="US, GB, NG" />
@@ -329,6 +366,12 @@ export function CampaignEditorPage() {
               </FieldGroup>
               <FieldGroup label="Browser restrictions">
                 <textarea {...register('browserRestrictions')} className="input-base min-h-24" placeholder="chrome, safari" />
+              </FieldGroup>
+              <FieldGroup label="Age restriction minimum">
+                <input type="number" {...register('ageRestrictionMin', { valueAsNumber: true })} className="input-base" placeholder="18" />
+              </FieldGroup>
+              <FieldGroup label="Age restriction maximum">
+                <input type="number" {...register('ageRestrictionMax', { valueAsNumber: true })} className="input-base" placeholder="45" />
               </FieldGroup>
               <FieldGroup label="Verification method">
                 <select {...register('verificationMethod')} className="input-base">
@@ -373,11 +416,28 @@ export function CampaignEditorPage() {
       case 'audience':
         return (
           <Card className="space-y-5">
-            <h2 className="text-2xl font-bold text-white">Step 5: Target audience & schedule</h2>
+            <h2 className="text-2xl font-bold text-white">Target audience, categories, and schedule</h2>
             <div className="grid gap-4 md:grid-cols-2">
               <FieldGroup label="Age range" hint="e.g. 18-35 or 25-55">
                 <input {...register('targetAgeRange')} className="input-base" placeholder="18-35" />
               </FieldGroup>
+              <FieldGroup label="Campaign categories" hint="Comma-separated categories from the admin catalog.">
+                <textarea {...register('campaignCategories')} className="input-base min-h-24" placeholder="acquisition, social, seasonal" />
+              </FieldGroup>
+              <div className="md:col-span-2 rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-mist">
+                <p className="text-xs uppercase tracking-[0.18em] text-mist/60">Catalog categories</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {availableCampaignCategories.length ? (
+                    availableCampaignCategories.map((category) => (
+                      <span key={category.id} className="rounded-full border border-white/10 bg-ink/60 px-3 py-1 text-xs text-white">
+                        {category.name}
+                      </span>
+                    ))
+                  ) : (
+                    <span>No categories loaded from Supabase yet.</span>
+                  )}
+                </div>
+              </div>
               <FieldGroup label="Interests" hint="Comma-separated audience interests.">
                 <textarea {...register('targetInterests')} className="input-base min-h-24" placeholder="crypto, gaming, fintech" />
               </FieldGroup>
@@ -401,6 +461,36 @@ export function CampaignEditorPage() {
               <FieldGroup label="Active to">
                 <input type="datetime-local" {...register('activeTo')} className="input-base" />
               </FieldGroup>
+              <FieldGroup label="Recurring campaigns" hint="Enable if this campaign should repeat on a schedule.">
+                <div className="flex gap-3 pt-1">
+                  <TogglePill active={values.recurringEnabled} onClick={() => setValue('recurringEnabled', true, { shouldDirty: true })}>
+                    Enabled
+                  </TogglePill>
+                  <TogglePill active={!values.recurringEnabled} onClick={() => setValue('recurringEnabled', false, { shouldDirty: true })}>
+                    Disabled
+                  </TogglePill>
+                </div>
+              </FieldGroup>
+              <FieldGroup label="Recurring frequency">
+                <select {...register('recurringFrequency')} className="input-base">
+                  <option value="daily">Daily</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="monthly">Monthly</option>
+                  <option value="custom">Custom</option>
+                </select>
+              </FieldGroup>
+              <FieldGroup label="Recurring interval">
+                <input type="number" min={1} {...register('recurringInterval', { valueAsNumber: true })} className="input-base" />
+              </FieldGroup>
+              <FieldGroup label="Recurring days of week" hint="Comma-separated weekdays for weekly schedules.">
+                <input {...register('recurringDaysOfWeek')} className="input-base" placeholder="monday, wednesday, friday" />
+              </FieldGroup>
+              <FieldGroup label="Recurring timezone">
+                <input {...register('recurringTimezone')} className="input-base" placeholder="UTC" />
+              </FieldGroup>
+              <FieldGroup label="Recurring ends at">
+                <input type="datetime-local" {...register('recurringEndsAt')} className="input-base" />
+              </FieldGroup>
             </div>
           </Card>
         );
@@ -409,26 +499,31 @@ export function CampaignEditorPage() {
           <div className="grid gap-6 xl:grid-cols-[1fr_350px]">
             <Card className="space-y-5">
               <div>
-                <h2 className="text-2xl font-bold text-white">Step 6: Review & launch</h2>
-                <p className="text-sm text-mist mt-2">Review your campaign configuration below, then save to publish.</p>
+                <h2 className="text-2xl font-bold text-white">Review & launch</h2>
+                <p className="mt-2 text-sm text-mist">Review the campaign payload before publishing.</p>
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                 <h3 className="text-lg font-semibold text-white">Campaign summary</h3>
                 <div className="mt-4 space-y-2 text-sm">
-                  <p><span className="text-mist/70">Title:</span> <span className="text-white font-medium">{values.title}</span></p>
-                  <p><span className="text-mist/70">Type:</span> <span className="text-white font-medium">{values.campaignType.replace(/_/g, ' ')}</span></p>
-                  <p><span className="text-mist/70">Reward:</span> <span className="text-white font-medium">${values.rewardAmount.toFixed(2)}</span></p>
-                  <p><span className="text-mist/70">Budget:</span> <span className="text-white font-medium">${values.budget.toFixed(0)} {values.budgetCurrency}</span></p>
-                  <p><span className="text-mist/70">Participants:</span> <span className="text-white font-medium">{values.totalParticipants}</span></p>
+                  <p><span className="text-mist/70">Title:</span> <span className="font-medium text-white">{values.title}</span></p>
+                  <p><span className="text-mist/70">Type:</span> <span className="font-medium text-white">{values.campaignType.replace(/_/g, ' ')}</span></p>
+                  <p><span className="text-mist/70">Image:</span> <span className="font-medium text-white">{values.campaignImageUrl || 'None'}</span></p>
+                  <p><span className="text-mist/70">Video:</span> <span className="font-medium text-white">{values.videoUrl || 'None'}</span></p>
+                  <p><span className="text-mist/70">Landing:</span> <span className="font-medium text-white">{values.landingUrl || 'None'}</span></p>
+                  <p><span className="text-mist/70">Reward:</span> <span className="font-medium text-white">${values.rewardAmount.toFixed(2)}</span></p>
+                  <p><span className="text-mist/70">Budget:</span> <span className="font-medium text-white">${values.budget.toFixed(0)} {values.budgetCurrency}</span></p>
+                  <p><span className="text-mist/70">Participants:</span> <span className="font-medium text-white">{values.totalParticipants}</span></p>
+                  <p><span className="text-mist/70">Categories:</span> <span className="font-medium text-white">{values.campaignCategories || 'None'}</span></p>
+                  <p><span className="text-mist/70">Age restriction:</span> <span className="font-medium text-white">{values.ageRestrictionMin ?? 'Any'} - {values.ageRestrictionMax ?? 'Any'}</span></p>
+                  <p><span className="text-mist/70">Recurring:</span> <span className="font-medium text-white">{values.recurringEnabled ? `${values.recurringFrequency} every ${values.recurringInterval}` : 'Disabled'}</span></p>
                   <p><span className="text-mist/70">Status:</span> <span className={`font-medium ${values.status === 'draft' ? 'text-mint' : 'text-amber-300'}`}>{values.status}</span></p>
                 </div>
               </div>
             </Card>
-
             <Card className="sticky top-6">
               <div>
                 <h2 className="text-2xl font-bold text-white">Live preview</h2>
-                <p className="text-sm text-mist mt-2">Exact configuration stored in database.</p>
+                <p className="mt-2 text-sm text-mist">Exact configuration stored in Supabase.</p>
               </div>
               <pre className="mt-4 max-h-[34rem] overflow-auto rounded-2xl border border-white/10 bg-ink/80 p-3 text-xs leading-relaxed text-mist">
                 {JSON.stringify(preview, null, 2)}
@@ -437,15 +532,12 @@ export function CampaignEditorPage() {
           </div>
         );
     }
-  };
-
-  const currentStepIndex = WIZARD_STEPS.findIndex((s) => s.id === currentStep);
+  })();
 
   return (
     <div className="space-y-6 p-6">
-      {/* Wizard progress */}
       <div>
-        <div className="flex items-center justify-between gap-2 mb-4">
+        <div className="mb-4 flex items-center justify-between gap-2">
           <div>
             <p className="text-sm uppercase tracking-[0.24em] text-mint/70">Campaign wizard</p>
             <h1 className="text-3xl font-bold text-white">{id ? 'Edit campaign' : 'Create new campaign'}</h1>
@@ -456,19 +548,12 @@ export function CampaignEditorPage() {
           </div>
         </div>
 
-        {/* Step indicators */}
         <div className="flex gap-2 overflow-x-auto">
           {WIZARD_STEPS.map((step, idx) => (
             <button
               key={step.id}
               onClick={() => setCurrentStep(step.id)}
-              className={`flex flex-col gap-1 rounded-xl border px-4 py-3 text-left whitespace-nowrap transition ${
-                currentStep === step.id
-                  ? 'border-ember bg-ember/10'
-                  : idx < currentStepIndex
-                  ? 'border-mint/30 bg-mint/10'
-                  : 'border-white/10 bg-white/5 hover:border-white/20'
-              }`}
+              className={`flex flex-col gap-1 rounded-xl border px-4 py-3 text-left whitespace-nowrap transition ${currentStep === step.id ? 'border-ember bg-ember/10' : idx < currentStepIndex ? 'border-mint/30 bg-mint/10' : 'border-white/10 bg-white/5 hover:border-white/20'}`}
             >
               <span className="text-xs uppercase tracking-[0.18em] text-mist/70">{step.label}</span>
               <span className="text-xs text-mist/60">{step.description}</span>
@@ -477,11 +562,9 @@ export function CampaignEditorPage() {
         </div>
       </div>
 
-      {/* Step content */}
-      {getStepContent()}
+      {stepContent}
 
-      {/* Navigation buttons */}
-      <div className="flex flex-wrap gap-3 justify-between sticky bottom-6">
+      <div className="sticky bottom-6 flex flex-wrap justify-between gap-3">
         <div className="flex gap-3">
           {currentStepIndex > 0 && (
             <Button variant="ghost" onClick={() => setCurrentStep(WIZARD_STEPS[currentStepIndex - 1].id)}>
@@ -494,7 +577,6 @@ export function CampaignEditorPage() {
             </Button>
           )}
         </div>
-
         <div className="flex gap-3">
           {currentStepIndex === WIZARD_STEPS.length - 1 && (
             <>
@@ -502,7 +584,7 @@ export function CampaignEditorPage() {
                 <input
                   type="checkbox"
                   checked={autoSaveEnabled}
-                  onChange={(e) => setAutoSaveEnabled(e.target.checked)}
+                  onChange={(event) => setAutoSaveEnabled(event.target.checked)}
                   className="rounded border border-white/20"
                 />
                 Auto-save enabled
@@ -517,262 +599,6 @@ export function CampaignEditorPage() {
           )}
         </div>
       </div>
-    </div>
-  );
-}
-        <div className="space-y-2">
-          <p className="text-sm uppercase tracking-[0.3em] text-mint/80">Campaign engine editor</p>
-          <h1 className="text-3xl font-bold text-ember">{id ? 'Edit campaign' : 'Create campaign'}</h1>
-          <p className="max-w-3xl text-mist">
-            Configure the full campaign lifecycle here: type, reward economics, approval logic, restrictions, audience
-            targeting, and schedule. The configuration is stored as JSON so the engine remains extensible.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap gap-3">
-          <Button variant="ghost" onClick={() => navigate('/business/campaigns')}>
-            Cancel
-          </Button>
-          <Button onClick={onSubmit} disabled={saveMutation.isPending}>
-            {saveMutation.isPending ? 'Saving...' : 'Save campaign'}
-          </Button>
-        </div>
-      </div>
-
-      <Card className="space-y-5">
-        <div>
-          <h2 className="text-2xl font-bold text-white">Campaign type</h2>
-          <p className="text-sm text-mist">Use a preset or start from a blank custom task definition.</p>
-        </div>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {campaignTypeOptions.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => {
-                setValue('campaignType', option.value, { shouldDirty: true });
-                setValue('instructions', option.defaultInstructions, { shouldDirty: true });
-                setValue('verificationMethod', option.defaultVerificationMethod, { shouldDirty: true });
-                if (!values.title || values.title === defaultValues.title) {
-                  setValue('title', option.label, { shouldDirty: true });
-                }
-                if (!values.description || values.description === defaultValues.description) {
-                  setValue('description', option.description, { shouldDirty: true });
-                }
-              }}
-              className={`rounded-2xl border p-4 text-left transition ${
-                values.campaignType === option.value
-                  ? 'border-ember bg-ember/10'
-                  : 'border-white/10 bg-white/5 hover:border-ember/40'
-              }`}
-            >
-              <p className="text-lg font-semibold text-white">{option.label}</p>
-              <p className="mt-2 text-sm text-mist">{option.description}</p>
-            </button>
-          ))}
-        </div>
-      </Card>
-
-      <form onSubmit={onSubmit} className="grid gap-6 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,0.8fr)]">
-        <div className="space-y-6">
-          <Card className="space-y-5">
-            <h2 className="text-2xl font-bold text-white">Core details</h2>
-            <div className="grid gap-4 md:grid-cols-2">
-              <FieldGroup label="Business ID" hint="Reference the business that owns this campaign.">
-                <input {...register('businessId')} className="input-base" placeholder="business-uuid-or-slug" />
-              </FieldGroup>
-
-              <FieldGroup label="Status">
-                <select {...register('status')} className="input-base">
-                  <option value="draft">Draft</option>
-                  <option value="scheduled">Scheduled</option>
-                  <option value="active">Active</option>
-                  <option value="paused">Paused</option>
-                  <option value="completed">Completed</option>
-                  <option value="archived">Archived</option>
-                </select>
-              </FieldGroup>
-
-              <FieldGroup label="Campaign title">
-                <input {...register('title', { required: true })} className="input-base" placeholder="Spring referral sprint" />
-              </FieldGroup>
-
-              <FieldGroup label="Campaign type">
-                <select {...register('campaignType')} className="input-base">
-                  {campaignTypeOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </FieldGroup>
-
-              <FieldGroup label="Description" hint="Visible to the campaign team and often shown to participants.">
-                <textarea {...register('description')} className="input-base min-h-28" />
-              </FieldGroup>
-
-              <FieldGroup label="Banner URL" hint="Optional hero image used in campaign listings.">
-                <input {...register('bannerUrl')} className="input-base" placeholder="https://..." />
-              </FieldGroup>
-            </div>
-
-            <FieldGroup label="Instructions" hint="These are the step-by-step instructions shown to participants.">
-              <textarea {...register('instructions', { required: true })} className="input-base min-h-36" />
-            </FieldGroup>
-          </Card>
-
-          <Card className="space-y-5">
-            <h2 className="text-2xl font-bold text-white">Reward and limits</h2>
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              <FieldGroup label="Reward amount">
-                <input type="number" step="0.01" {...register('rewardAmount', { valueAsNumber: true })} className="input-base" />
-              </FieldGroup>
-
-              <FieldGroup label="Budget">
-                <input type="number" step="0.01" {...register('budget', { valueAsNumber: true })} className="input-base" />
-              </FieldGroup>
-
-              <FieldGroup label="Budget currency">
-                <input {...register('budgetCurrency')} className="input-base" placeholder="USD" />
-              </FieldGroup>
-
-              <FieldGroup label="Completion limit">
-                <input type="number" {...register('completionLimit', { valueAsNumber: true })} className="input-base" />
-              </FieldGroup>
-
-              <FieldGroup label="Daily limit">
-                <input type="number" {...register('dailyLimit', { valueAsNumber: true })} className="input-base" />
-              </FieldGroup>
-
-              <FieldGroup label="Total participants">
-                <input type="number" {...register('totalParticipants', { valueAsNumber: true })} className="input-base" />
-              </FieldGroup>
-
-              <FieldGroup label="Priority" hint="Higher values bubble the campaign above lower-priority items.">
-                <input type="number" {...register('priority', { valueAsNumber: true })} className="input-base" />
-              </FieldGroup>
-
-              <FieldGroup label="Time delay before reward (seconds)">
-                <input type="number" {...register('timeDelayBeforeReward', { valueAsNumber: true })} className="input-base" />
-              </FieldGroup>
-
-              <FieldGroup label="Cooldown period (seconds)">
-                <input type="number" {...register('cooldownPeriod', { valueAsNumber: true })} className="input-base" />
-              </FieldGroup>
-            </div>
-          </Card>
-
-          <Card className="space-y-5">
-            <h2 className="text-2xl font-bold text-white">Restrictions and approvals</h2>
-            <div className="grid gap-4 md:grid-cols-2">
-              <FieldGroup label="Country restrictions" hint="Comma-separated country codes or names.">
-                <textarea {...register('countryRestrictions')} className="input-base min-h-24" placeholder="US, GB, NG" />
-              </FieldGroup>
-
-              <FieldGroup label="Device restrictions">
-                <textarea {...register('deviceRestrictions')} className="input-base min-h-24" placeholder="desktop, mobile" />
-              </FieldGroup>
-
-              <FieldGroup label="Browser restrictions">
-                <textarea {...register('browserRestrictions')} className="input-base min-h-24" placeholder="chrome, safari" />
-              </FieldGroup>
-
-              <FieldGroup label="Verification method">
-                <select {...register('verificationMethod')} className="input-base">
-                  {campaignVerificationOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </FieldGroup>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <FieldGroup label="Auto approval" hint="Approve submissions instantly when validation rules pass.">
-                <div className="flex gap-3 pt-1">
-                  <TogglePill active={values.autoApproval} onClick={() => setValue('autoApproval', true, { shouldDirty: true })}>
-                    Enabled
-                  </TogglePill>
-                  <TogglePill active={!values.autoApproval} onClick={() => setValue('autoApproval', false, { shouldDirty: true })}>
-                    Disabled
-                  </TogglePill>
-                </div>
-              </FieldGroup>
-
-              <FieldGroup label="Manual approval" hint="Route submissions to a reviewer queue.">
-                <div className="flex gap-3 pt-1">
-                  <TogglePill active={values.manualApproval} onClick={() => setValue('manualApproval', true, { shouldDirty: true })}>
-                    Enabled
-                  </TogglePill>
-                  <TogglePill active={!values.manualApproval} onClick={() => setValue('manualApproval', false, { shouldDirty: true })}>
-                    Disabled
-                  </TogglePill>
-                </div>
-              </FieldGroup>
-
-              <FieldGroup label="Required screenshots">
-                <input type="number" {...register('requiredScreenshots', { valueAsNumber: true })} className="input-base" />
-              </FieldGroup>
-
-              <FieldGroup label="Required proof" hint="Text or a proof template such as URL, code, or receipt reference.">
-                <input {...register('requiredProof')} className="input-base" />
-              </FieldGroup>
-            </div>
-          </Card>
-
-          <Card className="space-y-5">
-            <h2 className="text-2xl font-bold text-white">Target audience and schedule</h2>
-            <div className="grid gap-4 md:grid-cols-2">
-              <FieldGroup label="Age range">
-                <input {...register('targetAgeRange')} className="input-base" placeholder="18-35" />
-              </FieldGroup>
-              <FieldGroup label="Active from">
-                <input type="datetime-local" {...register('activeFrom')} className="input-base" />
-              </FieldGroup>
-              <FieldGroup label="Interests" hint="Comma-separated audience interests.">
-                <textarea {...register('targetInterests')} className="input-base min-h-24" placeholder="crypto, gaming, fintech" />
-              </FieldGroup>
-              <FieldGroup label="Active to">
-                <input type="datetime-local" {...register('activeTo')} className="input-base" />
-              </FieldGroup>
-              <FieldGroup label="Regions">
-                <textarea {...register('targetRegions')} className="input-base min-h-24" placeholder="Africa, Europe" />
-              </FieldGroup>
-              <FieldGroup label="Languages">
-                <textarea {...register('targetLanguages')} className="input-base min-h-24" placeholder="en, fr" />
-              </FieldGroup>
-              <FieldGroup label="Tags">
-                <textarea {...register('targetTags')} className="input-base min-h-24" placeholder="high-intent, web3" />
-              </FieldGroup>
-              <FieldGroup label="Audience notes">
-                <textarea {...register('targetNotes')} className="input-base min-h-24" />
-              </FieldGroup>
-            </div>
-          </Card>
-        </div>
-
-        <div className="space-y-6">
-          <Card className="space-y-4 sticky top-6">
-            <div>
-              <h2 className="text-2xl font-bold text-white">Live engine preview</h2>
-              <p className="text-sm text-mist">This is the exact configuration payload stored in the database.</p>
-            </div>
-            <pre className="max-h-[34rem] overflow-auto rounded-2xl border border-white/10 bg-ink/80 p-4 text-xs leading-relaxed text-mist">
-              {JSON.stringify(preview, null, 2)}
-            </pre>
-          </Card>
-
-          <Card className="space-y-4">
-            <h2 className="text-2xl font-bold text-white">Engine notes</h2>
-            <ul className="space-y-3 text-sm text-mist">
-              <li>• Add more campaign presets in the service layer without changing the editor layout.</li>
-              <li>• Unknown or future rules can be passed through the JSON engine config.</li>
-              <li>• The editor persists both the campaign summary and the underlying engine payload.</li>
-            </ul>
-          </Card>
-        </div>
-      </form>
     </div>
   );
 }

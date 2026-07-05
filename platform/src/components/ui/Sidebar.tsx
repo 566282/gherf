@@ -15,6 +15,7 @@ export function Sidebar({ open, onToggle }: SidebarProps) {
     { label: 'Dashboard', path: '/app' },
     { label: 'Browse Campaigns', path: '/app/campaigns' },
     { label: 'My Tasks', path: '/app/tasks' },
+    { label: 'Notifications', path: '/app/notifications' },
     { label: 'Gamification', path: '/app/gamification' },
     { label: 'Wallet', path: '/app/wallet' },
     ...(permissions.isAdvertiser || permissions.isCampaignManager

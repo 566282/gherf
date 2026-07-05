@@ -64,7 +64,7 @@ export const campaignTypeValues = [
   'custom_tasks',
 ] as const;
 
-export type CampaignType = (typeof campaignTypeValues)[number];
+export type CampaignType = string;
 
 export const campaignVerificationMethods = [
   'automatic_verification',
@@ -108,6 +108,38 @@ export interface VerificationPolicy {
   appealWindowHours: number;
 }
 
+export interface CampaignRecurringConfig {
+  enabled: boolean;
+  frequency: 'daily' | 'weekly' | 'monthly' | 'custom';
+  interval: number;
+  daysOfWeek: string[];
+  timezone: string;
+  endsAt: string | null;
+}
+
+export interface CampaignTypeDefinition {
+  value: string;
+  label: string;
+  description: string;
+  defaultInstructions: string;
+  defaultVerificationMethod: CampaignVerificationMethod;
+  isSystem?: boolean;
+  isActive?: boolean;
+  sortOrder?: number;
+}
+
+export interface CampaignCategory {
+  id: string;
+  slug: string;
+  name: string;
+  description?: string;
+  isActive: boolean;
+  isSystem: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export const campaignDurationUnits = ['minutes', 'hours', 'days', 'weeks'] as const;
 
 export type CampaignDurationUnit = (typeof campaignDurationUnits)[number];
@@ -129,9 +161,28 @@ export interface CampaignTargetAudience {
   notes: string;
 }
 
+export interface TaskRequirement {
+  key: string;
+  label: string;
+  value?: string | number | boolean | string[] | null;
+}
+
+export interface TaskEngineConfig {
+  taskConfig: Record<string, unknown>;
+  requirements: TaskRequirement[];
+  cooldownSeconds: number;
+  maximumAttempts: number | null;
+  verificationMethod: CampaignVerificationMethod | string;
+  fraudChecks: string[];
+  expiresAt: string | null;
+}
+
 export interface CampaignEngineConfig {
   campaignType: CampaignType;
   instructions: string;
+  campaignImageUrl: string;
+  videoUrl: string;
+  landingUrl: string;
   rewardAmount: number;
   durationValue: number;
   durationUnit: CampaignDurationUnit;
@@ -140,11 +191,14 @@ export interface CampaignEngineConfig {
   countryRestrictions: string[];
   deviceRestrictions: CampaignDeviceRestriction[];
   browserRestrictions: CampaignBrowserRestriction[];
+  ageRestrictionMin: number | null;
+  ageRestrictionMax: number | null;
   verificationMethod: CampaignVerificationMethod;
   autoApproval: boolean;
   manualApproval: boolean;
   budget: number;
   totalParticipants: number;
+  campaignCategories: string[];
   targetAudience: CampaignTargetAudience;
   activeFrom: string;
   activeTo: string;
@@ -152,6 +206,7 @@ export interface CampaignEngineConfig {
   requiredScreenshots: number;
   requiredProof: string;
   verificationPolicy: VerificationPolicy;
+  recurringConfig: CampaignRecurringConfig;
   timeDelayBeforeReward: number;
   cooldownPeriod: number;
 }
@@ -165,6 +220,9 @@ export interface Campaign {
   title: string;
   description?: string;
   bannerUrl?: string;
+  campaignImageUrl?: string;
+  videoUrl?: string;
+  landingUrl?: string;
   campaignType: CampaignType;
   instructions: string;
   engineConfig: CampaignEngineConfig;
@@ -175,6 +233,10 @@ export interface Campaign {
   budgetCurrency: string;
   totalRewardsAllocated: number;
   maxParticipants?: number;
+  ageRestrictionMin?: number | null;
+  ageRestrictionMax?: number | null;
+  campaignCategories: string[];
+  recurringConfig: CampaignRecurringConfig;
   currentParticipants: number;
   createdAt: string;
   updatedAt: string;
@@ -202,9 +264,16 @@ export interface CampaignTask {
   campaignId: string;
   title: string;
   description?: string;
-  taskType: 'click' | 'survey' | 'video' | 'form' | 'custom';
+  taskType: string;
   mediaUrl?: string;
   rewardAmount: number;
+  requirements: TaskRequirement[];
+  cooldownSeconds: number;
+  maximumAttempts: number | null;
+  verificationMethod: CampaignVerificationMethod | string;
+  fraudChecks: string[];
+  expiresAt: string | null;
+  taskConfig: Record<string, unknown>;
   maxCompletions?: number;
   currentCompletions: number;
   status: 'draft' | 'active' | 'paused' | 'completed';
@@ -304,6 +373,16 @@ export const walletWithdrawalMethods = [
 
 export type WalletWithdrawalMethod = (typeof walletWithdrawalMethods)[number];
 
+export const walletAccountTypes = [
+  'main',
+  'bonus',
+  'referral',
+  'cashback',
+  'reward',
+] as const;
+
+export type WalletAccountType = (typeof walletAccountTypes)[number];
+
 export const walletApprovalWorkflows = ['manual', 'automatic', 'hybrid'] as const;
 
 export type WalletApprovalWorkflow = (typeof walletApprovalWorkflows)[number];
@@ -315,11 +394,15 @@ export const walletTransactionTypes = [
   'cashback',
   'promotional_reward',
   'achievement_reward',
+  'video_reward',
+  'deposit',
   'withdrawal_request',
   'withdrawal_reversal',
   'processing_fee',
   'admin_adjustment',
   'exchange_adjustment',
+  'transfer_in',
+  'transfer_out',
 ] as const;
 
 export type WalletTransactionType = (typeof walletTransactionTypes)[number];
@@ -343,6 +426,50 @@ export interface WalletExchangeRate {
   updatedAt?: string;
 }
 
+export interface WalletAccount {
+  id: string;
+  userId: string;
+  walletType: WalletAccountType;
+  currency: string;
+  availableBalance: number;
+  pendingBalance: number;
+  lockedBalance: number;
+  metadata?: Record<string, unknown> | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WalletTransfer {
+  id: string;
+  userId: string;
+  fromWalletAccountId: string;
+  toWalletAccountId: string;
+  amount: number;
+  currency: string;
+  status: 'pending' | 'completed' | 'failed' | 'cancelled';
+  transferCategory: 'internal' | 'deposit' | 'withdrawal' | 'adjustment' | 'reward';
+  note?: string | null;
+  referenceTransactionId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WalletAuditLog {
+  id: string;
+  userId: string;
+  entryType: 'transaction' | 'transfer' | 'ledger' | 'reward' | 'withdrawal';
+  eventType: string;
+  walletType?: WalletAccountType | null;
+  amount: number;
+  currency: string;
+  balanceAfter?: number | null;
+  status?: string | null;
+  note?: string | null;
+  referenceId?: string | null;
+  metadata?: Record<string, unknown> | null;
+  createdAt: string;
+}
+
 export interface WalletSettings {
   minWithdrawal: number;
   maxWithdrawal: number;
@@ -355,9 +482,15 @@ export interface WalletSettings {
 
 export interface WalletSummary {
   currency: string;
+  mainWallet: number;
+  bonusWallet: number;
+  referralWallet: number;
+  cashbackWallet: number;
+  rewardWallet: number;
   earnings: number;
   pendingEarnings: number;
   withdrawableBalance: number;
+  totalBalance: number;
   bonusRewards: number;
   referralCommissions: number;
   cashback: number;
@@ -375,6 +508,9 @@ export interface WalletTransaction {
   balanceAfter: number;
   currency: string;
   status: WalletTransactionStatus;
+  walletType?: WalletAccountType | null;
+  counterpartyWalletType?: WalletAccountType | null;
+  transferId?: string | null;
   method?: WalletWithdrawalMethod | null;
   referenceId?: string | null;
   note?: string | null;
@@ -388,6 +524,7 @@ export interface WithdrawalRequestInput {
   destinationLabel: string;
   destinationValue: string;
   destinationCurrency?: string;
+  scheduledFor?: string | null;
   note?: string;
 }
 
@@ -406,6 +543,7 @@ export interface WithdrawalRequest {
   netAmount: number;
   approvalWorkflow: WalletApprovalWorkflow;
   status: 'pending' | 'approved' | 'rejected' | 'processing' | 'completed' | 'cancelled';
+  scheduledFor?: string | null;
   adminNotes?: string | null;
   reviewedBy?: string | null;
   reviewedAt?: string | null;
@@ -413,11 +551,34 @@ export interface WithdrawalRequest {
   updatedAt: string;
 }
 
+export const supportTicketStatuses = ['open', 'waiting_on_you', 'resolved', 'closed'] as const;
+
+export type SupportTicketStatus = (typeof supportTicketStatuses)[number];
+
+export const supportTicketPriorities = ['low', 'medium', 'high', 'urgent'] as const;
+
+export type SupportTicketPriority = (typeof supportTicketPriorities)[number];
+
+export interface SupportTicket {
+  id: string;
+  userId: string;
+  subject: string;
+  category: string;
+  priority: SupportTicketPriority;
+  status: SupportTicketStatus;
+  lastMessageAt: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+
 export interface WalletDashboard {
   summary: WalletSummary;
   settings: WalletSettings;
+  accounts: WalletAccount[];
   transactions: WalletTransaction[];
   withdrawals: WithdrawalRequest[];
+  transfers: WalletTransfer[];
+  auditLogs: WalletAuditLog[];
 }
 
 export interface AdminFeatureConfig {
@@ -554,10 +715,20 @@ export interface AdminConsoleConfig {
 export const cmsPageKeys = [
   'home',
   'faqs',
+  'about',
+  'contact',
+  'news',
+  'announcements',
   'help-center',
   'privacy-policy',
   'terms',
   'blog',
+  'seo',
+  'meta-tags',
+  'open-graph',
+  'sitemap',
+  'robots',
+  'custom-urls',
   'landing-pages',
   'advertiser-pages',
   'user-guides',

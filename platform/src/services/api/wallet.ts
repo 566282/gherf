@@ -1,9 +1,14 @@
 import { supabase } from '@/services/supabase/client';
+import { notifySuperAdmins, sendUserNotification } from '@/services/api/communications';
 import type {
+  WalletAccount,
+  WalletAccountType,
+  WalletAuditLog,
   WalletApprovalWorkflow,
   WalletSettings,
   WalletTransaction,
   WalletWithdrawalMethod,
+  WalletTransfer,
   WithdrawalRequest,
   WithdrawalRequestInput,
 } from '@/types';
@@ -15,6 +20,52 @@ type SettingRow = {
 
 type ProfileBalanceRow = {
   wallet_balance: number | null;
+  full_name?: string | null;
+  email?: string | null;
+};
+
+type WalletAccountRow = {
+  id: string;
+  user_id: string;
+  wallet_type: WalletAccountType;
+  currency: string;
+  available_balance: number | string;
+  pending_balance: number | string;
+  locked_balance: number | string;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type WalletTransferRow = {
+  id: string;
+  user_id: string;
+  from_wallet_account_id: string;
+  to_wallet_account_id: string;
+  amount: number | string;
+  currency: string;
+  status: WalletTransfer['status'];
+  transfer_category: WalletTransfer['transferCategory'];
+  note: string | null;
+  reference_transaction_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type WalletAuditRow = {
+  id: string;
+  user_id: string;
+  entry_type: WalletAuditLog['entryType'];
+  event_type: string;
+  wallet_type: WalletAccountType | null;
+  amount: number | string;
+  currency: string;
+  balance_after: number | string | null;
+  status: string | null;
+  note: string | null;
+  reference_id: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
 };
 
 type WithdrawalRequestRow = {
@@ -32,6 +83,7 @@ type WithdrawalRequestRow = {
   net_amount: number | string;
   approval_workflow: WalletApprovalWorkflow;
   status: WithdrawalRequest['status'];
+  scheduled_for: string | null;
   admin_notes: string | null;
   reviewed_by: string | null;
   reviewed_at: string | null;
@@ -130,11 +182,62 @@ function mapWithdrawalRequest(row: WithdrawalRequestRow): WithdrawalRequest {
     netAmount: Number(row.net_amount),
     approvalWorkflow: row.approval_workflow,
     status: row.status,
+    scheduledFor: row.scheduled_for,
     adminNotes: row.admin_notes,
     reviewedBy: row.reviewed_by,
     reviewedAt: row.reviewed_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+function mapWalletAccount(row: WalletAccountRow): WalletAccount {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    walletType: row.wallet_type,
+    currency: row.currency,
+    availableBalance: Number(row.available_balance),
+    pendingBalance: Number(row.pending_balance),
+    lockedBalance: Number(row.locked_balance),
+    metadata: row.metadata,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function mapWalletTransfer(row: WalletTransferRow): WalletTransfer {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    fromWalletAccountId: row.from_wallet_account_id,
+    toWalletAccountId: row.to_wallet_account_id,
+    amount: Number(row.amount),
+    currency: row.currency,
+    status: row.status,
+    transferCategory: row.transfer_category,
+    note: row.note,
+    referenceTransactionId: row.reference_transaction_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function mapWalletAuditLog(row: WalletAuditRow): WalletAuditLog {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    entryType: row.entry_type,
+    eventType: row.event_type,
+    walletType: row.wallet_type,
+    amount: Number(row.amount),
+    currency: row.currency,
+    balanceAfter: row.balance_after === null ? null : Number(row.balance_after),
+    status: row.status,
+    note: row.note,
+    referenceId: row.reference_id,
+    metadata: row.metadata,
+    createdAt: row.created_at,
   };
 }
 
@@ -164,6 +267,56 @@ export async function listWalletSettings(): Promise<WalletSettings> {
   return mergeWalletSettings(data as SettingRow[]);
 }
 
+export async function listWalletAccounts(userId?: string): Promise<WalletAccount[]> {
+  let query = supabase
+    .from('wallet_accounts')
+    .select('id,user_id,wallet_type,currency,available_balance,pending_balance,locked_balance,metadata,created_at,updated_at')
+    .order('created_at', { ascending: false });
+
+  if (userId) {
+    query = query.eq('user_id', userId);
+  }
+
+  const { data, error } = await query;
+  if (error || !data) return [];
+
+  return data.map((row) => mapWalletAccount(row as WalletAccountRow));
+}
+
+export async function listWalletTransfers(userId?: string, limit = 20): Promise<WalletTransfer[]> {
+  let query = supabase
+    .from('wallet_transfers')
+    .select('id,user_id,from_wallet_account_id,to_wallet_account_id,amount,currency,status,transfer_category,note,reference_transaction_id,created_at,updated_at')
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (userId) {
+    query = query.eq('user_id', userId);
+  }
+
+  const { data, error } = await query;
+  if (error || !data) return [];
+
+  return data.map((row) => mapWalletTransfer(row as WalletTransferRow));
+}
+
+export async function listWalletAuditLogs(userId?: string, limit = 30): Promise<WalletAuditLog[]> {
+  let query = supabase
+    .from('wallet_audit_logs')
+    .select('id,user_id,entry_type,event_type,wallet_type,amount,currency,balance_after,status,note,reference_id,metadata,created_at')
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (userId) {
+    query = query.eq('user_id', userId);
+  }
+
+  const { data, error } = await query;
+  if (error || !data) return [];
+
+  return data.map((row) => mapWalletAuditLog(row as WalletAuditRow));
+}
+
 export async function updateWalletSettings(settings: Partial<WalletSettings>): Promise<void> {
   const rows = [
     { key: 'wallet_min_withdrawal', value: settings.minWithdrawal, description: 'Minimum withdrawal amount' },
@@ -183,10 +336,50 @@ export async function updateWalletSettings(settings: Partial<WalletSettings>): P
   if (error) throw error;
 }
 
+export async function applyWalletAdjustment(
+  userId: string,
+  walletType: WalletAccountType,
+  amount: number,
+  reason?: string,
+  currency = 'USD',
+): Promise<void> {
+  const { error } = await supabase.rpc('record_wallet_adjustment', {
+    p_user_id: userId,
+    p_wallet_type: walletType,
+    p_amount: amount,
+    p_currency: currency,
+    p_transaction_type: amount >= 0 ? 'deposit' : 'admin_adjustment',
+    p_reason: reason ?? null,
+    p_performed_by: null,
+  });
+
+  if (error) throw error;
+}
+
+export async function transferWalletBalance(
+  userId: string,
+  fromWalletType: WalletAccountType,
+  toWalletType: WalletAccountType,
+  amount: number,
+  note?: string,
+  currency = 'USD',
+): Promise<void> {
+  const { error } = await supabase.rpc('transfer_wallet_balance', {
+    p_user_id: userId,
+    p_from_wallet_type: fromWalletType,
+    p_to_wallet_type: toWalletType,
+    p_amount: amount,
+    p_currency: currency,
+    p_note: note ?? null,
+  });
+
+  if (error) throw error;
+}
+
 export async function listWalletTransactions(userId?: string, limit = 12): Promise<WalletTransaction[]> {
   let query = supabase
     .from('wallet_transactions')
-    .select('id,user_id,transaction_type,amount,balance_after,currency,status,method,reference_id,note,metadata,created_at')
+    .select('id,user_id,transaction_type,amount,balance_after,currency,status,wallet_type,counterparty_wallet_type,transfer_id,method,reference_id,note,metadata,created_at')
     .order('created_at', { ascending: false })
     .limit(limit);
 
@@ -205,6 +398,9 @@ export async function listWalletTransactions(userId?: string, limit = 12): Promi
     balanceAfter: Number(row.balance_after),
     currency: row.currency,
     status: row.status,
+    walletType: row.wallet_type ?? null,
+    counterpartyWalletType: row.counterparty_wallet_type ?? null,
+    transferId: row.transfer_id ?? null,
     method: row.method,
     referenceId: row.reference_id,
     note: row.note,
@@ -217,7 +413,7 @@ export async function listWithdrawalRequests(userId?: string, limit = 12): Promi
   let query = supabase
     .from('withdrawal_requests')
     .select(
-      'id,user_id,wallet_transaction_id,method,destination_label,destination_value,destination_currency,currency,amount,processing_fee,exchange_rate,net_amount,approval_workflow,status,admin_notes,reviewed_by,reviewed_at,created_at,updated_at',
+      'id,user_id,wallet_transaction_id,method,destination_label,destination_value,destination_currency,currency,amount,processing_fee,exchange_rate,net_amount,approval_workflow,status,scheduled_for,admin_notes,reviewed_by,reviewed_at,created_at,updated_at',
     )
     .order('created_at', { ascending: false })
     .limit(limit);
@@ -236,7 +432,7 @@ export async function listPendingWithdrawalRequests(limit = 12): Promise<Withdra
   const { data, error } = await supabase
     .from('withdrawal_requests')
     .select(
-      'id,user_id,wallet_transaction_id,method,destination_label,destination_value,destination_currency,currency,amount,processing_fee,exchange_rate,net_amount,approval_workflow,status,admin_notes,reviewed_by,reviewed_at,created_at,updated_at',
+      'id,user_id,wallet_transaction_id,method,destination_label,destination_value,destination_currency,currency,amount,processing_fee,exchange_rate,net_amount,approval_workflow,status,scheduled_for,admin_notes,reviewed_by,reviewed_at,created_at,updated_at',
     )
     .eq('status', 'pending')
     .order('created_at', { ascending: false })
@@ -258,15 +454,32 @@ export async function createWithdrawalRequest(userId: string, input: WithdrawalR
     throw new Error(`Maximum withdrawal is ${settings.maxWithdrawal} ${settings.currency}`);
   }
 
+  const scheduledFor = input.scheduledFor ? new Date(input.scheduledFor) : null;
+  if (scheduledFor && Number.isNaN(scheduledFor.getTime())) {
+    throw new Error('Withdrawal date must be valid.');
+  }
+
+  if (scheduledFor) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const scheduledDay = new Date(scheduledFor);
+    scheduledDay.setHours(0, 0, 0, 0);
+
+    if (scheduledDay.getTime() < today.getTime()) {
+      throw new Error('Withdrawal date must be today or later.');
+    }
+  }
+
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
-    .select('wallet_balance')
+    .select('wallet_balance,full_name,email')
     .eq('id', userId)
     .single<ProfileBalanceRow>();
 
   if (profileError) throw profileError;
 
   const currentBalance = profile.wallet_balance ?? 0;
+  const effectiveWithdrawalLimit = Math.min(settings.maxWithdrawal, currentBalance);
   if (input.amount > currentBalance) {
     throw new Error('Withdrawal amount exceeds your withdrawable balance.');
   }
@@ -281,6 +494,13 @@ export async function createWithdrawalRequest(userId: string, input: WithdrawalR
   const transactionStatus = isAutoApproved ? 'completed' : 'pending';
   const nextBalance = Number((currentBalance - input.amount).toFixed(2));
   let transactionId: string | null = null;
+  const withdrawalDate = scheduledFor ?? new Date();
+  const withdrawalDateLabel = withdrawalDate.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+  const displayName = profile.full_name?.trim() || profile.email?.trim() || userId;
 
   const { error: balanceError } = await supabase.from('profiles').update({ wallet_balance: nextBalance }).eq('id', userId);
   if (balanceError) throw balanceError;
@@ -331,15 +551,51 @@ export async function createWithdrawalRequest(userId: string, input: WithdrawalR
         exchange_rate: exchangeRate,
         net_amount: netAmount,
         approval_workflow: approvalWorkflow,
+        scheduled_for: scheduledFor ? scheduledFor.toISOString() : null,
         status,
         admin_notes: input.note ?? null,
       })
-      .select('id,user_id,wallet_transaction_id,method,destination_label,destination_value,destination_currency,currency,amount,processing_fee,exchange_rate,net_amount,approval_workflow,status,admin_notes,reviewed_by,reviewed_at,created_at,updated_at')
+      .select('id,user_id,wallet_transaction_id,method,destination_label,destination_value,destination_currency,currency,amount,processing_fee,exchange_rate,net_amount,approval_workflow,status,scheduled_for,admin_notes,reviewed_by,reviewed_at,created_at,updated_at')
       .single<WithdrawalRequestRow>();
 
     if (requestError || !request) {
       throw requestError ?? new Error('Unable to create withdrawal request.');
     }
+
+    const requestLabel = isAutoApproved ? 'approved' : 'pending';
+
+    void Promise.all([
+      notifySuperAdmins({
+        title: isAutoApproved ? 'Withdrawal auto-approved' : 'Withdrawal request submitted',
+        message: `${displayName} ${isAutoApproved ? 'received an auto-approved withdrawal' : 'submitted a withdrawal request'} for ${settings.currency} ${input.amount.toFixed(2)} on ${withdrawalDateLabel}.`,
+        type: 'info',
+        category: 'transactional',
+        metadata: {
+          userId,
+          userName: displayName,
+          amount: input.amount,
+          currency: settings.currency,
+          effectiveWithdrawalLimit,
+          scheduledFor: scheduledFor ? scheduledFor.toISOString() : null,
+          withdrawalRequestId: request.id,
+        },
+      }),
+      sendUserNotification(userId, {
+        title: `Withdrawal ${requestLabel}`,
+        message: isAutoApproved
+          ? `Your ${settings.currency} ${input.amount.toFixed(2)} withdrawal is within your limit of ${settings.currency} ${effectiveWithdrawalLimit.toFixed(2)} and has been approved for ${withdrawalDateLabel}.`
+          : `Withdrawals are not allowed until ${withdrawalDateLabel}. Your ${settings.currency} ${input.amount.toFixed(2)} request is within your limit of ${settings.currency} ${effectiveWithdrawalLimit.toFixed(2)} and will remain pending until that fixed date.`,
+        type: isAutoApproved ? 'success' : 'info',
+        category: 'transactional',
+        metadata: {
+          withdrawalRequestId: request.id,
+          amount: input.amount,
+          currency: settings.currency,
+          effectiveWithdrawalLimit,
+          scheduledFor: scheduledFor ? scheduledFor.toISOString() : null,
+        },
+      }),
+    ]).catch(() => undefined);
 
     return mapWithdrawalRequest(request);
   } catch (error) {
@@ -361,7 +617,7 @@ export async function resolveWithdrawalRequest(
   const { data: request, error: requestError } = await supabase
     .from('withdrawal_requests')
     .select(
-      'id,user_id,wallet_transaction_id,method,destination_label,destination_value,destination_currency,currency,amount,processing_fee,exchange_rate,net_amount,approval_workflow,status,admin_notes,reviewed_by,reviewed_at,created_at,updated_at',
+      'id,user_id,wallet_transaction_id,method,destination_label,destination_value,destination_currency,currency,amount,processing_fee,exchange_rate,net_amount,approval_workflow,status,scheduled_for,admin_notes,reviewed_by,reviewed_at,created_at,updated_at',
     )
     .eq('id', requestId)
     .single<WithdrawalRequestRow>();
@@ -380,6 +636,18 @@ export async function resolveWithdrawalRequest(
       .eq('id', requestId);
 
     if (error) throw error;
+
+    void sendUserNotification(request.user_id, {
+      title: 'Withdrawal approved',
+      message: `Your withdrawal request for ${request.currency} ${Number(request.amount).toFixed(2)} has been approved and is scheduled for ${request.scheduled_for ? new Date(request.scheduled_for).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'processing'}.`,
+      type: 'success',
+      category: 'transactional',
+      metadata: {
+        withdrawalRequestId: request.id,
+        scheduledFor: request.scheduled_for,
+        approvedBy: reviewerId,
+      },
+    }).catch(() => undefined);
 
     return;
   }
@@ -408,6 +676,18 @@ export async function resolveWithdrawalRequest(
     .eq('id', requestId);
 
   if (updateError) throw updateError;
+
+  void sendUserNotification(request.user_id, {
+    title: 'Withdrawal rejected',
+    message: `Your withdrawal request for ${request.currency} ${Number(request.amount).toFixed(2)} was rejected and your balance was restored.`,
+    type: 'error',
+    category: 'transactional',
+    metadata: {
+      withdrawalRequestId: request.id,
+      scheduledFor: request.scheduled_for,
+      reviewedBy: reviewerId,
+    },
+  }).catch(() => undefined);
 
   await supabase.from('wallet_ledger').insert({
     user_id: request.user_id,

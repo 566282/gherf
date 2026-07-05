@@ -218,6 +218,96 @@ Configurable platform-wide settings (feature flags, thresholds, limits).
 | updated_at | TIMESTAMPTZ | Auto-updated |
 
 **Example Settings**:
+
+---
+
+### withdrawal_requests
+User withdrawal requests and their review state.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | UUID | Primary key |
+| user_id | UUID | FK to profiles |
+| wallet_transaction_id | UUID | FK to wallet_transactions |
+| method | TEXT | Withdrawal method |
+| destination_label | TEXT | Friendly destination label |
+| destination_value | TEXT | Account/address value |
+| destination_currency | TEXT | Payout currency |
+| currency | TEXT | Base wallet currency |
+| amount | NUMERIC(15,2) | Requested amount |
+| processing_fee | NUMERIC(15,2) | Fee charged to the request |
+| exchange_rate | NUMERIC(18,8) | Conversion rate used for payout |
+| net_amount | NUMERIC(15,2) | Amount after fees |
+| approval_workflow | TEXT | manual / automatic / hybrid |
+| status | TEXT | pending / approved / rejected / processing / completed / cancelled |
+| scheduled_for | TIMESTAMPTZ | Fixed withdrawal date used for restrictions and notification copy |
+| admin_notes | TEXT | Optional review notes |
+| reviewed_by | UUID | FK to profiles |
+| reviewed_at | TIMESTAMPTZ | Review timestamp |
+| created_at | TIMESTAMPTZ | Auto-set |
+| updated_at | TIMESTAMPTZ | Auto-updated |
+
+**RLS Policies**:
+- Users can view their own requests.
+- Super admins can view and update all requests.
+
+---
+
+### notification_queue
+Notification delivery queue for immediate and delayed processing.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | UUID | Primary key |
+| user_id | UUID | FK to profiles |
+| title | TEXT | Notification title |
+| message | TEXT | Notification body |
+| type | TEXT | info / success / warning / error |
+| channel | TEXT | in_app / email / push / sms / whatsapp / telegram |
+| category | TEXT | internal / transactional / live_announcement / promotional |
+| template_key | TEXT | Optional template reference |
+| status | TEXT | queued / retry / sent / failed |
+| scheduled_for | TIMESTAMPTZ | Process after this time |
+| sent_at | TIMESTAMPTZ | Delivery timestamp |
+| retry_count | INTEGER | Number of attempts so far |
+| max_retries | INTEGER | Upper bound for retries |
+| last_error | TEXT | Most recent failure reason |
+| metadata | JSONB | Delivery metadata |
+| created_at | TIMESTAMPTZ | Auto-set |
+| updated_at | TIMESTAMPTZ | Auto-updated |
+
+**RLS Policies**:
+- Users can view their own queue items.
+- Super admins can view and manage all queue items.
+
+---
+
+### notification_retry_history
+Immutable retry history for failed delivery attempts.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | UUID | Primary key |
+| queue_id | UUID | FK to notification_queue |
+| attempt_number | INTEGER | Attempt sequence number |
+| status | TEXT | failed / retried / delivered |
+| error_message | TEXT | Failure reason |
+| metadata | JSONB | Snapshot of delivery context |
+| attempted_at | TIMESTAMPTZ | Attempt time |
+
+**RLS Policies**:
+- Super admins can view and manage retry history.
+
+---
+
+### RPC helpers
+
+- `notify_super_admins(...)` inserts admin alerts into `user_notifications` for every super admin.
+- `process_notification_queue(p_limit)` moves due queue rows into `user_notifications` and records failures into `notification_retry_history`.
+- `retry_notification_queue_item(p_queue_id)` resets a queue row so the worker can try again.
+
+**Operational note**: use a cron job or scheduled edge function to invoke `process_notification_queue` regularly.
+
 ```json
 {
   "key": "max_daily_reward_payout",

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Card } from '@/components/ui/Card';
 import { formatCurrency } from '@/lib/auth';
 import { useAuth } from '@/app/providers/AuthProvider';
@@ -133,6 +134,20 @@ export function ProfilePage(): JSX.Element {
             <p className="text-sm uppercase tracking-[0.24em] text-mint/70">Account</p>
             <h1 className="mt-2 text-3xl font-semibold tracking-tight text-white">{profile.fullName ?? 'Unnamed user'}</h1>
             <p className="mt-2 text-mist/80">{profile.email}</p>
+            <div className="mt-4 flex flex-wrap gap-3">
+              <Link to="/app/wallet" className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white transition hover:border-mint/30 hover:bg-mint/10">
+                Open wallet
+              </Link>
+              <Link to="/app/notifications" className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white transition hover:border-mint/30 hover:bg-mint/10">
+                View notifications
+              </Link>
+              <Link to="/app/tasks" className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white transition hover:border-mint/30 hover:bg-mint/10">
+                Resume tasks
+              </Link>
+              <Link to="/app/gamification" className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white transition hover:border-mint/30 hover:bg-mint/10">
+                View leaderboard
+              </Link>
+            </div>
           </div>
           <div className="grid gap-2 text-sm text-mist/80">
             <span>Referral code: {profile.referralCode}</span>
@@ -172,7 +187,10 @@ export function ProfilePage(): JSX.Element {
           </div>
         </Card>
         <Card>
-          <h2 className="text-xl font-semibold">Notifications</h2>
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-xl font-semibold">Notifications</h2>
+            <Link to="/app/notifications" className="text-sm text-ember/90 hover:text-ember">Open inbox →</Link>
+          </div>
           <ul className="mt-4 space-y-3 text-sm text-mist/80">
             {notifications.length ? notifications.map((item) => <li key={item.id} className="rounded-xl border border-white/10 bg-white/5 p-3"><p className="font-medium text-white">{item.title}</p><p>{item.message}</p></li>) : <li>No notifications yet.</li>}
           </ul>
@@ -182,6 +200,10 @@ export function ProfilePage(): JSX.Element {
           <ul className="mt-4 space-y-3 text-sm text-mist/80">
             {rewards.length ? rewards.map((item) => <li key={item.id} className="rounded-xl border border-white/10 bg-white/5 p-3"><p className="font-medium text-white">{item.action}</p><p>{formatCurrency(item.amount, item.currency)}</p></li>) : <li>No reward activity yet.</li>}
           </ul>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <Link to="/app/wallet" className="text-sm text-ember/90 hover:text-ember">Review wallet activity →</Link>
+            <Link to="/help-center" className="text-sm text-ember/90 hover:text-ember">Open support center →</Link>
+          </div>
         </Card>
       </div>
 
@@ -190,6 +212,10 @@ export function ProfilePage(): JSX.Element {
         <ul className="mt-4 space-y-3 text-sm text-mist/80">
           {walletActivity.length ? walletActivity.map((item) => <li key={item.id} className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 p-3"><span>{item.note ?? 'Wallet update'}</span><span>{formatCurrency(item.amount)} · {formatCurrency(item.balanceAfter)}</span></li>) : <li>No wallet transactions yet.</li>}
         </ul>
+        <div className="mt-4 flex flex-wrap gap-3">
+          <Link to="/app/wallet" className="text-sm text-ember/90 hover:text-ember">Open wallet →</Link>
+          <Link to="/app/tasks" className="text-sm text-ember/90 hover:text-ember">Resume tasks →</Link>
+        </div>
       </Card>
 
       <Card>

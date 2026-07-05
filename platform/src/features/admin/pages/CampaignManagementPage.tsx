@@ -1,8 +1,17 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { campaignTypeOptions, listCampaigns } from '@/services/api/campaigns';
+import {
+  campaignTypeOptions,
+  createCampaignCategory,
+  createCampaignType,
+  listCampaignCategories,
+  listCampaigns,
+  listCampaignTypes,
+} from '@/services/api/campaigns';
+import type { CampaignVerificationMethod } from '@/types';
 
 function formatMoney(amount: number, currency: string) {
   return new Intl.NumberFormat('en-US', {
@@ -36,10 +45,58 @@ function formatType(value: string) {
 
 export function CampaignManagementPage() {
   const navigate = useNavigate();
+  const [campaignTypeDraft, setCampaignTypeDraft] = useState({
+    slug: '',
+    label: '',
+    description: '',
+    defaultInstructions: '',
+    defaultVerificationMethod: 'manual_review' as CampaignVerificationMethod,
+  });
+  const [campaignCategoryDraft, setCampaignCategoryDraft] = useState({
+    slug: '',
+    name: '',
+    description: '',
+  });
+
   const { data: campaigns = [], isLoading, error, refetch } = useQuery({
     queryKey: ['business-campaigns'],
     queryFn: listCampaigns,
   });
+
+  const { data: campaignTypes = [], refetch: refetchCampaignTypes } = useQuery({
+    queryKey: ['campaign-types'],
+    queryFn: listCampaignTypes,
+  });
+
+  const { data: campaignCategories = [], refetch: refetchCampaignCategories } = useQuery({
+    queryKey: ['campaign-categories'],
+    queryFn: listCampaignCategories,
+  });
+
+  const createTypeMutation = useMutation({
+    mutationFn: createCampaignType,
+    onSuccess: () => {
+      setCampaignTypeDraft({
+        slug: '',
+        label: '',
+        description: '',
+        defaultInstructions: '',
+        defaultVerificationMethod: 'manual_review',
+      });
+      refetchCampaignTypes();
+    },
+  });
+
+  const createCategoryMutation = useMutation({
+    mutationFn: createCampaignCategory,
+    onSuccess: () => {
+      setCampaignCategoryDraft({ slug: '', name: '', description: '' });
+      refetchCampaignCategories();
+    },
+  });
+
+  const availableCampaignTypes = campaignTypes.length ? campaignTypes : campaignTypeOptions;
+  const firstCampaignType = availableCampaignTypes[0]?.value ?? 'custom_tasks';
 
   const totalBudget = campaigns.reduce((sum, campaign) => sum + campaign.budget, 0);
   const activeCampaigns = campaigns.filter((campaign) => campaign.status === 'active').length;
@@ -61,7 +118,7 @@ export function CampaignManagementPage() {
           <Button variant="ghost" onClick={() => refetch()}>
             Refresh
           </Button>
-          <Button onClick={() => navigate(`/business/campaigns/new?type=${campaignTypeOptions[0].value}`)}>
+          <Button onClick={() => navigate(`/business/campaigns/new?type=${firstCampaignType}`)}>
             New campaign
           </Button>
         </div>
@@ -92,13 +149,13 @@ export function CampaignManagementPage() {
             <h2 className="text-2xl font-semibold text-white">Campaign templates</h2>
             <p className="text-sm text-mist/80">Start from a preset, then tune the engine settings in the editor.</p>
           </div>
-            <Link to="/business/campaigns/new" className="text-sm text-ember/90 hover:text-ember">
+          <Link to="/business/campaigns/new" className="text-sm text-ember/90 hover:text-ember">
             Open blank editor
           </Link>
         </div>
 
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {campaignTypeOptions.map((option) => (
+          {availableCampaignTypes.map((option) => (
             <button
               key={option.value}
               onClick={() => navigate(`/business/campaigns/new?type=${option.value}`)}
@@ -110,6 +167,112 @@ export function CampaignManagementPage() {
           ))}
         </div>
       </Card>
+
+      <div className="grid gap-6 xl:grid-cols-2">
+        <Card className="space-y-4">
+          <div>
+            <h2 className="text-2xl font-bold text-white">Campaign type catalog</h2>
+            <p className="text-sm text-mist">Create new types here and the editor will pick them up from Supabase.</p>
+          </div>
+          <div className="max-h-72 space-y-3 overflow-auto rounded-2xl border border-white/10 bg-white/5 p-3">
+            {availableCampaignTypes.map((type) => (
+              <div key={type.value} className="rounded-xl border border-white/10 bg-ink/40 p-3">
+                <p className="font-semibold text-white">{type.label}</p>
+                <p className="text-xs uppercase tracking-[0.16em] text-mist/60">{type.value}</p>
+                <p className="mt-1 text-sm text-mist">{type.description}</p>
+              </div>
+            ))}
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <input
+              value={campaignTypeDraft.slug}
+              onChange={(event) => setCampaignTypeDraft((current) => ({ ...current, slug: event.target.value }))}
+              className="input-base"
+              placeholder="custom_type_slug"
+            />
+            <input
+              value={campaignTypeDraft.label}
+              onChange={(event) => setCampaignTypeDraft((current) => ({ ...current, label: event.target.value }))}
+              className="input-base"
+              placeholder="Campaign label"
+            />
+            <textarea
+              value={campaignTypeDraft.description}
+              onChange={(event) => setCampaignTypeDraft((current) => ({ ...current, description: event.target.value }))}
+              className="input-base min-h-24 md:col-span-2"
+              placeholder="Describe the type"
+            />
+            <textarea
+              value={campaignTypeDraft.defaultInstructions}
+              onChange={(event) => setCampaignTypeDraft((current) => ({ ...current, defaultInstructions: event.target.value }))}
+              className="input-base min-h-24 md:col-span-2"
+              placeholder="Default instructions"
+            />
+            <select
+              value={campaignTypeDraft.defaultVerificationMethod}
+              onChange={(event) => setCampaignTypeDraft((current) => ({ ...current, defaultVerificationMethod: event.target.value }))}
+              className="input-base md:col-span-2"
+            >
+              <option value="manual_review">Manual review</option>
+              <option value="automatic_verification">Automatic verification</option>
+              <option value="screenshot_upload">Screenshot upload</option>
+              <option value="video_proof">Video proof</option>
+              <option value="link_validation">Link validation</option>
+              <option value="api_verification">API verification</option>
+              <option value="timer_verification">Timer verification</option>
+              <option value="random_audit">Random audit</option>
+            </select>
+          </div>
+          <Button
+            onClick={() => createTypeMutation.mutate(campaignTypeDraft)}
+            disabled={!campaignTypeDraft.label.trim() || createTypeMutation.isPending}
+          >
+            {createTypeMutation.isPending ? 'Creating...' : 'Create campaign type'}
+          </Button>
+        </Card>
+
+        <Card className="space-y-4">
+          <div>
+            <h2 className="text-2xl font-bold text-white">Campaign categories</h2>
+            <p className="text-sm text-mist">Categories are also Supabase-backed so you can grow the catalog without code changes.</p>
+          </div>
+          <div className="max-h-72 space-y-3 overflow-auto rounded-2xl border border-white/10 bg-white/5 p-3">
+            {campaignCategories.map((category) => (
+              <div key={category.id} className="rounded-xl border border-white/10 bg-ink/40 p-3">
+                <p className="font-semibold text-white">{category.name}</p>
+                <p className="text-xs uppercase tracking-[0.16em] text-mist/60">{category.slug}</p>
+                <p className="mt-1 text-sm text-mist">{category.description ?? 'No description yet.'}</p>
+              </div>
+            ))}
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <input
+              value={campaignCategoryDraft.slug}
+              onChange={(event) => setCampaignCategoryDraft((current) => ({ ...current, slug: event.target.value }))}
+              className="input-base"
+              placeholder="category_slug"
+            />
+            <input
+              value={campaignCategoryDraft.name}
+              onChange={(event) => setCampaignCategoryDraft((current) => ({ ...current, name: event.target.value }))}
+              className="input-base"
+              placeholder="Category name"
+            />
+            <textarea
+              value={campaignCategoryDraft.description}
+              onChange={(event) => setCampaignCategoryDraft((current) => ({ ...current, description: event.target.value }))}
+              className="input-base min-h-24 md:col-span-2"
+              placeholder="Describe the category"
+            />
+          </div>
+          <Button
+            onClick={() => createCategoryMutation.mutate(campaignCategoryDraft)}
+            disabled={!campaignCategoryDraft.name.trim() || createCategoryMutation.isPending}
+          >
+            {createCategoryMutation.isPending ? 'Creating...' : 'Create category'}
+          </Button>
+        </Card>
+      </div>
 
       <Card className="space-y-4 overflow-hidden">
         <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">

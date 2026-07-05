@@ -4,7 +4,16 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useAuth } from '@/app/providers/AuthProvider';
-import { buildDefaultGamificationConfig, gamificationModules, listGamificationConfig, type GamificationConfig } from '@/services/api/gamification';
+import {
+  buildDefaultGamificationConfig,
+  buildDefaultGamificationState,
+  gamificationModules,
+  listGamificationConfig,
+  listGamificationPlayerState,
+  upsertGamificationPlayerState,
+  type GamificationConfig,
+  type GamificationPlayerState,
+} from '@/services/api/gamification';
 
 type QuestState = {
   id: string;
@@ -35,21 +44,6 @@ type LeaderboardEntry = {
   badge: string;
 };
 
-const storageKey = 'investpro.gamification.demo-state';
-
-const baseQuests: QuestState[] = [
-  { id: 'open-app', title: 'Open the app', description: 'Visit the platform and check your feed.', reward: '1 wheel spin', xp: 20, progress: 0, target: 1, completed: false },
-  { id: 'complete-task', title: 'Complete a task', description: 'Finish one task or campaign action.', reward: 'Bonus XP', xp: 35, progress: 0, target: 1, completed: false },
-  { id: 'visit-profile', title: 'Review your profile', description: 'Update a profile field or review your level.', reward: 'Mystery reward', xp: 25, progress: 0, target: 1, completed: false },
-];
-
-const baseAchievements: AchievementState[] = [
-  { id: 'first-win', title: 'First win', description: 'Claim your first reward.', xp: 50, unlocked: true, progress: 1, target: 1 },
-  { id: 'streak-seven', title: 'Seven-day streak', description: 'Maintain a seven-day login streak.', xp: 120, unlocked: false, progress: 4, target: 7 },
-  { id: 'mission-master', title: 'Mission master', description: 'Finish five missions in a season.', xp: 150, unlocked: false, progress: 2, target: 5 },
-  { id: 'wheel-winner', title: 'Wheel winner', description: 'Trigger a high-value lucky wheel prize.', xp: 90, unlocked: false, progress: 0, target: 1 },
-];
-
 const baseLeaderboard: LeaderboardEntry[] = [
   { name: 'Ava Stone', xp: 2680, streak: 28, level: 11, badge: 'Momentum' },
   { name: 'Noah Reed', xp: 2435, streak: 21, level: 10, badge: 'Streak Keeper' },
@@ -70,57 +64,14 @@ function loadDemoState() {
       xp: number;
       streak: number;
       dailyClaimed: boolean;
-      spinTokens: number;
-      mysteryTokens: number;
-      quests: QuestState[];
-      achievements: AchievementState[];
-    };
-  } catch {
-    return null;
-  }
-}
-
-function saveDemoState(state: ReturnType<typeof createDemoState>) {
-  if (typeof window === 'undefined') {
-    return;
-  }
-
-  window.localStorage.setItem(storageKey, JSON.stringify(state));
-}
-
-function createDemoState(seed?: { xp: number; streak: number }) {
-  return {
-    xp: seed?.xp ?? 860,
-    streak: seed?.streak ?? 6,
-    dailyClaimed: false,
-    spinTokens: 2,
-    mysteryTokens: 1,
-    quests: baseQuests.map((quest) => ({ ...quest })),
-    achievements: baseAchievements.map((achievement) => ({ ...achievement })),
-  };
-}
-
-function progressValue(current: number, target: number): number {
-  if (target <= 0) return 0;
-  return Math.min(100, Math.round((current / target) * 100));
-}
-
-function AnimatedCounter({ value, className }: { value: number; className?: string }): JSX.Element {
-  const [displayValue, setDisplayValue] = useState(value);
-
-  useEffect(() => {
-    let frame = 0;
-    const startValue = displayValue;
-    const difference = value - startValue;
-    const startTime = performance.now();
-
-    const step = (timestamp: number) => {
-      const progress = Math.min(1, (timestamp - startTime) / 320);
-      const eased = 1 - Math.pow(1 - progress, 3);
-      setDisplayValue(Math.round(startValue + difference * eased));
-
-      if (progress < 1) {
-        frame = window.requestAnimationFrame(step);
+      return (
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          {pieces.map(([position, color, offset], index) => (
+            <span key={`${position}-${index}`} className={`confetti-piece ${position} ${color} ${offset}`} style={{ top: `${12 + index * 2}%`, animationDelay: `${index * 80}ms` }} />
+          ))}
+        </div>
+      );
+    }
       }
     };
 
@@ -157,16 +108,12 @@ export function GamificationPage() {
   const [config, setConfig] = useState<GamificationConfig>(buildDefaultGamificationConfig());
   const [statusMessage, setStatusMessage] = useState('Loading engagement systems...');
   const [isLoadingConfig, setIsLoadingConfig] = useState(true);
+  const [isLoadingState, setIsLoadingState] = useState(true);
   const [showConfetti, setShowConfetti] = useState(false);
-  const [state, setState] = useState(() => createDemoState({ xp: Math.max((profile?.levelTier ?? 1) * 120, 120), streak: Math.max(1, Math.min(14, profile?.rewardHistoryCount ?? 6)) }));
+  const [state, setState] = useState<GamificationPlayerState>(() => buildDefaultGamificationState({ xp: Math.max((profile?.levelTier ?? 1) * 120, 120), streak: Math.max(1, Math.min(14, profile?.rewardHistoryCount ?? 6)) }));
   const confettiTimer = useRef<number | null>(null);
 
   useEffect(() => {
-    const savedState = loadDemoState();
-    if (savedState) {
-      setState(savedState);
-    }
-
     void listGamificationConfig()
       .then((nextConfig) => {
         setConfig(nextConfig);
@@ -181,8 +128,60 @@ export function GamificationPage() {
   }, []);
 
   useEffect(() => {
-    saveDemoState(state);
-  }, [state]);
+    let cancelled = false;
+
+    if (!profile?.id) {
+      setState(buildDefaultGamificationState({ xp: Math.max((profile?.levelTier ?? 1) * 120, 120), streak: Math.max(1, Math.min(14, profile?.rewardHistoryCount ?? 6)) }));
+      setIsLoadingState(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setIsLoadingState(true);
+
+    void listGamificationPlayerState(profile.id, buildDefaultGamificationState({ xp: Math.max((profile?.levelTier ?? 1) * 120, 120), streak: Math.max(1, Math.min(14, profile?.rewardHistoryCount ?? 6)) }))
+      .then((nextState) => {
+        if (cancelled) {
+          return;
+        }
+
+        const resolvedState = nextState ?? buildDefaultGamificationState({ xp: Math.max((profile?.levelTier ?? 1) * 120, 120), streak: Math.max(1, Math.min(14, profile?.rewardHistoryCount ?? 6)) });
+        setState(resolvedState);
+        if (!nextState) {
+          void upsertGamificationPlayerState(profile.id, resolvedState, profile.id).catch(() => {
+            if (!cancelled) {
+              setStatusMessage('Using local gamification defaults until Supabase state can be created.');
+            }
+          });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setState(buildDefaultGamificationState({ xp: Math.max((profile?.levelTier ?? 1) * 120, 120), streak: Math.max(1, Math.min(14, profile?.rewardHistoryCount ?? 6)) }));
+          setStatusMessage('Unable to load gamification progress from Supabase.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoadingState(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [profile?.id, profile?.levelTier, profile?.rewardHistoryCount]);
+
+  useEffect(() => {
+    if (!profile?.id || isLoadingState) {
+      return;
+    }
+
+    void upsertGamificationPlayerState(profile.id, state, profile.id).catch(() => {
+      setStatusMessage('Unable to save gamification progress to Supabase.');
+    });
+  }, [isLoadingState, profile?.id, state]);
 
   useEffect(() => {
     return () => {

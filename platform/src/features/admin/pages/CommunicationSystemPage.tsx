@@ -33,6 +33,8 @@ const channelLabels: Record<CommunicationChannel, string> = {
   email: 'Email',
   push: 'Push',
   sms: 'SMS',
+  whatsapp: 'WhatsApp',
+  telegram: 'Telegram',
 };
 
 export function CommunicationSystemPage(): JSX.Element {

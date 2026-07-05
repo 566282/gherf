@@ -13,9 +13,16 @@ type TaskRow = {
   campaign_id: string;
   title: string;
   description: string | null;
-  task_type: CampaignTask['taskType'];
+  task_type: string;
   media_url: string | null;
   reward_amount: number | string;
+  requirements: JsonValue | null;
+  cooldown_seconds: number | string | null;
+  maximum_attempts: number | null;
+  verification_method: string | null;
+  fraud_checks: JsonValue | null;
+  expires_at: string | null;
+  task_config: JsonValue | null;
   max_completions: number | null;
   current_completions: number | null;
   status: CampaignTask['status'];
@@ -83,6 +90,13 @@ export interface CampaignTaskView {
   taskType: CampaignTask['taskType'];
   mediaUrl?: string;
   rewardAmount: number;
+  requirements: CampaignTask['requirements'];
+  cooldownSeconds: number;
+  maximumAttempts: number | null;
+  verificationMethod: CampaignTask['verificationMethod'];
+  fraudChecks: CampaignTask['fraudChecks'];
+  expiresAt: string | null;
+  taskConfig: CampaignTask['taskConfig'];
   maxCompletions?: number;
   currentCompletions: number;
   status: CampaignTask['status'];
@@ -110,6 +124,175 @@ export interface SubmissionReviewItem {
   campaignBudgetCurrency: string;
 }
 
+export interface TaskRequirementDraft {
+  key: string;
+  label: string;
+  value: string;
+}
+
+export interface TaskEngineFormValues {
+  campaignId: string;
+  title: string;
+  description: string;
+  taskType: string;
+  mediaUrl: string;
+  rewardAmount: number;
+  requirements: TaskRequirementDraft[];
+  cooldownSeconds: number;
+  maximumAttempts: number | null;
+  verificationMethod: string;
+  fraudChecksText: string;
+  expiresAt: string;
+  taskConfigText: string;
+  maxCompletions: number | null;
+  status: CampaignTask['status'];
+}
+
+function createEmptyRequirement(index = 1): TaskRequirementDraft {
+  return {
+    key: `requirement-${index}`,
+    label: '',
+    value: '',
+  };
+}
+
+export function createTaskDraft(campaignId = '', taskType = 'custom_html_task'): TaskEngineFormValues {
+  return {
+    campaignId,
+    title: '',
+    description: '',
+    taskType,
+    mediaUrl: '',
+    rewardAmount: 1,
+    requirements: [createEmptyRequirement()],
+    cooldownSeconds: 0,
+    maximumAttempts: 1,
+    verificationMethod: 'manual_review',
+    fraudChecksText: 'fraud_detection, duplicate_detection',
+    expiresAt: '',
+    taskConfigText: '{\n  "instructions": ""\n}',
+    maxCompletions: 1,
+    status: 'draft',
+  };
+}
+
+export function taskViewToDraft(task: CampaignTaskView): TaskEngineFormValues {
+  return {
+    campaignId: task.campaignId,
+    title: task.title,
+    description: task.description ?? '',
+    taskType: task.taskType,
+    mediaUrl: task.mediaUrl ?? '',
+    rewardAmount: task.rewardAmount,
+    requirements: task.requirements.length
+      ? task.requirements.map((requirement, index) => ({
+          key: requirement.key || `requirement-${index + 1}`,
+          label: requirement.label,
+          value: requirement.value == null ? '' : Array.isArray(requirement.value) ? requirement.value.join(', ') : String(requirement.value),
+        }))
+      : [createEmptyRequirement()],
+    cooldownSeconds: task.cooldownSeconds,
+    maximumAttempts: task.maximumAttempts,
+    verificationMethod: task.verificationMethod,
+    fraudChecksText: task.fraudChecks.join(', '),
+    expiresAt: task.expiresAt ? toLocalInputValue(task.expiresAt) : '',
+    taskConfigText: JSON.stringify(task.taskConfig, null, 2),
+    maxCompletions: task.maxCompletions ?? null,
+    status: task.status,
+  };
+}
+
+function toLocalInputValue(value: string): string {
+  const date = new Date(value);
+  const pad = (input: number) => String(input).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function parseRequirementValue(value: string): string | number | boolean | string[] | null {
+  const trimmed = value.trim();
+  if (!trimmed.length) return null;
+  if (trimmed === 'true') return true;
+  if (trimmed === 'false') return false;
+  if (!Number.isNaN(Number(trimmed)) && trimmed === String(Number(trimmed))) return Number(trimmed);
+  if (trimmed.includes(',')) return trimmed.split(',').map((item) => item.trim()).filter(Boolean);
+  return trimmed;
+}
+
+function parseJsonObject(text: string): Record<string, unknown> {
+  if (!text.trim().length) return {};
+
+  const parsed = JSON.parse(text) as unknown;
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('Task configuration must be a JSON object.');
+  }
+
+  return parsed as Record<string, unknown>;
+}
+
+function serializeTaskRequirements(requirements: TaskRequirementDraft[]): CampaignTask['requirements'] {
+  return requirements
+    .filter((requirement) => requirement.key.trim().length || requirement.label.trim().length || requirement.value.trim().length)
+    .map((requirement) => ({
+      key: requirement.key.trim() || requirement.label.trim() || 'requirement',
+      label: requirement.label.trim() || requirement.key.trim() || 'Requirement',
+      value: parseRequirementValue(requirement.value),
+    }));
+}
+
+function serializeFraudChecks(text: string): CampaignTask['fraudChecks'] {
+  return text
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function buildTaskPayload(form: TaskEngineFormValues) {
+  return {
+    campaign_id: form.campaignId,
+    title: form.title.trim(),
+    description: form.description.trim() || null,
+    task_type: form.taskType.trim(),
+    media_url: form.mediaUrl.trim() || null,
+    reward_amount: form.rewardAmount,
+    requirements: serializeTaskRequirements(form.requirements),
+    cooldown_seconds: form.cooldownSeconds,
+    maximum_attempts: form.maximumAttempts,
+    verification_method: form.verificationMethod.trim(),
+    fraud_checks: serializeFraudChecks(form.fraudChecksText),
+    expires_at: form.expiresAt ? new Date(form.expiresAt).toISOString() : null,
+    task_config: parseJsonObject(form.taskConfigText),
+    max_completions: form.maxCompletions,
+    status: form.status,
+  };
+}
+
+async function hydrateTaskView(taskId: string): Promise<CampaignTaskView> {
+  const bundle = await loadTaskBundle(taskId);
+  if (!bundle) throw new Error('Task not found.');
+
+  return mapTaskRow(bundle.task, bundle.campaign);
+}
+
+export async function getCampaignTask(taskId: string): Promise<CampaignTaskView | null> {
+  try {
+    return await hydrateTaskView(taskId);
+  } catch {
+    return null;
+  }
+}
+
+export async function saveCampaignTask(form: TaskEngineFormValues, taskId?: string): Promise<CampaignTaskView> {
+  const payload = buildTaskPayload(form);
+  const query = taskId
+    ? supabase.from('campaign_tasks').update(payload).eq('id', taskId)
+    : supabase.from('campaign_tasks').insert(payload);
+
+  const { data, error } = await query.select('id').single<{ id: string }>();
+  if (error) throw error;
+
+  return hydrateTaskView(data.id);
+}
+
 function mapTaskRow(row: TaskRow, campaign: CampaignRow): CampaignTaskView {
   return {
     id: row.id,
@@ -124,6 +307,13 @@ function mapTaskRow(row: TaskRow, campaign: CampaignRow): CampaignTaskView {
     taskType: row.task_type,
     mediaUrl: row.media_url ?? undefined,
     rewardAmount: Number(row.reward_amount),
+    requirements: normalizeRequirements(row.requirements),
+    cooldownSeconds: Number(row.cooldown_seconds ?? 0),
+    maximumAttempts: row.maximum_attempts ?? row.max_completions ?? null,
+    verificationMethod: typeof row.verification_method === 'string' && row.verification_method.trim().length ? row.verification_method : campaign.engine_config?.verificationMethod ?? 'manual_review',
+    fraudChecks: normalizeFraudChecks(row.fraud_checks),
+    expiresAt: row.expires_at,
+    taskConfig: normalizeTaskConfig(row.task_config),
     maxCompletions: row.max_completions ?? undefined,
     currentCompletions: row.current_completions ?? 0,
     status: row.status,
@@ -160,6 +350,41 @@ function mapRewardRow(row: RewardRow) {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+function normalizeRequirements(value: JsonValue | null): CampaignTask['requirements'] {
+  if (!Array.isArray(value)) return [];
+
+  return value.flatMap((entry, index) => {
+    if (typeof entry === 'string') {
+      return [{ key: `requirement-${index + 1}`, label: entry }];
+    }
+
+    if (entry && typeof entry === 'object' && !Array.isArray(entry)) {
+      const record = entry as Record<string, JsonValue>;
+      const key = typeof record.key === 'string' ? record.key : `requirement-${index + 1}`;
+      const label = typeof record.label === 'string' ? record.label : key;
+      const value = Object.prototype.hasOwnProperty.call(record, 'value')
+        ? (record.value as string | number | boolean | string[] | null)
+        : null;
+
+      return [{ key, label, value }];
+    }
+
+    return [];
+  });
+}
+
+function normalizeFraudChecks(value: JsonValue | null): CampaignTask['fraudChecks'] {
+  if (!Array.isArray(value)) return [];
+
+  return value.flatMap((entry) => (typeof entry === 'string' ? [entry] : []));
+}
+
+function normalizeTaskConfig(value: JsonValue | null): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+
+  return value as Record<string, unknown>;
 }
 
 async function loadCampaignsForTasks(taskRows: TaskRow[]): Promise<CampaignRow[]> {
@@ -204,7 +429,7 @@ async function loadSubmissionRewards(submissionIds: string[]): Promise<Map<strin
 export async function listCampaignTasks(campaignId?: string, userId?: string): Promise<CampaignTaskView[]> {
   let taskQuery = supabase
     .from('campaign_tasks')
-    .select('id,campaign_id,title,description,task_type,media_url,reward_amount,max_completions,current_completions,status,created_at,updated_at')
+    .select('id,campaign_id,title,description,task_type,media_url,reward_amount,requirements,cooldown_seconds,maximum_attempts,verification_method,fraud_checks,expires_at,task_config,max_completions,current_completions,status,created_at,updated_at')
     .order('created_at', { ascending: false });
 
   if (campaignId) taskQuery = taskQuery.eq('campaign_id', campaignId);
@@ -246,7 +471,7 @@ async function listVisibleCampaignIds(): Promise<string[]> {
 async function loadTaskBundle(taskId: string): Promise<{ task: TaskRow; campaign: CampaignRow } | null> {
   const { data: taskData, error: taskError } = await supabase
     .from('campaign_tasks')
-    .select('id,campaign_id,title,description,task_type,media_url,reward_amount,max_completions,current_completions,status,created_at,updated_at')
+    .select('id,campaign_id,title,description,task_type,media_url,reward_amount,requirements,cooldown_seconds,maximum_attempts,verification_method,fraud_checks,expires_at,task_config,max_completions,current_completions,status,created_at,updated_at')
     .eq('id', taskId)
     .maybeSingle();
 

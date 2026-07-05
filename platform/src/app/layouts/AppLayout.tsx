@@ -17,6 +17,7 @@ const appNavItems: NavItem[] = [
   { label: 'Dashboard', path: '/app', description: 'Overview and status' },
   { label: 'Campaigns', path: '/app/campaigns', description: 'Browse available tasks' },
   { label: 'Tasks', path: '/app/tasks', description: 'Complete actions' },
+  { label: 'Notifications', path: '/app/notifications', description: 'Full inbox and history' },
   { label: 'Wallet', path: '/app/wallet', description: 'Rewards and history' },
   { label: 'Profile', path: '/app/profile', description: 'Account settings' },
 ];
@@ -84,7 +85,7 @@ export function AppLayout({ children }: PropsWithChildren): JSX.Element {
   const bottomNavItems = [
     { label: 'Home', path: shellBase, emoji: '⌂' },
     { label: 'Campaigns', path: `${shellBase}/campaigns`, emoji: '⌁' },
-    { label: isBusinessShell ? 'Analytics' : 'Wallet', path: isBusinessShell ? `${shellBase}/analytics` : `${shellBase}/wallet`, emoji: '◌' },
+    { label: isBusinessShell ? 'Analytics' : 'Notifications', path: isBusinessShell ? `${shellBase}/analytics` : `${shellBase}/notifications`, emoji: '◌' },
     { label: 'Profile', path: '/app/profile', emoji: '☺' },
   ];
 
@@ -228,10 +229,13 @@ export function AppLayout({ children }: PropsWithChildren): JSX.Element {
                   <p className="mt-2 text-sm text-foreground">{unreadNotifications > 0 ? `${unreadNotifications} unread updates` : 'No unread notifications'}</p>
                   <div className="mt-4 space-y-3">
                     <div className="rounded-2xl border border-border bg-surface-elevated p-3 text-sm text-foreground/85">
-                      New campaign approvals and payout events appear here.
+                      New campaign approvals, payout events, and notification history appear here.
                     </div>
                     <Link to="/help-center" className="block rounded-2xl border border-border px-3 py-2 text-sm text-foreground transition hover:border-accent/40 hover:text-accent">
                       Open help center
+                    </Link>
+                    <Link to="/app/notifications" className="block rounded-2xl border border-border px-3 py-2 text-sm text-foreground transition hover:border-accent/40 hover:text-accent">
+                      View all notifications
                     </Link>
                   </div>
                 </div>

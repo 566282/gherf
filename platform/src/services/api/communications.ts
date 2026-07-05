@@ -1,6 +1,6 @@
 import { supabase } from '@/services/supabase/client';
 
-export const communicationChannels = ['in_app', 'email', 'push', 'sms'] as const;
+export const communicationChannels = ['in_app', 'email', 'push', 'sms', 'whatsapp', 'telegram'] as const;
 
 export type CommunicationChannel = (typeof communicationChannels)[number];
 
@@ -49,6 +49,52 @@ type SettingRow = {
   value: unknown;
 };
 
+type CommunicationTemplateRow = {
+  key: string;
+  name: string;
+  description: string;
+  channels: string[];
+  subject: string;
+  body: string;
+  push_title: string | null;
+  push_body: string | null;
+  sms_body: string | null;
+  is_enabled: boolean;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type NotificationQueueRow = {
+  id: string;
+  user_id: string;
+  title: string;
+  message: string;
+  type: string;
+  channel: string;
+  category: string;
+  template_key: string | null;
+  status: string;
+  scheduled_for: string | null;
+  sent_at: string | null;
+  retry_count: number;
+  max_retries: number;
+  last_error: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type NotificationRetryRow = {
+  id: string;
+  queue_id: string;
+  attempt_number: number;
+  status: string;
+  error_message: string | null;
+  metadata: Record<string, unknown> | null;
+  attempted_at: string;
+};
+
 type NotificationInsert = {
   user_id: string;
   title: string;
@@ -61,6 +107,16 @@ type NotificationInsert = {
   metadata?: Record<string, unknown>;
 };
 
+type NotificationPayload = {
+  title: string;
+  message: string;
+  type?: string;
+  channel?: CommunicationChannel;
+  category?: CommunicationCategory;
+  templateKey?: CommunicationTemplateKey;
+  metadata?: Record<string, unknown>;
+};
+
 const COMMUNICATION_SETTING_KEY = 'communication_config';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -69,6 +125,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isChannelArray(value: unknown): value is CommunicationChannel[] {
   return Array.isArray(value) && value.every((entry) => typeof entry === 'string' && communicationChannels.includes(entry as CommunicationChannel));
+}
+
+function toChannelArray(value: string[] | null): CommunicationChannel[] {
+  if (!Array.isArray(value)) {
+    return ['in_app'];
+  }
+
+  return value.filter((entry): entry is CommunicationChannel => communicationChannels.includes(entry as CommunicationChannel));
 }
 
 function buildDefaultTemplate(key: CommunicationTemplateKey): CommunicationTemplate {
@@ -151,7 +215,7 @@ function buildDefaultTemplate(key: CommunicationTemplateKey): CommunicationTempl
     key: 'promotional_blast',
     name: 'Promotional blast',
     description: 'Marketing promotions and campaign incentives.',
-    channels: ['in_app', 'email', 'push', 'sms'],
+    channels: ['in_app', 'email', 'push', 'sms', 'whatsapp', 'telegram'],
     subject: 'New promotion is live',
     body: 'Hi {{full_name}},\n\n{{promo_headline}}\n\n{{promo_body}}\n\nClaim now: {{cta_link}}',
     pushTitle: '{{promo_headline}}',
@@ -253,6 +317,119 @@ export async function updateCommunicationConfig(config: CommunicationConfig): Pr
   if (error) throw error;
 }
 
+export async function sendUserNotification(userId: string, payload: NotificationPayload): Promise<void> {
+  const { error } = await supabase
+    .from('user_notifications')
+    .insert({
+      user_id: userId,
+      title: payload.title,
+      message: payload.message,
+      type: payload.type ?? 'info',
+      channel: payload.channel ?? 'in_app',
+      category: payload.category ?? 'transactional',
+      template_key: payload.templateKey ?? null,
+      is_promotional: false,
+      metadata: payload.metadata ?? {},
+    })
+  ;
+
+  if (error) throw error;
+}
+
+export async function enqueueUserNotification(userId: string, payload: NotificationPayload): Promise<string> {
+  const { data, error } = await supabase
+    .from('notification_queue')
+    .insert({
+      user_id: userId,
+      title: payload.title,
+      message: payload.message,
+      type: payload.type ?? 'info',
+      channel: payload.channel ?? 'in_app',
+      category: payload.category ?? 'transactional',
+      template_key: payload.templateKey ?? null,
+      status: 'queued',
+      scheduled_for: payload.deliverAt ?? null,
+      metadata: payload.metadata ?? {},
+    })
+    .select('id')
+    .single<{ id: string }>();
+
+  if (error || !data) throw error ?? new Error('Unable to enqueue notification.');
+
+  return data.id;
+}
+
+export async function processNotificationQueue(limit = 25): Promise<number> {
+  const { data, error } = await supabase.rpc('process_notification_queue', {
+    p_limit: limit,
+  });
+
+  if (error) throw error;
+
+  return typeof data === 'number' ? data : Number(data ?? 0);
+}
+
+export async function retryNotificationQueueItem(queueId: string): Promise<void> {
+  const { error } = await supabase.rpc('retry_notification_queue_item', {
+    p_queue_id: queueId,
+  });
+
+  if (error) throw error;
+}
+
+export async function cancelNotificationQueueItem(queueId: string): Promise<void> {
+  const { error } = await supabase
+    .from('notification_queue')
+    .update({
+      status: 'cancelled',
+      last_error: 'Cancelled by admin',
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', queueId);
+
+  if (error) throw error;
+}
+
+export async function notifySuperAdmins(payload: NotificationPayload): Promise<number> {
+  const { data, error } = await supabase.rpc('notify_super_admins', {
+    p_title: payload.title,
+    p_message: payload.message,
+    p_type: payload.type ?? 'info',
+    p_channel: payload.channel ?? 'in_app',
+    p_category: payload.category ?? 'transactional',
+    p_template_key: payload.templateKey ?? null,
+    p_metadata: payload.metadata ?? {},
+  });
+
+  if (error) throw error;
+
+  return typeof data === 'number' ? data : Number(data ?? 0);
+}
+
+export async function listCommunicationTemplates(): Promise<CommunicationTemplate[]> {
+  const { data, error } = await supabase
+    .from('communication_templates')
+    .select('key,name,description,channels,subject,body,push_title,push_body,sms_body,is_enabled,metadata,created_at,updated_at')
+    .order('created_at', { ascending: false });
+
+  if (error || !data) {
+    return Object.values(buildDefaultCommunicationConfig().templates);
+  }
+
+  return (data as CommunicationTemplateRow[]).map((row) => ({
+    key: row.key as CommunicationTemplateKey,
+    name: row.name,
+    description: row.description,
+    channels: toChannelArray(row.channels),
+    subject: row.subject,
+    body: row.body,
+    pushTitle: row.push_title ?? '',
+    pushBody: row.push_body ?? '',
+    smsBody: row.sms_body ?? '',
+    enabled: row.is_enabled,
+  }));
+}
+
 async function insertNotificationBatch(rows: NotificationInsert[]): Promise<number> {
   if (!rows.length) return 0;
 
@@ -260,6 +437,57 @@ async function insertNotificationBatch(rows: NotificationInsert[]): Promise<numb
   if (error) throw error;
 
   return rows.length;
+}
+
+export async function sendAdminPaymentNotification(input: {
+  amount: number;
+  currency?: string;
+  source: 'deposit' | 'wallet_credit' | 'payment';
+  title?: string;
+  message?: string;
+  metadata?: Record<string, unknown>;
+}): Promise<number> {
+  return notifySuperAdmins({
+    title: input.title ?? 'User payment recorded',
+    message: input.message ?? `A ${input.source.replace(/_/g, ' ')} of ${input.amount.toFixed(2)} ${input.currency ?? 'USD'} was recorded.`,
+    type: 'info',
+    channel: 'in_app',
+    category: 'transactional',
+    metadata: {
+      source: input.source,
+      amount: input.amount,
+      currency: input.currency ?? 'USD',
+      ...input.metadata,
+    },
+  });
+}
+
+export async function listNotificationQueue(limit = 12, offset = 0): Promise<NotificationQueueRow[]> {
+  const { data, error } = await supabase
+    .from('notification_queue')
+    .select('id,user_id,title,message,type,channel,category,template_key,status,scheduled_for,sent_at,retry_count,max_retries,last_error,metadata,created_at,updated_at')
+    .order('created_at', { ascending: false })
+    .range(offset, offset + limit - 1);
+
+  if (error || !data) {
+    return [];
+  }
+
+  return data as NotificationQueueRow[];
+}
+
+export async function listNotificationRetryHistory(limit = 12): Promise<NotificationRetryRow[]> {
+  const { data, error } = await supabase
+    .from('notification_retry_history')
+    .select('id,queue_id,attempt_number,status,error_message,metadata,attempted_at')
+    .order('attempted_at', { ascending: false })
+    .limit(limit);
+
+  if (error || !data) {
+    return [];
+  }
+
+  return data as NotificationRetryRow[];
 }
 
 export async function sendInternalMessage(input: {

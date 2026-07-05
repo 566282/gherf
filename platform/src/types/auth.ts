@@ -58,7 +58,12 @@ export interface WalletActivity {
   id: string;
   amount: number;
   balanceAfter: number;
+  entryType?: string | null;
   note?: string | null;
+  walletType?: string | null;
+  transactionType?: string | null;
+  currency?: string | null;
+  status?: string | null;
   createdAt: string;
 }
 

@@ -265,7 +265,7 @@ export function CmsManagementPage(): JSX.Element {
             <p className="text-sm uppercase tracking-[0.35em] text-ember/80">Phase 12 CMS</p>
             <h1 className="text-4xl font-bold text-white md:text-5xl">Go4Wealth content management</h1>
             <p className="max-w-3xl text-base text-mist/80">
-              Edit the homepage, FAQs, help center, privacy policy, terms, blog, landing pages, advertiser pages, and user guides from one admin workspace.
+              Edit the homepage, about, FAQ, contact, news, announcements, help center, privacy policy, terms, blog, SEO, meta tags, Open Graph, sitemap, robots, custom URLs, landing pages, advertiser pages, and user guides from one admin workspace.
             </p>
           </div>
 

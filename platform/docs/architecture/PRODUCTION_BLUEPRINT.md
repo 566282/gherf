@@ -155,6 +155,8 @@ The platform should be API-ready from day one, even if much of the data access c
 - Expose server-side operations only through trusted endpoints.
 - Use Supabase Edge Functions for scheduled tasks, webhooks, and privileged workflows.
 - Keep frontend code limited to anon-key-safe operations.
+- Prefer a thin RPC or edge-function layer for queue processing, notification retries, and any privileged delivery workflow.
+- Schedule delivery jobs from Supabase cron or an edge-function scheduler rather than from the browser.
 
 ### Suggested endpoint groups
 
@@ -205,6 +207,13 @@ Security should be enforced in layers, not assumed in one place.
 3. Apply database migrations.
 4. Promote the frontend build to Netlify production.
 5. Verify auth, routes, RLS, storage, and analytics in production.
+6. Verify queue-processing cron or scheduled function execution and confirm notification delivery rows move from `queued` to `sent`.
+
+### Notification delivery pattern
+
+- User notices should be created immediately for withdrawal events.
+- If a workflow depends on a fixed date, store that date on the source record and display it in the message body, but do not defer the notice itself.
+- Admin-facing alerts should be emitted immediately and should include the source record id, effective limit, and date metadata.
 
 ### Environment variables
 

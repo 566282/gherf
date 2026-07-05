@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { listAnalyticsReport, type AnalyticsReport, type CategoryMetric, type TimeSeriesPoint } from '@/services/api/analytics';
 import { exportAnalyticsReport, type AnalyticsDatasetKey, type ExportFormat } from '@/services/export/reportExport';
+import { supabase } from '@/services/supabase/client';
 
 const rangeOptions = [
   { label: '7 days', value: 7 as const },
@@ -15,6 +16,8 @@ const exportScopes: Array<{ label: string; value: AnalyticsDatasetKey }> = [
   { label: 'User growth', value: 'userGrowth' },
   { label: 'Active users', value: 'activeUsers' },
   { label: 'Revenue', value: 'revenue' },
+  { label: 'Task completion', value: 'taskCompletion' },
+  { label: 'Retention', value: 'retention' },
   { label: 'Campaign performance', value: 'campaignPerformance' },
   { label: 'Reward distribution', value: 'rewardDistribution' },
   { label: 'Withdrawal statistics', value: 'withdrawalStatistics' },
@@ -23,6 +26,31 @@ const exportScopes: Array<{ label: string; value: AnalyticsDatasetKey }> = [
   { label: 'Device statistics', value: 'deviceStatistics' },
   { label: 'Browser statistics', value: 'browserStatistics' },
   { label: 'Conversion funnels', value: 'conversionFunnels' },
+];
+
+const enterpriseAnalyticsCoverage = [
+  'Revenue',
+  'Campaign performance',
+  'User growth',
+  'Task completion',
+  'Retention',
+  'Active users',
+  'Referral statistics',
+  'Top campaigns',
+  'Top countries',
+  'Device analytics',
+  'Browser analytics',
+  'Export: PDF, CSV, Excel',
+  'Live dashboard',
+];
+
+const dataSourceLabels = [
+  'Supabase profiles',
+  'Supabase campaigns',
+  'Supabase rewards',
+  'Supabase referrals',
+  'Supabase withdrawals',
+  'Supabase submissions',
 ];
 
 function formatCurrency(value: number): string {
@@ -97,21 +125,54 @@ export function AnalyticsReportingPage(): JSX.Element {
   const [report, setReport] = useState<AnalyticsReport | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState('Loading analytics dashboards...');
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
   const [exportScope, setExportScope] = useState<AnalyticsDatasetKey>('all');
 
   useEffect(() => {
-    setIsLoading(true);
-    setStatusMessage('Loading analytics dashboards...');
+    let cancelled = false;
+    const refreshableTables = ['profiles', 'campaigns', 'campaign_tasks', 'task_submissions', 'rewards', 'withdrawal_requests', 'referral_programs', 'referral_attributions', 'referral_commission_ledger', 'referral_fraud_flags', 'referral_leaderboard_snapshots'];
 
-    void listAnalyticsReport(rangeDays)
-      .then((nextReport) => {
+    const refreshAnalytics = async () => {
+      setIsLoading(true);
+      setStatusMessage('Loading analytics dashboards...');
+
+      try {
+        const nextReport = await listAnalyticsReport(rangeDays);
+        if (cancelled) return;
+
         setReport(nextReport);
-        setStatusMessage(`Analytics ready for last ${rangeDays} days.`);
-      })
-      .catch(() => {
-        setStatusMessage('Unable to load analytics right now.');
-      })
-      .finally(() => setIsLoading(false));
+        setStatusMessage(`Analytics ready for last ${rangeDays} days via Supabase.`);
+        setLastRefreshedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+      } catch {
+        if (!cancelled) {
+          setStatusMessage('Unable to load analytics right now.');
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    void refreshAnalytics();
+
+    const channel = supabase.channel(`analytics-report-${rangeDays}`);
+    refreshableTables.forEach((table) => {
+      channel.on('postgres_changes', { event: '*', schema: 'public', table }, () => {
+        void refreshAnalytics();
+      });
+    });
+    void channel.subscribe();
+
+    const refreshHandle = window.setInterval(() => {
+      void refreshAnalytics();
+    }, 60000);
+
+    return () => {
+      cancelled = true;
+      void supabase.removeChannel(channel);
+      window.clearInterval(refreshHandle);
+    };
   }, [rangeDays]);
 
   const funnelMax = useMemo(() => {
@@ -156,6 +217,30 @@ export function AnalyticsReportingPage(): JSX.Element {
           </div>
 
           <div className="w-full space-y-3 rounded-2xl border border-border bg-surface-elevated p-4 xl:w-[30rem]">
+            <div className="space-y-2">
+              <p className="text-xs uppercase tracking-[0.2em] text-muted">Enterprise analytics</p>
+              <div className="flex flex-wrap gap-2">
+                {enterpriseAnalyticsCoverage.map((item) => (
+                  <span key={item} className="rounded-full border border-border bg-background px-3 py-1 text-xs text-foreground/80">
+                    {item}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-border bg-background/60 p-3">
+              <p className="text-xs uppercase tracking-[0.2em] text-muted">Live dashboard</p>
+              <p className="mt-1 text-sm text-foreground/80">Connected to Supabase and refreshed from production-backed analytics tables.</p>
+              <p className="mt-1 text-xs text-muted">Last refreshed: {lastRefreshedAt ?? 'pending first sync'}</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {dataSourceLabels.map((label) => (
+                  <span key={label} className="rounded-full bg-surface-elevated px-2 py-1 text-[11px] text-foreground/70">
+                    {label}
+                  </span>
+                ))}
+              </div>
+            </div>
+
             <div className="grid gap-3 sm:grid-cols-3">
               {rangeOptions.map((option) => (
                 <Button key={option.value} variant={rangeDays === option.value ? 'primary' : 'ghost'} onClick={() => setRangeDays(option.value)}>
@@ -215,6 +300,11 @@ export function AnalyticsReportingPage(): JSX.Element {
         <MiniSeriesChart title="User growth" subtitle="New users over time" series={report.userGrowth} chartVar="--chart-1" />
         <MiniSeriesChart title="Active users" subtitle="Daily active users" series={report.activeUsers} chartVar="--chart-2" />
         <MiniSeriesChart title="Revenue" subtitle="Daily recognized revenue" series={report.revenue} chartVar="--chart-3" />
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-2">
+        <MiniSeriesChart title="Task completion" subtitle="Approved submissions as a share of daily submissions" series={report.taskCompletion} chartVar="--chart-4" />
+        <MiniSeriesChart title="Retention" subtitle="Returning users as a share of daily active users" series={report.retention} chartVar="--chart-5" />
       </div>
 
       <Card>
@@ -286,15 +376,23 @@ export function AnalyticsReportingPage(): JSX.Element {
       <div className="grid gap-6 xl:grid-cols-2">
         <Card>
           <p className="text-sm uppercase tracking-[0.24em] text-mint/70">Referral performance</p>
-          <h3 className="mt-2 text-xl font-semibold text-white">Referral growth and commission value</h3>
+          <h3 className="mt-2 text-xl font-semibold text-white">Referral growth, commissions, and risk controls</h3>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-              <p className="text-xs text-mist/70">Referred users</p>
-              <p className="mt-1 text-xl font-semibold text-white">{formatNumber(report.referralPerformance.referredUsers)}</p>
+              <p className="text-xs text-mist/70">Qualified referrals</p>
+              <p className="mt-1 text-xl font-semibold text-white">{formatNumber(report.referralPerformance.qualifiedReferrals)}</p>
             </div>
             <div className="rounded-xl border border-white/10 bg-white/5 p-3">
               <p className="text-xs text-mist/70">Referral commissions</p>
               <p className="mt-1 text-xl font-semibold text-white">{formatCurrency(report.referralPerformance.referralCommissions)}</p>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+              <p className="text-xs text-mist/70">Active programs</p>
+              <p className="mt-1 text-xl font-semibold text-white">{formatNumber(report.referralPerformance.activePrograms)}</p>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+              <p className="text-xs text-mist/70">Fraud flags</p>
+              <p className="mt-1 text-xl font-semibold text-white">{formatNumber(report.referralPerformance.fraudFlags)}</p>
             </div>
           </div>
           <div className="mt-4 space-y-2">
@@ -308,20 +406,62 @@ export function AnalyticsReportingPage(): JSX.Element {
         </Card>
 
         <Card>
-          <p className="text-sm uppercase tracking-[0.24em] text-mint/70">Conversion funnels</p>
-          <h3 className="mt-2 text-xl font-semibold text-white">Signup to reward claim flow</h3>
-          <div className="mt-4 space-y-3">
-            {report.conversionFunnels.map((step) => (
-              <div key={step.step} className="space-y-1">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-mist/80">{step.step}</span>
-                  <span className="text-white">{formatNumber(step.users)} ({formatNumber(step.conversionFromPrevious)}%)</span>
+          <p className="text-sm uppercase tracking-[0.24em] text-mint/70">Referral backend</p>
+          <h3 className="mt-2 text-xl font-semibold text-white">Programs, leaderboard, and fraud signals</h3>
+          <div className="mt-4 grid gap-4 lg:grid-cols-2">
+            <div className="space-y-3 rounded-xl border border-white/10 bg-white/5 p-3">
+              <p className="text-xs uppercase tracking-[0.2em] text-mist/70">Programs by activity</p>
+              {report.referralPerformance.programsByActivity.length ? (
+                report.referralPerformance.programsByActivity.map((program) => (
+                  <div key={program.programId} className="rounded-lg border border-white/10 bg-black/10 px-3 py-2 text-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-white">{program.programName}</span>
+                      <span className="text-mist/80">{program.status}</span>
+                    </div>
+                    <div className="mt-1 flex items-center justify-between text-xs text-mist/70">
+                      <span>{formatNumber(program.referredUsers)} referred</span>
+                      <span>{formatCurrency(program.referralCommissions)}</span>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-mist/70">No referral programs found.</p>
+              )}
+            </div>
+
+            <div className="space-y-3 rounded-xl border border-white/10 bg-white/5 p-3">
+              <p className="text-xs uppercase tracking-[0.2em] text-mist/70">Leaderboard</p>
+              {report.referralPerformance.leaderboard.length ? (
+                report.referralPerformance.leaderboard.map((entry) => (
+                  <div key={`${entry.programId}-${entry.profileId}-${entry.periodKey}`} className="rounded-lg border border-white/10 bg-black/10 px-3 py-2 text-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-white">{entry.profileId}</span>
+                      <span className="text-mist/80">#{entry.rank ?? '-'}</span>
+                    </div>
+                    <div className="mt-1 flex items-center justify-between text-xs text-mist/70">
+                      <span>{formatNumber(entry.referralCount)} referrals</span>
+                      <span>{formatCurrency(entry.commissionTotal)}</span>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-mist/70">No leaderboard snapshots yet.</p>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-4 space-y-2">
+            <p className="text-xs uppercase tracking-[0.2em] text-mist/70">Fraud signals</p>
+            {report.referralPerformance.fraudSignals.length ? (
+              report.referralPerformance.fraudSignals.map((signal) => (
+                <div key={`${signal.ruleKey}-${signal.severity}-${signal.status}`} className="flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm">
+                  <span className="text-mist/80">{signal.ruleKey}</span>
+                  <span className="text-white">{formatNumber(signal.count)} {signal.severity} / {signal.status}</span>
                 </div>
-                <div className="h-3 rounded-full bg-white/10">
-                  <div className="h-3 rounded-full bg-ember" style={{ width: `${Math.max(2, (step.users / funnelMax) * 100)}%` }} />
-                </div>
-              </div>
-            ))}
+              ))
+            ) : (
+              <p className="text-sm text-mist/70">No referral fraud signals in the selected range.</p>
+            )}
           </div>
         </Card>
       </div>

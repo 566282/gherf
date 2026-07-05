@@ -1,5 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
 import clsx from 'clsx';
+import { usePermissions } from '@/hooks/useAuth';
 
 interface AdminSidebarProps {
   open: boolean;
@@ -7,11 +8,12 @@ interface AdminSidebarProps {
 }
 
 type MenuItem =
-  | { label: string; path: string; hash?: undefined }
-  | { label: string; path: string; hash: string };
+  | { label: string; path: string; hash?: undefined; adminOnly?: boolean }
+  | { label: string; path: string; hash: string; adminOnly?: boolean };
 
 export function AdminSidebar({ open, onToggle }: AdminSidebarProps) {
   const location = useLocation();
+  const permissions = usePermissions();
 
   const menuItems: MenuItem[] = [
     { label: 'Overview',       path: '/admin', hash: 'overview' },
@@ -21,15 +23,31 @@ export function AdminSidebar({ open, onToggle }: AdminSidebarProps) {
     { label: 'Trust',          path: '/admin', hash: 'trust' },
     { label: 'Content',        path: '/admin', hash: 'content' },
     { label: 'Platform',       path: '/admin', hash: 'platform' },
-    { label: 'CMS',            path: '/admin/cms' },
-    { label: 'Gamification',   path: '/admin/gamification' },
-    { label: 'Communications', path: '/admin/communications' },
-    { label: 'Analytics',      path: '/admin/analytics' },
-    { label: 'Verification',   path: '/admin/verification' },
-    { label: 'Users',          path: '/admin/users' },
-    { label: 'Settings',       path: '/admin/settings' },
-    { label: 'Audit Logs',     path: '/admin/audit-logs' },
+    { label: 'Dashboard Analytics', path: '/admin/dashboard-analytics', adminOnly: true },
+    { label: 'Ad Management', path: '/admin/ad-management', adminOnly: true },
+    { label: 'Video Management', path: '/admin/video-management', adminOnly: true },
+    { label: 'Reward Settings', path: '/admin/reward-settings', adminOnly: true },
+    { label: 'Referral Settings', path: '/admin/referral-settings', adminOnly: true },
+    { label: 'Fraud Detection', path: '/admin/fraud-detection', adminOnly: true },
+    { label: 'Reports', path: '/admin/reports', adminOnly: true },
+    { label: 'Withdrawal Approval', path: '/admin/withdrawal-approval', adminOnly: true },
+    { label: 'Wallet Management', path: '/admin/wallet', adminOnly: true },
+    { label: 'Task Engine', path: '/admin/task-engine', adminOnly: true },
+    { label: 'System Settings', path: '/admin/system-settings', adminOnly: true },
+    { label: 'Email Templates', path: '/admin/email-templates', adminOnly: true },
+    { label: 'Notification Center', path: '/admin/notification-center', adminOnly: true },
+    { label: 'Support Tickets', path: '/admin/support-tickets', adminOnly: true },
+    { label: 'Permissions', path: '/admin/permissions', adminOnly: true },
+    { label: 'CMS', path: '/admin/cms', adminOnly: true },
+    { label: 'Gamification', path: '/admin/gamification', adminOnly: true },
+    { label: 'Communications', path: '/admin/communications', adminOnly: true },
+    { label: 'Analytics', path: '/admin/analytics', adminOnly: true },
+    { label: 'Verification', path: '/admin/verification', adminOnly: true },
+    { label: 'Users', path: '/admin/users', adminOnly: true },
+    { label: 'Audit Logs', path: '/admin/audit-logs', adminOnly: true },
   ];
+
+  const visibleMenuItems = menuItems.filter((item) => !item.adminOnly || permissions.isAdmin);
 
   return (
     <aside
@@ -57,7 +75,7 @@ export function AdminSidebar({ open, onToggle }: AdminSidebarProps) {
       </div>
 
       <nav aria-label="Admin" className="space-y-1 px-2 py-4">
-        {menuItems.map((item) => {
+        {visibleMenuItems.map((item) => {
           const active = item.hash
             ? location.pathname === item.path && location.hash === `#${item.hash}`
             : location.pathname === item.path || location.pathname.startsWith(item.path + '/');

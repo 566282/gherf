@@ -58,6 +58,56 @@ type WalletTransactionRow = {
   created_at: string;
 };
 
+type ReferralProgramRow = {
+  id: string;
+  name: string;
+  status: string;
+  created_at: string;
+};
+
+type ReferralAttributionRow = {
+  id: string;
+  program_id: string;
+  referred_profile_id: string;
+  referrer_profile_id: string;
+  qualification_status: string;
+  fraud_status: string;
+  is_duplicate_account: boolean;
+  created_at: string;
+};
+
+type ReferralCommissionRow = {
+  id: string;
+  program_id: string;
+  beneficiary_profile_id: string;
+  tier_depth: number;
+  commission_kind: string;
+  amount: number | string;
+  status: string;
+  created_at: string;
+};
+
+type ReferralFraudFlagRow = {
+  id: string;
+  program_id: string | null;
+  rule_key: string;
+  severity: string;
+  status: string;
+  signal: string;
+  created_at: string;
+};
+
+type ReferralLeaderboardRow = {
+  id: string;
+  program_id: string;
+  profile_id: string;
+  period_key: string;
+  referral_count: number;
+  commission_total: number | string;
+  rank: number | null;
+  created_at: string;
+};
+
 export interface TimeSeriesPoint {
   label: string;
   value: number;
@@ -92,10 +142,40 @@ export interface WithdrawalStats {
   byMethod: CategoryMetric[];
 }
 
-export interface ReferralPerformance {
+export interface ReferralProgramMetric {
+  programId: string;
+  programName: string;
+  status: string;
   referredUsers: number;
   referralCommissions: number;
+}
+
+export interface ReferralLeaderboardMetric {
+  programId: string;
+  profileId: string;
+  periodKey: string;
+  rank: number | null;
+  referralCount: number;
+  commissionTotal: number;
+}
+
+export interface ReferralFraudMetric {
+  ruleKey: string;
+  severity: string;
+  status: string;
+  count: number;
+}
+
+export interface ReferralPerformance {
+  referredUsers: number;
+  qualifiedReferrals: number;
+  referralCommissions: number;
   referralsByDay: TimeSeriesPoint[];
+  activePrograms: number;
+  fraudFlags: number;
+  programsByActivity: ReferralProgramMetric[];
+  leaderboard: ReferralLeaderboardMetric[];
+  fraudSignals: ReferralFraudMetric[];
 }
 
 export interface AnalyticsKpi {
@@ -114,6 +194,8 @@ export interface AnalyticsReport {
   userGrowth: TimeSeriesPoint[];
   activeUsers: TimeSeriesPoint[];
   revenue: TimeSeriesPoint[];
+  taskCompletion: TimeSeriesPoint[];
+  retention: TimeSeriesPoint[];
   campaignPerformance: CampaignPerformanceMetric[];
   rewardDistribution: CategoryMetric[];
   withdrawalStatistics: WithdrawalStats;
@@ -131,6 +213,11 @@ function toNumber(value: number | string | null | undefined): number {
 
 function isoDay(value: string): string {
   return new Date(value).toISOString().slice(0, 10);
+}
+
+function isoDayStart(value: string): number {
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return date.getTime();
 }
 
 function buildDateRange(days: number): string[] {
@@ -239,6 +326,40 @@ async function fetchWalletTransactions(): Promise<WalletTransactionRow[]> {
   return data as WalletTransactionRow[];
 }
 
+async function fetchReferralPrograms(): Promise<ReferralProgramRow[]> {
+  const { data, error } = await supabase.from('referral_programs').select('id,name,status,created_at');
+  if (error || !data) return [];
+  return data as ReferralProgramRow[];
+}
+
+async function fetchReferralAttributions(): Promise<ReferralAttributionRow[]> {
+  const { data, error } = await supabase
+    .from('referral_attributions')
+    .select('id,program_id,referred_profile_id,referrer_profile_id,qualification_status,fraud_status,is_duplicate_account,created_at');
+  if (error || !data) return [];
+  return data as ReferralAttributionRow[];
+}
+
+async function fetchReferralCommissions(): Promise<ReferralCommissionRow[]> {
+  const { data, error } = await supabase
+    .from('referral_commission_ledger')
+    .select('id,program_id,beneficiary_profile_id,tier_depth,commission_kind,amount,status,created_at');
+  if (error || !data) return [];
+  return data as ReferralCommissionRow[];
+}
+
+async function fetchReferralFraudFlags(): Promise<ReferralFraudFlagRow[]> {
+  const { data, error } = await supabase.from('referral_fraud_flags').select('id,program_id,rule_key,severity,status,signal,created_at');
+  if (error || !data) return [];
+  return data as ReferralFraudFlagRow[];
+}
+
+async function fetchReferralLeaderboard(): Promise<ReferralLeaderboardRow[]> {
+  const { data, error } = await supabase.from('referral_leaderboard_snapshots').select('id,program_id,profile_id,period_key,referral_count,commission_total,rank,created_at');
+  if (error || !data) return [];
+  return data as ReferralLeaderboardRow[];
+}
+
 function inWindow(value: string, sinceTime: number): boolean {
   return new Date(value).getTime() >= sinceTime;
 }
@@ -268,7 +389,20 @@ function buildConversionSteps(signups: number, active: number, submissions: numb
 }
 
 export async function listAnalyticsReport(rangeDays: RangeOption = 30): Promise<AnalyticsReport> {
-  const [profiles, campaigns, campaignTasks, submissions, rewards, withdrawals, walletTransactions] = await Promise.all([
+  const [
+    profiles,
+    campaigns,
+    campaignTasks,
+    submissions,
+    rewards,
+    withdrawals,
+    walletTransactions,
+    referralPrograms,
+    referralAttributions,
+    referralCommissionsLedger,
+    referralFraudFlags,
+    referralLeaderboard,
+  ] = await Promise.all([
     fetchProfiles(),
     fetchCampaigns(),
     fetchCampaignTasks(),
@@ -276,6 +410,11 @@ export async function listAnalyticsReport(rangeDays: RangeOption = 30): Promise<
     fetchRewards(),
     fetchWithdrawals(),
     fetchWalletTransactions(),
+    fetchReferralPrograms(),
+    fetchReferralAttributions(),
+    fetchReferralCommissions(),
+    fetchReferralFraudFlags(),
+    fetchReferralLeaderboard(),
   ]);
 
   const dateLabels = buildDateRange(rangeDays);
@@ -300,6 +439,14 @@ export async function listAnalyticsReport(rangeDays: RangeOption = 30): Promise<
     if (reward.status !== 'approved' && reward.status !== 'claimed') return accumulator;
     const key = isoDay(reward.created_at);
     accumulator[key] = (accumulator[key] ?? 0) + toNumber(reward.amount);
+    return accumulator;
+  }, {});
+
+  const taskCompletionByDay = submissions.reduce<Record<string, number>>((accumulator, submission) => {
+    if (!inWindow(submission.created_at, sinceTime)) return accumulator;
+    if (submission.status !== 'approved') return accumulator;
+    const key = isoDay(submission.created_at);
+    accumulator[key] = (accumulator[key] ?? 0) + 1;
     return accumulator;
   }, {});
 
@@ -354,17 +501,62 @@ export async function listAnalyticsReport(rangeDays: RangeOption = 30): Promise<
     byMethod: countByLabel(withdrawalsInWindow.map((withdrawal) => withdrawal.method || 'Unknown')),
   };
 
-  const referredProfiles = profiles.filter((profile) => Boolean(profile.referred_by_code));
-  const referralsByDayMap = referredProfiles.reduce<Record<string, number>>((accumulator, profile) => {
-    if (!inWindow(profile.created_at, sinceTime)) return accumulator;
-    const key = isoDay(profile.created_at);
+  const activeReferralPrograms = referralPrograms.filter((program) => program.status === 'active');
+  const referralAttributionsInWindow = referralAttributions.filter((attribution) => inWindow(attribution.created_at, sinceTime));
+  const qualifiedAttributionsInWindow = referralAttributionsInWindow.filter((attribution) => attribution.qualification_status === 'qualified');
+
+  const referralsByDayMap = qualifiedAttributionsInWindow.reduce<Record<string, number>>((accumulator, attribution) => {
+    const key = isoDay(attribution.created_at);
     accumulator[key] = (accumulator[key] ?? 0) + 1;
     return accumulator;
   }, {});
 
-  const referralCommissions = walletTransactions
-    .filter((transaction) => transaction.transaction_type === 'referral_commission' && inWindow(transaction.created_at, sinceTime))
-    .reduce((sum, transaction) => sum + toNumber(transaction.amount), 0);
+  const referralCommissions = referralCommissionsLedger
+    .filter((commission) => inWindow(commission.created_at, sinceTime))
+    .reduce((sum, commission) => sum + toNumber(commission.amount), 0);
+
+  const referralsByProgram = referralPrograms.map((program) => {
+    const attributionsForProgram = referralAttributionsInWindow.filter((attribution) => attribution.program_id === program.id && attribution.qualification_status === 'qualified');
+    const commissionsForProgram = referralCommissionsLedger.filter(
+      (commission) => commission.program_id === program.id && inWindow(commission.created_at, sinceTime),
+    );
+
+    return {
+      programId: program.id,
+      programName: program.name,
+      status: program.status,
+      referredUsers: attributionsForProgram.length,
+      referralCommissions: commissionsForProgram.reduce((sum, commission) => sum + toNumber(commission.amount), 0),
+    };
+  }).sort((left, right) => right.referralCommissions - left.referralCommissions);
+
+  const leaderboard = referralLeaderboard
+    .filter((entry) => inWindow(entry.created_at, sinceTime))
+    .sort((left, right) => {
+      const rankLeft = left.rank ?? Number.MAX_SAFE_INTEGER;
+      const rankRight = right.rank ?? Number.MAX_SAFE_INTEGER;
+      return rankLeft - rankRight;
+    })
+    .slice(0, 8)
+    .map((entry) => ({
+      programId: entry.program_id,
+      profileId: entry.profile_id,
+      periodKey: entry.period_key,
+      rank: entry.rank,
+      referralCount: entry.referral_count,
+      commissionTotal: toNumber(entry.commission_total),
+    }));
+
+  const fraudSignals = countByLabel(
+    referralFraudFlags
+      .filter((flag) => inWindow(flag.created_at, sinceTime))
+      .map((flag) => `${flag.rule_key} · ${flag.severity} · ${flag.status}`),
+  ).map((entry) => {
+    const [ruleKey, severity, status] = entry.label.split(' · ');
+    return { ruleKey: ruleKey ?? 'unknown', severity: severity ?? 'unknown', status: status ?? 'unknown', count: entry.value };
+  });
+
+  const fraudFlagsInWindow = referralFraudFlags.filter((flag) => inWindow(flag.created_at, sinceTime)).length;
 
   const geoStats = countByLabel(submissions.map((submission) => extractCountry(submission.submission_data)));
   const deviceStats = countByLabel(submissions.map((submission) => extractDevice(submission.submission_data)));
@@ -377,6 +569,23 @@ export async function listAnalyticsReport(rangeDays: RangeOption = 30): Promise<
   const claimedRewardsInWindow = rewards.filter(
     (reward) => inWindow(reward.created_at, sinceTime) && reward.status === 'claimed',
   );
+
+  const retentionByDay = dateLabels.reduce<Record<string, number>>((accumulator, label) => {
+    const dayStart = isoDayStart(label);
+    const dayEnd = dayStart + DAY_MS;
+    const returningUsers = profiles.filter((profile) => {
+      if (!profile.last_login_at) return false;
+
+      const loginTime = new Date(profile.last_login_at).getTime();
+      const createdTime = new Date(profile.created_at).getTime();
+
+      return loginTime >= dayStart && loginTime < dayEnd && createdTime < dayStart;
+    }).length;
+
+    const activeUsersForDay = activeByDay[label] ?? 0;
+    accumulator[label] = activeUsersForDay > 0 ? roundPercent((returningUsers / activeUsersForDay) * 100) : 0;
+    return accumulator;
+  }, {});
 
   return {
     generatedAt: new Date().toISOString(),
@@ -394,13 +603,21 @@ export async function listAnalyticsReport(rangeDays: RangeOption = 30): Promise<
     userGrowth: toSeries(dateLabels, growthByDay),
     activeUsers: toSeries(dateLabels, activeByDay),
     revenue: toSeries(dateLabels, revenueByDay),
+    taskCompletion: toSeries(dateLabels, taskCompletionByDay),
+    retention: toSeries(dateLabels, retentionByDay),
     campaignPerformance,
     rewardDistribution,
     withdrawalStatistics: withdrawalStats,
     referralPerformance: {
-      referredUsers: referredProfiles.length,
+      referredUsers: referralAttributionsInWindow.length,
+      qualifiedReferrals: qualifiedAttributionsInWindow.length,
       referralCommissions: roundPercent(referralCommissions),
       referralsByDay: toSeries(dateLabels, referralsByDayMap),
+      activePrograms: activeReferralPrograms.length,
+      fraudFlags: fraudFlagsInWindow,
+      programsByActivity: referralsByProgram,
+      leaderboard,
+      fraudSignals,
     },
     geographicStatistics: geoStats,
     deviceStatistics: deviceStats,
