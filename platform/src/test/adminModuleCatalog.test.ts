@@ -35,21 +35,21 @@ describe('admin module catalog writes', () => {
     const entry: AdminModuleCatalogEntry = {
       records: [
         {
-          id: 'video-1',
-          name: 'Product explainer',
-          category: 'Explainers',
-          status: 'Published',
-          owner: 'Content',
-          value: '4:32',
+          id: 'ad-platform-1',
+          name: 'Homepage hero takeover',
+          category: 'Homepage',
+          status: 'Live',
+          owner: 'Media Ops',
+          value: 'CTR 4.8%',
           updatedAt: '2026-07-04T12:00:00.000Z',
-          risk: 'Low',
-          notes: 'Primary explainer used on the landing page.',
+          risk: 'High',
+          notes: 'Premium homepage unit with country, device, and age targeting.',
         },
       ],
       activity: [
         {
-          title: 'Video management reviewed',
-          description: 'A recent change set for video management was validated.',
+          title: 'Campaign optimization queued',
+          description: 'Bid rules and audience splits were prepared for the next optimization cycle.',
           meta: 'Activity log',
         },
       ],
@@ -64,7 +64,7 @@ describe('admin module catalog writes', () => {
       error: null,
     });
 
-    await updateAdminModuleCatalog('video-management', entry, 'admin-1');
+    await updateAdminModuleCatalog('ad-platform', entry, 'admin-1');
 
     expect(supabaseState.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -72,7 +72,7 @@ describe('admin module catalog writes', () => {
         updated_by: 'admin-1',
         value: {
           'dashboard-analytics': { records: [], activity: [] },
-          'video-management': entry,
+          'ad-platform': entry,
         },
       }),
       { onConflict: 'key' },

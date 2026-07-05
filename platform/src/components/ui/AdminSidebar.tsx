@@ -25,7 +25,7 @@ export function AdminSidebar({ open, onToggle }: AdminSidebarProps) {
     { label: 'Platform',       path: '/admin', hash: 'platform' },
     { label: 'Dashboard Analytics', path: '/admin/dashboard-analytics', adminOnly: true },
     { label: 'Ad Management', path: '/admin/ad-management', adminOnly: true },
-    { label: 'Video Management', path: '/admin/video-management', adminOnly: true },
+    { label: 'Ad Platform', path: '/admin/ad-platform', adminOnly: true },
     { label: 'Reward Settings', path: '/admin/reward-settings', adminOnly: true },
     { label: 'Referral Settings', path: '/admin/referral-settings', adminOnly: true },
     { label: 'Fraud Detection', path: '/admin/fraud-detection', adminOnly: true },

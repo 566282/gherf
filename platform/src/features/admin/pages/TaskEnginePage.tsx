@@ -3,13 +3,19 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { useAuth } from '@/app/providers/AuthProvider';
 import { describeFraudRiskChecks, fraudRiskChecks } from '@/services/api/fraud';
 import { listCampaigns } from '@/services/api/campaigns';
 import {
   createTaskDraft,
+  createTaskDraftFromTemplate,
   getCampaignTaskViews,
+  listTaskEngineAnalytics,
+  listTaskTemplates,
   saveCampaignTask,
+  validateTaskDraft,
   taskViewToDraft,
+  type TaskEngineAnalytics,
   type TaskEngineFormValues,
   type TaskRequirementDraft,
 } from '@/services/api/tasks';
@@ -102,6 +108,14 @@ function formatDateTime(value: string) {
   }).format(new Date(value));
 }
 
+function formatMonthLabel(value: string) {
+  const [year, month] = value.split('-').map((part) => Number(part));
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    year: 'numeric',
+  }).format(new Date(year, (month ?? 1) - 1, 1));
+}
+
 function stringifyPayload(values: TaskEngineFormValues) {
   const requirements = values.requirements
     .filter((item) => item.key.trim().length || item.label.trim().length || item.value.trim().length)
@@ -135,6 +149,7 @@ function stringifyPayload(values: TaskEngineFormValues) {
 }
 
 export function TaskEnginePage(): JSX.Element {
+  const { profile } = useAuth();
   const { data: campaigns = [] } = useQuery({
     queryKey: ['task-engine-campaigns'],
     queryFn: listCampaigns,
@@ -148,10 +163,18 @@ export function TaskEnginePage(): JSX.Element {
     },
   });
 
+  const { data: analytics = null } = useQuery<TaskEngineAnalytics | null>({
+    queryKey: ['task-engine-analytics'],
+    queryFn: listTaskEngineAnalytics,
+  });
+
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [draft, setDraft] = useState<TaskEngineFormValues>(createTaskDraft());
   const [formError, setFormError] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState('Ready to create a task definition.');
+  const validationIssues = useMemo(() => validateTaskDraft(draft), [draft]);
+  const blockingIssues = useMemo(() => validationIssues.filter((issue) => issue.severity === 'error'), [validationIssues]);
+  const taskTemplates = useMemo(() => listTaskTemplates(), []);
 
   useEffect(() => {
     if (!campaigns.length || draft.campaignId) return;
@@ -162,7 +185,7 @@ export function TaskEnginePage(): JSX.Element {
   const selectedTask = taskGroups.find((task) => task.id === selectedTaskId) ?? null;
 
   const saveMutation = useMutation({
-    mutationFn: async () => saveCampaignTask(draft, selectedTaskId ?? undefined),
+    mutationFn: async () => saveCampaignTask(draft, selectedTaskId ?? undefined, profile?.id),
     onSuccess: async (savedTask) => {
       setFormError(null);
       setSavedMessage(`Saved ${savedTask.title} as ${savedTask.taskType}.`);
@@ -226,6 +249,14 @@ export function TaskEnginePage(): JSX.Element {
     setSavedMessage('Starting a new task definition.');
   };
 
+  const applyTemplate = (templateId: Parameters<typeof createTaskDraftFromTemplate>[0]) => {
+    const nextCampaignId = draft.campaignId || campaigns[0]?.id || '';
+    setDraft(createTaskDraftFromTemplate(templateId, nextCampaignId));
+    setSelectedTaskId(null);
+    setFormError(null);
+    setSavedMessage('Template applied. Review the preview before saving.');
+  };
+
   return (
     <div className="space-y-6 p-6">
       <Card className="space-y-4 border border-border bg-surface-elevated p-6">
@@ -268,6 +299,29 @@ export function TaskEnginePage(): JSX.Element {
           <p className="text-sm text-muted">Extensibility model</p>
           <p className="mt-2 text-3xl font-bold text-foreground">JSON</p>
           <p className="mt-2 text-sm text-muted">The task payload can evolve without code changes.</p>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <Card className="border border-border bg-surface-elevated">
+          <p className="text-sm text-muted">Approval rate</p>
+          <p className="mt-2 text-3xl font-bold text-foreground">{analytics ? `${analytics.approvalRate.toFixed(1)}%` : '—'}</p>
+          <p className="mt-2 text-sm text-muted">Approved submissions over total submissions.</p>
+        </Card>
+        <Card className="border border-border bg-surface-elevated">
+          <p className="text-sm text-muted">Fraud rate</p>
+          <p className="mt-2 text-3xl font-bold text-foreground">{analytics ? `${analytics.fraudRate.toFixed(1)}%` : '—'}</p>
+          <p className="mt-2 text-sm text-muted">Rejected task submissions in the current dataset.</p>
+        </Card>
+        <Card className="border border-border bg-surface-elevated">
+          <p className="text-sm text-muted">Avg review time</p>
+          <p className="mt-2 text-3xl font-bold text-foreground">{analytics ? `${analytics.averageReviewHours.toFixed(1)}h` : '—'}</p>
+          <p className="mt-2 text-sm text-muted">Time from submission to review completion.</p>
+        </Card>
+        <Card className="border border-border bg-surface-elevated">
+          <p className="text-sm text-muted">Reward spend</p>
+          <p className="mt-2 text-3xl font-bold text-foreground">{analytics ? `$${analytics.rewardCost.toFixed(2)}` : '—'}</p>
+          <p className="mt-2 text-sm text-muted">Approved and claimed rewards across tasks.</p>
         </Card>
       </div>
 
@@ -447,7 +501,9 @@ export function TaskEnginePage(): JSX.Element {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <Button onClick={() => void saveMutation.mutateAsync()}>Save task</Button>
+            <Button onClick={() => void saveMutation.mutateAsync()} disabled={Boolean(blockingIssues.length) || saveMutation.isPending}>
+              {saveMutation.isPending ? 'Saving...' : 'Save task'}
+            </Button>
             <Button variant="ghost" onClick={resetDraft}>
               Reset draft
             </Button>
@@ -456,10 +512,42 @@ export function TaskEnginePage(): JSX.Element {
           <div className="space-y-2">
             {savedMessage ? <p className="text-sm text-mint">{savedMessage}</p> : null}
             {formError ? <p className="text-sm text-rose-300">{formError}</p> : null}
+            {blockingIssues.length ? (
+              <div className="space-y-2 rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4 text-sm text-amber-200">
+                {blockingIssues.map((issue) => (
+                  <p key={`${issue.field}-${issue.message}`}>{issue.message}</p>
+                ))}
+              </div>
+            ) : null}
           </div>
         </Card>
 
         <div className="space-y-6">
+          <Card className="space-y-4 border border-border bg-surface-elevated p-6">
+            <div>
+              <p className="text-sm uppercase tracking-[0.24em] text-accent/70">Template library</p>
+              <h2 className="mt-2 text-2xl font-semibold text-foreground">Start from a proven preset</h2>
+              <p className="mt-2 text-sm text-muted">Templates keep common task patterns consistent and fast to configure.</p>
+            </div>
+            <div className="grid gap-3">
+              {taskTemplates.map((template) => (
+                <button
+                  key={template.id}
+                  type="button"
+                  onClick={() => applyTemplate(template.id)}
+                  className="rounded-2xl border border-border bg-background p-4 text-left transition hover:border-accent/50 hover:text-accent"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-medium text-foreground">{template.label}</p>
+                    <span className="rounded-full border border-border px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-muted">{template.taskType}</span>
+                  </div>
+                  <p className="mt-2 text-sm text-muted">{template.description}</p>
+                  <p className="mt-2 text-xs uppercase tracking-[0.16em] text-muted">Reward ${template.rewardAmount.toFixed(2)} · {template.verificationMethod}</p>
+                </button>
+              ))}
+            </div>
+          </Card>
+
           <Card className="space-y-4 border border-border bg-surface-elevated p-6">
             <div>
               <p className="text-sm uppercase tracking-[0.24em] text-accent/70">Payload preview</p>
@@ -487,6 +575,19 @@ export function TaskEnginePage(): JSX.Element {
                   <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-300">
                     No fraud checks selected
                   </span>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-border bg-background p-4">
+              <p className="text-sm font-medium text-foreground">Validation preview</p>
+              <div className="mt-3 space-y-2 text-sm text-muted">
+                {validationIssues.length ? validationIssues.map((issue) => (
+                  <p key={`${issue.field}-${issue.message}`} className={issue.severity === 'error' ? 'text-rose-300' : 'text-amber-200'}>
+                    {issue.severity === 'warning' ? 'Warning: ' : 'Error: '}{issue.message}
+                  </p>
+                )) : (
+                  <p className="text-emerald-300">No validation blockers detected.</p>
                 )}
               </div>
             </div>
@@ -530,6 +631,71 @@ export function TaskEnginePage(): JSX.Element {
                   </p>
                 </button>
               ))}
+            </div>
+          </Card>
+
+          <Card className="space-y-4 border border-border bg-surface-elevated p-6">
+            <div>
+              <p className="text-sm uppercase tracking-[0.24em] text-accent/70">Task analytics</p>
+              <h2 className="mt-2 text-2xl font-semibold text-foreground">Task volume and reward cost by type</h2>
+            </div>
+            <div className="space-y-3">
+              {(analytics?.byTaskType ?? []).slice(0, 6).map((item) => (
+                <div key={item.taskType} className="rounded-2xl border border-border bg-background p-4 text-sm text-muted">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-medium text-foreground">{item.taskType}</p>
+                    <span>{item.taskCount} tasks</span>
+                  </div>
+                  <p className="mt-2">Submissions: {item.submissionCount} · Approval rate: {item.approvalRate.toFixed(1)}% · Fraud rate: {item.fraudRate.toFixed(1)}%</p>
+                  <p className="mt-1">Average reward: ${item.averageReward.toFixed(2)} · Reward cost: ${item.rewardCost.toFixed(2)}</p>
+                </div>
+              ))}
+              {!analytics?.byTaskType.length ? <p className="text-sm text-muted">No task analytics available yet.</p> : null}
+            </div>
+          </Card>
+
+          <Card className="space-y-4 border border-border bg-surface-elevated p-6">
+            <div>
+              <p className="text-sm uppercase tracking-[0.24em] text-accent/70">Campaign completion</p>
+              <h2 className="mt-2 text-2xl font-semibold text-foreground">Completion rate and review latency by campaign</h2>
+            </div>
+            <div className="space-y-3">
+              {(analytics?.byCampaign ?? []).slice(0, 5).map((item) => (
+                <div key={item.campaignId} className="rounded-2xl border border-border bg-background p-4 text-sm text-muted">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-medium text-foreground">{item.campaignTitle}</p>
+                    <span>{item.completionRate.toFixed(1)}% complete</span>
+                  </div>
+                  <p className="mt-2">
+                    Tasks: {item.taskCount} · Submissions: {item.submissionCount} · Review latency: {item.averageReviewHours.toFixed(1)}h
+                  </p>
+                  <p className="mt-1">
+                    Fraud rate: {item.fraudRate.toFixed(1)}% · Reward cost: ${item.rewardCost.toFixed(2)} · {item.campaignStatus}
+                  </p>
+                </div>
+              ))}
+              {!analytics?.byCampaign.length ? <p className="text-sm text-muted">No campaign analytics available yet.</p> : null}
+            </div>
+          </Card>
+
+          <Card className="space-y-4 border border-border bg-surface-elevated p-6">
+            <div>
+              <p className="text-sm uppercase tracking-[0.24em] text-accent/70">Fraud flags over time</p>
+              <h2 className="mt-2 text-2xl font-semibold text-foreground">Monthly review pressure and fraud volume</h2>
+            </div>
+            <div className="space-y-3">
+              {(analytics?.fraudFlagsByMonth ?? []).slice(0, 6).map((item) => (
+                <div key={item.period} className="rounded-2xl border border-border bg-background p-4 text-sm text-muted">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-medium text-foreground">{formatMonthLabel(item.period)}</p>
+                    <span>{item.fraudFlags} fraud flags</span>
+                  </div>
+                  <p className="mt-2">
+                    Submissions: {item.submissionCount} · Average review latency: {item.averageReviewHours.toFixed(1)}h
+                  </p>
+                </div>
+              ))}
+              {!analytics?.fraudFlagsByMonth.length ? <p className="text-sm text-muted">No trend data available yet.</p> : null}
             </div>
           </Card>
         </div>

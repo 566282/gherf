@@ -1,9 +1,10 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { useAuth } from '@/app/providers/AuthProvider';
 import {
   buildCampaignEngineConfig,
   campaignTypeOptions,
@@ -16,8 +17,18 @@ import {
   saveCampaign,
   type CampaignEditorFormValues,
 } from '@/services/api/campaigns';
+import {
+  createTaskDraft,
+  getCampaignTaskViews,
+  saveCampaignTask,
+  taskViewToDraft,
+  type TaskEngineFormValues,
+  type TaskRequirementDraft,
+} from '@/services/api/tasks';
 
-type WizardStep = 'type' | 'details' | 'rewards' | 'restrictions' | 'audience' | 'preview';
+type WizardStep = 'type' | 'details' | 'rewards' | 'restrictions' | 'audience' | 'tasks' | 'preview';
+
+type CampaignTaskDraft = TaskEngineFormValues & { id?: string };
 
 const WIZARD_STEPS: Array<{ id: WizardStep; label: string; description: string }> = [
   { id: 'type', label: 'Campaign type', description: 'Choose a template or start blank' },
@@ -25,6 +36,7 @@ const WIZARD_STEPS: Array<{ id: WizardStep; label: string; description: string }
   { id: 'rewards', label: 'Rewards & limits', description: 'Budget, reward amount, and caps' },
   { id: 'restrictions', label: 'Restrictions', description: 'Devices, locations, approval' },
   { id: 'audience', label: 'Target audience', description: 'Demographics, categories, and schedule' },
+  { id: 'tasks', label: 'Attached tasks', description: 'Task type, requirements, and verification' },
   { id: 'preview', label: 'Review & launch', description: 'Preview and save campaign' },
 ];
 
@@ -50,6 +62,46 @@ function TogglePill({ active, children, onClick }: { active: boolean; children: 
       {children}
     </button>
   );
+}
+
+function createCampaignTaskDraft(campaignId = ''): CampaignTaskDraft {
+  return {
+    ...createTaskDraft(campaignId),
+    campaignId,
+  };
+}
+
+function formatTaskPreview(task: CampaignTaskDraft) {
+  let taskConfig: Record<string, unknown> = {};
+
+  try {
+    taskConfig = task.taskConfigText.trim().length ? (JSON.parse(task.taskConfigText) as Record<string, unknown>) : {};
+  } catch {
+    taskConfig = { parseError: 'Invalid JSON' };
+  }
+
+  return {
+    id: task.id ?? null,
+    campaignId: task.campaignId,
+    title: task.title,
+    taskType: task.taskType,
+    rewardAmount: task.rewardAmount,
+    requirements: task.requirements
+      .filter((requirement) => requirement.key.trim().length || requirement.label.trim().length || requirement.value.trim().length)
+      .map((requirement) => ({
+        key: requirement.key.trim() || requirement.label.trim() || 'requirement',
+        label: requirement.label.trim() || requirement.key.trim() || 'Requirement',
+        value: requirement.value.trim(),
+      })),
+    cooldownSeconds: task.cooldownSeconds,
+    maximumAttempts: task.maximumAttempts,
+    verificationMethod: task.verificationMethod,
+    fraudChecks: task.fraudChecksText.split(',').map((item) => item.trim()).filter(Boolean),
+    expiresAt: task.expiresAt ? new Date(task.expiresAt).toISOString() : null,
+    taskConfig,
+    maxCompletions: task.maxCompletions,
+    status: task.status,
+  };
 }
 
 function buildPreview(values: CampaignEditorFormValues) {
@@ -120,6 +172,7 @@ function hasType(value: string | null, options: Array<{ value: string }>) {
 }
 
 export function CampaignEditorPage() {
+  const { profile } = useAuth();
   const navigate = useNavigate();
   const { id } = useParams();
   const [searchParams] = useSearchParams();
@@ -127,6 +180,8 @@ export function CampaignEditorPage() {
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
   const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
   const [presetApplied, setPresetApplied] = useState(false);
+  const [taskDrafts, setTaskDrafts] = useState<CampaignTaskDraft[]>([createCampaignTaskDraft()]);
+  const [taskDraftsHydrated, setTaskDraftsHydrated] = useState(false);
 
   const { data: campaignTypes = [] } = useQuery({
     queryKey: ['campaign-types'],
@@ -158,10 +213,32 @@ export function CampaignEditorPage() {
     enabled: Boolean(id),
   });
 
+  const campaignTasksQuery = useQuery({
+    queryKey: ['campaign-tasks', id],
+    queryFn: () => getCampaignTaskViews(id as string),
+    enabled: Boolean(id),
+  });
+
   const saveMutation = useMutation({
-    mutationFn: (values: CampaignEditorFormValues) => saveCampaign(values, id),
-    onSuccess: (savedCampaign) => {
+    mutationFn: async (values: CampaignEditorFormValues) => {
+      const savedCampaign = await saveCampaign(values, id);
+      const savedTasks = await Promise.all(
+        taskDrafts.map((taskDraft) => {
+          const nextTaskDraft = {
+            ...taskDraft,
+            campaignId: savedCampaign.id,
+          };
+
+          return saveCampaignTask(nextTaskDraft, taskDraft.id, profile?.id);
+        }),
+      );
+
+      return { savedCampaign, savedTasks };
+    },
+    onSuccess: ({ savedCampaign, savedTasks }) => {
       setLastSavedTime(new Date().toLocaleTimeString());
+      setTaskDrafts(savedTasks.map((task) => ({ ...taskViewToDraft(task), id: task.id })));
+      setTaskDraftsHydrated(true);
       navigate(`/business/campaigns/${savedCampaign.id}/edit`);
     },
   });
@@ -174,6 +251,17 @@ export function CampaignEditorPage() {
   }, [campaignQuery.data, reset]);
 
   useEffect(() => {
+    if (taskDraftsHydrated || !campaignTasksQuery.data) return;
+
+    const nextTaskDrafts = campaignTasksQuery.data.length
+      ? campaignTasksQuery.data.map((task) => ({ ...taskViewToDraft(task), id: task.id, campaignId: task.campaignId }))
+      : [createCampaignTaskDraft(id ?? '')];
+
+    setTaskDrafts(nextTaskDrafts);
+    setTaskDraftsHydrated(true);
+  }, [campaignTasksQuery.data, taskDraftsHydrated, id]);
+
+  useEffect(() => {
     if (id || presetApplied) return;
 
     const preset = selectedType
@@ -182,6 +270,8 @@ export function CampaignEditorPage() {
 
     if (preset) {
       reset(createDefaultCampaignForm(preset));
+      setTaskDrafts([createCampaignTaskDraft()]);
+      setTaskDraftsHydrated(false);
       setPresetApplied(true);
     }
   }, [id, selectedType, availableCampaignTypes, presetApplied, reset]);
@@ -198,10 +288,68 @@ export function CampaignEditorPage() {
 
   const values = watch();
   const preview = buildPreview(values);
+  const taskPreview = useMemo(() => taskDrafts.map(formatTaskPreview), [taskDrafts]);
 
   const onSubmit = handleSubmit(async (submittedValues) => {
     await saveMutation.mutateAsync(submittedValues);
   });
+
+  const addTaskDraft = () => {
+    setTaskDrafts((current) => [...current, createCampaignTaskDraft(id ?? current[0]?.campaignId ?? '')]);
+  };
+
+  const updateTaskDraft = (taskIndex: number, patch: Partial<CampaignTaskDraft>) => {
+    setTaskDrafts((current) => current.map((task, currentIndex) => (currentIndex === taskIndex ? { ...task, ...patch } : task)));
+  };
+
+  const removeTaskDraft = (taskIndex: number) => {
+    setTaskDrafts((current) => {
+      const nextDrafts = current.filter((_, currentIndex) => currentIndex !== taskIndex);
+      return nextDrafts.length ? nextDrafts : [createCampaignTaskDraft(id ?? '')];
+    });
+  };
+
+  const addRequirementRow = (taskIndex: number) => {
+    setTaskDrafts((current) =>
+      current.map((task, currentIndex) => {
+        if (currentIndex !== taskIndex) return task;
+
+        return {
+          ...task,
+          requirements: [...task.requirements, { key: `requirement-${task.requirements.length + 1}`, label: '', value: '' }],
+        };
+      }),
+    );
+  };
+
+  const removeRequirementRow = (taskIndex: number, requirementIndex: number) => {
+    setTaskDrafts((current) =>
+      current.map((task, currentIndex) => {
+        if (currentIndex !== taskIndex) return task;
+
+        const nextRequirements = task.requirements.filter((_, currentRequirementIndex) => currentRequirementIndex !== requirementIndex);
+        return {
+          ...task,
+          requirements: nextRequirements.length ? nextRequirements : [{ key: 'requirement-1', label: '', value: '' }],
+        };
+      }),
+    );
+  };
+
+  const updateRequirementRow = (taskIndex: number, requirementIndex: number, patch: Partial<TaskRequirementDraft>) => {
+    setTaskDrafts((current) =>
+      current.map((task, currentIndex) => {
+        if (currentIndex !== taskIndex) return task;
+
+        return {
+          ...task,
+          requirements: task.requirements.map((requirement, currentRequirementIndex) =>
+            currentRequirementIndex === requirementIndex ? { ...requirement, ...patch } : requirement,
+          ),
+        };
+      }),
+    );
+  };
 
   const loadingCampaign = Boolean(id) && campaignQuery.isLoading;
   const notFound = Boolean(id) && campaignQuery.isSuccess && !campaignQuery.data;
@@ -494,6 +642,119 @@ export function CampaignEditorPage() {
             </div>
           </Card>
         );
+      case 'tasks':
+        return (
+          <Card className="space-y-6">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <h2 className="text-2xl font-bold text-white">Attached tasks</h2>
+                <p className="mt-2 text-sm text-mist">Create one or more tasks that will be saved with this campaign.</p>
+              </div>
+              <Button variant="ghost" onClick={addTaskDraft}>
+                Add task
+              </Button>
+            </div>
+
+            <div className="space-y-4">
+              {taskDrafts.map((task, taskIndex) => (
+                <div key={task.id ?? `${taskIndex}-${task.taskType}`} className="space-y-4 rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.18em] text-mist/60">Task {taskIndex + 1}</p>
+                      <h3 className="text-xl font-semibold text-white">{task.title || 'Untitled task'}</h3>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeTaskDraft(taskIndex)}
+                      className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-mist transition hover:border-rose-500/40 hover:text-rose-300"
+                    >
+                      Remove task
+                    </button>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                    <FieldGroup label="Task title">
+                      <input className="input-base" value={task.title} onChange={(event) => updateTaskDraft(taskIndex, { title: event.target.value })} placeholder="Join Telegram and verify membership" />
+                    </FieldGroup>
+                    <FieldGroup label="Task type" hint="Free-form string, so new types do not need code changes.">
+                      <input className="input-base" value={task.taskType} onChange={(event) => updateTaskDraft(taskIndex, { taskType: event.target.value })} placeholder="join_telegram" />
+                    </FieldGroup>
+                    <FieldGroup label="Reward amount">
+                      <input type="number" step="0.01" className="input-base" value={task.rewardAmount} onChange={(event) => updateTaskDraft(taskIndex, { rewardAmount: Number(event.target.value) })} />
+                    </FieldGroup>
+                    <FieldGroup label="Verification method">
+                      <select className="input-base" value={task.verificationMethod} onChange={(event) => updateTaskDraft(taskIndex, { verificationMethod: event.target.value })}>
+                        {campaignVerificationOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </FieldGroup>
+                    <FieldGroup label="Cooldown seconds">
+                      <input type="number" className="input-base" value={task.cooldownSeconds} onChange={(event) => updateTaskDraft(taskIndex, { cooldownSeconds: Number(event.target.value) })} />
+                    </FieldGroup>
+                    <FieldGroup label="Maximum attempts">
+                      <input type="number" className="input-base" value={task.maximumAttempts ?? ''} onChange={(event) => updateTaskDraft(taskIndex, { maximumAttempts: event.target.value === '' ? null : Number(event.target.value) })} />
+                    </FieldGroup>
+                    <FieldGroup label="Expiration">
+                      <input type="datetime-local" className="input-base" value={task.expiresAt} onChange={(event) => updateTaskDraft(taskIndex, { expiresAt: event.target.value })} />
+                    </FieldGroup>
+                    <FieldGroup label="Maximum completions">
+                      <input type="number" className="input-base" value={task.maxCompletions ?? ''} onChange={(event) => updateTaskDraft(taskIndex, { maxCompletions: event.target.value === '' ? null : Number(event.target.value) })} />
+                    </FieldGroup>
+                    <FieldGroup label="Task status">
+                      <select className="input-base" value={task.status} onChange={(event) => updateTaskDraft(taskIndex, { status: event.target.value as CampaignTaskDraft['status'] })}>
+                        <option value="draft">Draft</option>
+                        <option value="active">Active</option>
+                        <option value="paused">Paused</option>
+                        <option value="completed">Completed</option>
+                      </select>
+                    </FieldGroup>
+                    <FieldGroup label="Media URL" hint="Optional screenshot, video, or landing asset.">
+                      <input className="input-base" value={task.mediaUrl} onChange={(event) => updateTaskDraft(taskIndex, { mediaUrl: event.target.value })} placeholder="https://..." />
+                    </FieldGroup>
+                    <FieldGroup label="Fraud checks" hint="Comma-separated risk checks.">
+                      <input className="input-base" value={task.fraudChecksText} onChange={(event) => updateTaskDraft(taskIndex, { fraudChecksText: event.target.value })} placeholder="fraud_detection, duplicate_detection" />
+                    </FieldGroup>
+                  </div>
+
+                  <FieldGroup label="Description" hint="Short instructions for the task runner.">
+                    <textarea className="input-base min-h-24" value={task.description} onChange={(event) => updateTaskDraft(taskIndex, { description: event.target.value })} />
+                  </FieldGroup>
+
+                  <FieldGroup label="Task config JSON" hint="Any task-specific payload, proof schema, or runtime hints.">
+                    <textarea className="input-base min-h-32 font-mono text-sm" value={task.taskConfigText} onChange={(event) => updateTaskDraft(taskIndex, { taskConfigText: event.target.value })} />
+                  </FieldGroup>
+
+                  <div className="space-y-3 rounded-2xl border border-white/10 bg-black/20 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-medium text-white">Requirements</p>
+                        <p className="text-xs text-mist/70">Add proof, steps, or eligibility rules here.</p>
+                      </div>
+                      <Button variant="ghost" onClick={() => addRequirementRow(taskIndex)}>
+                        Add requirement
+                      </Button>
+                    </div>
+                    <div className="space-y-3">
+                      {task.requirements.map((requirement, requirementIndex) => (
+                        <div key={`${taskIndex}-${requirementIndex}`} className="grid gap-3 rounded-2xl border border-white/10 bg-white/5 p-3 md:grid-cols-[1fr_1fr_1fr_auto]">
+                          <input className="input-base" value={requirement.key} onChange={(event) => updateRequirementRow(taskIndex, requirementIndex, { key: event.target.value })} placeholder="proof_url" />
+                          <input className="input-base" value={requirement.label} onChange={(event) => updateRequirementRow(taskIndex, requirementIndex, { label: event.target.value })} placeholder="Upload proof" />
+                          <input className="input-base" value={requirement.value} onChange={(event) => updateRequirementRow(taskIndex, requirementIndex, { value: event.target.value })} placeholder="optional value" />
+                          <button type="button" onClick={() => removeRequirementRow(taskIndex, requirementIndex)} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-mist transition hover:border-rose-500/40 hover:text-rose-300">
+                            Remove
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        );
       case 'preview':
         return (
           <div className="grid gap-6 xl:grid-cols-[1fr_350px]">
@@ -516,6 +777,7 @@ export function CampaignEditorPage() {
                   <p><span className="text-mist/70">Categories:</span> <span className="font-medium text-white">{values.campaignCategories || 'None'}</span></p>
                   <p><span className="text-mist/70">Age restriction:</span> <span className="font-medium text-white">{values.ageRestrictionMin ?? 'Any'} - {values.ageRestrictionMax ?? 'Any'}</span></p>
                   <p><span className="text-mist/70">Recurring:</span> <span className="font-medium text-white">{values.recurringEnabled ? `${values.recurringFrequency} every ${values.recurringInterval}` : 'Disabled'}</span></p>
+                  <p><span className="text-mist/70">Attached tasks:</span> <span className="font-medium text-white">{taskDrafts.length}</span></p>
                   <p><span className="text-mist/70">Status:</span> <span className={`font-medium ${values.status === 'draft' ? 'text-mint' : 'text-amber-300'}`}>{values.status}</span></p>
                 </div>
               </div>
@@ -526,7 +788,7 @@ export function CampaignEditorPage() {
                 <p className="mt-2 text-sm text-mist">Exact configuration stored in Supabase.</p>
               </div>
               <pre className="mt-4 max-h-[34rem] overflow-auto rounded-2xl border border-white/10 bg-ink/80 p-3 text-xs leading-relaxed text-mist">
-                {JSON.stringify(preview, null, 2)}
+                  {JSON.stringify({ campaign: preview, tasks: taskPreview }, null, 2)}
               </pre>
             </Card>
           </div>

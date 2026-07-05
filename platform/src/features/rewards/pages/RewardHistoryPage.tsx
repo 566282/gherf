@@ -13,6 +13,7 @@ import {
   listWithdrawalRequests,
   transferWalletBalance,
 } from '@/services/api/wallet';
+import { getAllowedTransferTargets, walletOperationalRules, walletTransferSources } from '@/services/api/walletPolicies';
 import type { WalletAccount, WalletTransaction, WalletTransfer, WalletWithdrawalMethod, WithdrawalRequest, WithdrawalRequestInput, WalletSettings, WalletAccountType } from '@/types';
 import { walletAccountTypes } from '@/types';
 
@@ -52,9 +53,12 @@ export function RewardHistoryPage() {
   const [amount, setAmount] = useState('50');
   const [method, setMethod] = useState<WalletWithdrawalMethod>(defaultWithdrawalMethod);
   const [transferAmount, setTransferAmount] = useState('25');
-  const [transferFrom, setTransferFrom] = useState<WalletAccountType>('main');
-  const [transferTo, setTransferTo] = useState<WalletAccountType>('reward');
+  const [transferFrom, setTransferFrom] = useState<WalletAccountType>('reward');
+  const [transferTo, setTransferTo] = useState<WalletAccountType>('main');
   const [transferNote, setTransferNote] = useState('Internal wallet transfer');
+  const [transferFilterWalletType, setTransferFilterWalletType] = useState<'all' | WalletAccountType>('all');
+  const [transferFilterStatus, setTransferFilterStatus] = useState<'all' | WalletTransfer['status']>('all');
+  const [transferFilterCurrency, setTransferFilterCurrency] = useState<'all' | string>('all');
   const [destinationLabel, setDestinationLabel] = useState('Primary payout account');
   const [destinationValue, setDestinationValue] = useState('');
   const [destinationCurrency, setDestinationCurrency] = useState('USD');
@@ -155,6 +159,24 @@ export function RewardHistoryPage() {
     'gift_cards',
     'manual_payout',
   ];
+  const allowedTransferTargets = getAllowedTransferTargets(transferFrom);
+  const transferCurrencyOptions = useMemo(() => {
+    const currencies = new Set<string>([settings?.currency ?? 'USD']);
+    for (const item of transfers) currencies.add(item.currency);
+    return ['all', ...Array.from(currencies).filter(Boolean)];
+  }, [settings?.currency, transfers]);
+
+  const filteredTransfers = useMemo(() => {
+    return transfers.filter((transfer) => {
+      const walletTypeMatches =
+        transferFilterWalletType === 'all' ||
+        transfer.fromWalletAccountId === transferFilterWalletType ||
+        transfer.toWalletAccountId === transferFilterWalletType;
+      const statusMatches = transferFilterStatus === 'all' || transfer.status === transferFilterStatus;
+      const currencyMatches = transferFilterCurrency === 'all' || transfer.currency === transferFilterCurrency;
+      return walletTypeMatches && statusMatches && currencyMatches;
+    });
+  }, [transferFilterCurrency, transferFilterStatus, transferFilterWalletType, transfers]);
 
   const handleWithdraw = async () => {
     if (!profile) return;
@@ -263,8 +285,37 @@ export function RewardHistoryPage() {
               <a href="#internal-transfer" className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white transition hover:border-mint/30 hover:bg-mint/10">
                 Move funds
               </a>
+                <div className="mt-4 grid gap-3 md:grid-cols-3">
+                  <label className="grid gap-2">
+                    <span className="text-sm text-mist/70">Wallet type</span>
+                    <select className="input-base" value={transferFilterWalletType} onChange={(event) => setTransferFilterWalletType(event.target.value as 'all' | WalletAccountType)}>
+                      <option value="all">All wallets</option>
+                      {walletAccountTypes.map((value) => <option key={value} value={value}>{walletAccountLabels[value]}</option>)}
+                    </select>
+                  </label>
+                  <label className="grid gap-2">
+                    <span className="text-sm text-mist/70">Status</span>
+                    <select className="input-base" value={transferFilterStatus} onChange={(event) => setTransferFilterStatus(event.target.value as 'all' | WalletTransfer['status'])}>
+                      <option value="all">All statuses</option>
+                      <option value="completed">Completed</option>
+                      <option value="pending">Pending</option>
+                      <option value="failed">Failed</option>
+                      <option value="cancelled">Cancelled</option>
+                    </select>
+                  </label>
+                  <label className="grid gap-2">
+                    <span className="text-sm text-mist/70">Currency</span>
+                    <select className="input-base" value={transferFilterCurrency} onChange={(event) => setTransferFilterCurrency(event.target.value)}>
+                      {transferCurrencyOptions.map((value) => (
+                        <option key={value} value={value}>
+                          {value === 'all' ? 'All currencies' : value}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
               <a href="#wallet-summary" className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white transition hover:border-mint/30 hover:bg-mint/10">
-                Review earnings
+                  {filteredTransfers.length ? filteredTransfers.map((transfer) => (
               </a>
             </div>
           </div>
@@ -318,6 +369,20 @@ export function RewardHistoryPage() {
           </div>
         </div>
 
+        <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          {walletAccountTypes.map((walletType) => {
+            const rule = walletOperationalRules[walletType];
+
+            return (
+              <div key={walletType} className="rounded-xl border border-white/10 bg-white/[0.04] p-4 shadow-soft">
+                <p className="text-sm uppercase tracking-[0.18em] text-mist/60">{rule.label}</p>
+                <p className="mt-2 text-sm text-white/90">{rule.description}</p>
+                <p className="mt-2 text-xs text-mist/60">{rule.withdrawable ? 'Withdrawable directly' : `Transfer to ${getAllowedTransferTargets(walletType).map((value) => walletOperationalRules[value].label).join(', ') || 'none'}`}</p>
+              </div>
+            );
+          })}
+        </div>
+
         <div className="mt-6 grid gap-4 xl:grid-cols-[1fr_0.8fr]">
           <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 shadow-soft">
             <p className="text-sm uppercase tracking-[0.2em] text-mint/70">Internal transfer</p>
@@ -326,13 +391,13 @@ export function RewardHistoryPage() {
               <label className="grid gap-2">
                 <span className="text-sm text-mist/70">From wallet</span>
                 <select className="input-base" value={transferFrom} onChange={(event) => setTransferFrom(event.target.value as WalletAccountType)}>
-                  {walletAccountTypes.map((value) => <option key={value} value={value}>{walletAccountLabels[value]}</option>)}
+                  {walletTransferSources.map((value) => <option key={value} value={value}>{walletAccountLabels[value]}</option>)}
                 </select>
               </label>
               <label className="grid gap-2">
                 <span className="text-sm text-mist/70">To wallet</span>
                 <select className="input-base" value={transferTo} onChange={(event) => setTransferTo(event.target.value as WalletAccountType)}>
-                  {walletAccountTypes.map((value) => <option key={value} value={value}>{walletAccountLabels[value]}</option>)}
+                  {allowedTransferTargets.map((value) => <option key={value} value={value}>{walletAccountLabels[value]}</option>)}
                 </select>
               </label>
               <label className="grid gap-2 md:col-span-2">
@@ -343,6 +408,9 @@ export function RewardHistoryPage() {
                 <span className="text-sm text-mist/70">Note</span>
                 <input className="input-base" value={transferNote} onChange={(event) => setTransferNote(event.target.value)} />
               </label>
+              <p className="md:col-span-2 text-xs text-mist/60">
+                {allowedTransferTargets.length ? `Valid destinations: ${allowedTransferTargets.map((value) => walletOperationalRules[value].label).join(', ')}` : 'This wallet cannot transfer funds.'}
+              </p>
             </div>
             <div className="mt-4 flex flex-wrap gap-3">
               <Button onClick={() => void handleTransfer()} disabled={isSubmitting}>
@@ -548,7 +616,7 @@ export function RewardHistoryPage() {
                   <p className="mt-2">{formatCurrency(transfer.amount, transfer.currency)}</p>
                   <p className="text-xs text-mist/60">{transfer.note ?? 'Wallet transfer'} · {transfer.fromWalletAccountId} → {transfer.toWalletAccountId}</p>
                 </div>
-              )) : <p className="text-sm text-mist/60">No wallet transfers yet.</p>}
+              )) : <p className="text-sm text-mist/60">No wallet transfers matched the current filters.</p>}
             </div>
           </Card>
 

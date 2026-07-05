@@ -9,6 +9,7 @@ import {
   resetUserPassword,
   suspendUser,
   updateProfile,
+  updateMemberPlan,
   verifyUser,
 } from '@/services/api/auth';
 
@@ -38,6 +39,7 @@ export function UsersManagementPage(): JSX.Element {
   const [displayName, setDisplayName] = useState('');
   const [reason, setReason] = useState('');
   const [adjustment, setAdjustment] = useState('25');
+  const [memberPlanTier, setMemberPlanTier] = useState('1');
 
   const selectedUser = useMemo(() => users.find((user) => user.id === selectedUserId) ?? null, [selectedUserId, users]);
 
@@ -61,6 +63,10 @@ export function UsersManagementPage(): JSX.Element {
   useEffect(() => {
     setDisplayName(selectedUser?.fullName ?? '');
   }, [selectedUser]);
+
+  useEffect(() => {
+    setMemberPlanTier(String(selectedUser?.levelTier ?? 1));
+  }, [selectedUser?.levelTier, selectedUserId]);
 
   const handleAction = async (action: () => Promise<void>) => {
     try {
@@ -148,6 +154,14 @@ export function UsersManagementPage(): JSX.Element {
                 <span>Wallet adjustment</span>
                 <input className="input-base" type="number" value={adjustment} onChange={(event) => setAdjustment(event.target.value)} />
               </label>
+              <label className="grid gap-2">
+                <span>Member plan</span>
+                <select className="input-base" value={memberPlanTier} onChange={(event) => setMemberPlanTier(event.target.value)}>
+                  <option value="1">Starter</option>
+                  <option value="2">Balanced</option>
+                  <option value="3">Premium</option>
+                </select>
+              </label>
               <div className="space-y-2 rounded-xl border border-white/10 bg-white/5 p-4">
                 <p>Wallet: {formatCurrency(selectedUser.walletBalance)}</p>
                 <p>Rewards: {formatCurrency(selectedUser.rewardBalance)}</p>
@@ -158,6 +172,9 @@ export function UsersManagementPage(): JSX.Element {
               <div className="flex flex-wrap gap-2">
                 <button type="button" className="rounded-xl bg-ember px-4 py-2 font-medium text-ink shadow-[0_10px_30px_rgba(201,130,78,0.2)]" onClick={() => void handleAction(() => updateProfile(selectedUser.id, { fullName: displayName, twoFactorEnabled: selectedUser.twoFactorEnabled }))}>
                   Save profile
+                </button>
+                <button type="button" className="rounded-xl border border-white/10 px-4 py-2 hover:bg-white/5" onClick={() => void handleAction(() => updateMemberPlan(selectedUser.id, Number(memberPlanTier)))}>
+                  Update plan
                 </button>
                 <button type="button" className="rounded-xl border border-white/10 px-4 py-2 hover:bg-white/5" onClick={() => void handleAction(() => adjustWalletBalance(selectedUser.id, Number(adjustment), reason || 'Manual balance adjustment'))}>
                   Adjust balance

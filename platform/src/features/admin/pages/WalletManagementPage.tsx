@@ -4,7 +4,15 @@ import { useQuery } from '@tanstack/react-query';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Skeleton } from '@/components/ui/Skeleton';
-import { applyWalletAdjustment, listPendingWithdrawalRequests, listWalletAccounts, listWalletAuditLogs, listWalletSettings, listWalletTransactions } from '@/services/api/wallet';
+import {
+  applyWalletAdjustment,
+  listPendingWithdrawalRequests,
+  listWalletAccounts,
+  listWalletAuditLogs,
+  listWalletSettings,
+  listWalletTransactions,
+  reconcileWalletBalances,
+} from '@/services/api/wallet';
 import type { WalletAccountType } from '@/types';
 import { walletAccountTypes } from '@/types';
 
@@ -18,7 +26,7 @@ function formatDate(value: string): string {
 
 function statusTone(status: string): string {
   if (status === 'approved' || status === 'completed' || status === 'paid') return 'text-emerald-300 border-emerald-500/20 bg-emerald-500/10';
-  if (status === 'processing' || status === 'pending') return 'text-amber-300 border-amber-500/20 bg-amber-500/10';
+  if (status === 'processing' || status === 'pending' || status === 'held') return 'text-amber-300 border-amber-500/20 bg-amber-500/10';
   return 'text-rose-300 border-rose-500/20 bg-rose-500/10';
 }
 
@@ -35,7 +43,11 @@ export function WalletManagementPage(): JSX.Element {
   const [adjustmentWalletType, setAdjustmentWalletType] = useState<WalletAccountType>('main');
   const [adjustmentAmount, setAdjustmentAmount] = useState('100');
   const [adjustmentReason, setAdjustmentReason] = useState('Manual admin adjustment');
+  const [walletTypeFilter, setWalletTypeFilter] = useState<'all' | WalletAccountType>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | string>('all');
+  const [currencyFilter, setCurrencyFilter] = useState<'all' | string>('all');
   const [isAdjusting, setIsAdjusting] = useState(false);
+  const [isReconciling, setIsReconciling] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   const { data, isLoading, error, refetch } = useQuery({
@@ -61,7 +73,7 @@ export function WalletManagementPage(): JSX.Element {
     const accounts = data?.accounts ?? [];
 
     return {
-      pendingWithdrawals: withdrawals.filter((item) => item.status === 'pending').length,
+      pendingWithdrawals: withdrawals.filter((item) => item.status === 'pending' || item.status === 'held').length,
       processingWithdrawals: withdrawals.filter((item) => item.status === 'processing').length,
       approvedWithdrawals: withdrawals.filter((item) => item.status === 'approved' || item.status === 'completed' || item.status === 'paid').length,
       transactionCount: transactions.length,
@@ -69,6 +81,51 @@ export function WalletManagementPage(): JSX.Element {
       totalBalance: accounts.reduce((sum, account) => sum + account.availableBalance, 0),
     };
   }, [data]);
+
+  const currencyOptions = useMemo(() => {
+    const currencies = new Set<string>();
+    currencies.add(data.settings.currency);
+
+    for (const account of data.accounts ?? []) currencies.add(account.currency);
+    for (const transaction of data.transactions ?? []) currencies.add(transaction.currency);
+    for (const withdrawal of data.withdrawals ?? []) currencies.add(withdrawal.currency);
+
+    return ['all', ...Array.from(currencies).filter(Boolean)];
+  }, [data.accounts, data.settings.currency, data.transactions, data.withdrawals]);
+
+  const filteredAccounts = useMemo(() => {
+    return (data.accounts ?? []).filter((account) => {
+      const walletTypeMatches = walletTypeFilter === 'all' || account.walletType === walletTypeFilter;
+      const currencyMatches = currencyFilter === 'all' || account.currency === currencyFilter;
+      return walletTypeMatches && currencyMatches;
+    });
+  }, [currencyFilter, data.accounts, walletTypeFilter]);
+
+  const filteredTransactions = useMemo(() => {
+    return (data.transactions ?? []).filter((transaction) => {
+      const walletTypeMatches = walletTypeFilter === 'all' || transaction.walletType === walletTypeFilter || transaction.counterpartyWalletType === walletTypeFilter;
+      const currencyMatches = currencyFilter === 'all' || transaction.currency === currencyFilter;
+      const statusMatches = statusFilter === 'all' || transaction.status === statusFilter;
+      return walletTypeMatches && currencyMatches && statusMatches;
+    });
+  }, [currencyFilter, data.transactions, statusFilter, walletTypeFilter]);
+
+  const filteredWithdrawals = useMemo(() => {
+    return (data.withdrawals ?? []).filter((withdrawal) => {
+      const currencyMatches = currencyFilter === 'all' || withdrawal.currency === currencyFilter;
+      const statusMatches = statusFilter === 'all' || withdrawal.status === statusFilter;
+      return currencyMatches && statusMatches;
+    });
+  }, [currencyFilter, data.withdrawals, statusFilter]);
+
+  const filteredAuditLogs = useMemo(() => {
+    return (data.auditLogs ?? []).filter((item) => {
+      const walletTypeMatches = walletTypeFilter === 'all' || item.walletType === walletTypeFilter;
+      const currencyMatches = currencyFilter === 'all' || item.currency === currencyFilter;
+      const statusMatches = statusFilter === 'all' || item.status === statusFilter;
+      return walletTypeMatches && currencyMatches && statusMatches;
+    });
+  }, [currencyFilter, data.auditLogs, statusFilter, walletTypeFilter]);
 
   const handleAdjustment = async () => {
     if (!adjustmentUserId.trim()) {
@@ -95,6 +152,26 @@ export function WalletManagementPage(): JSX.Element {
       setStatusMessage(error instanceof Error ? error.message : 'Unable to apply wallet adjustment.');
     } finally {
       setIsAdjusting(false);
+    }
+  };
+
+  const handleReconcile = async () => {
+    const userId = adjustmentUserId.trim() || undefined;
+    setIsReconciling(true);
+    setStatusMessage(null);
+
+    try {
+      const result = await reconcileWalletBalances(userId);
+      setStatusMessage(
+        result.userId
+          ? `Reconciled ${result.reconciledCount} wallet profile(s) for ${result.userId}. Adjusted ${result.adjustedCount} account(s).`
+          : `Reconciled ${result.reconciledCount} wallet profile(s). Adjusted ${result.adjustedCount} account(s).`,
+      );
+      await refetch();
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : 'Unable to run wallet reconciliation.');
+    } finally {
+      setIsReconciling(false);
     }
   };
 
@@ -154,6 +231,51 @@ export function WalletManagementPage(): JSX.Element {
       </Card>
 
       <Card className="border border-border bg-surface-elevated p-6">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-sm uppercase tracking-[0.24em] text-accent/70">Review filters</p>
+            <h2 className="mt-2 text-2xl font-semibold text-foreground">Wallet type, status, and currency</h2>
+          </div>
+          <p className="text-sm text-muted">Use these filters to review the exact subset of balances, transactions, withdrawals, and audit logs you need.</p>
+        </div>
+        <div className="mt-4 grid gap-4 md:grid-cols-3">
+          <label className="grid gap-2">
+            <span className="text-sm text-muted">Wallet type</span>
+            <select className="input-base" value={walletTypeFilter} onChange={(event) => setWalletTypeFilter(event.target.value as 'all' | WalletAccountType)}>
+              <option value="all">All wallets</option>
+              {walletAccountTypes.map((value) => <option key={value} value={value}>{walletAccountLabels[value]}</option>)}
+            </select>
+          </label>
+          <label className="grid gap-2">
+            <span className="text-sm text-muted">Status</span>
+            <select className="input-base" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+              <option value="all">All statuses</option>
+              <option value="pending">Pending</option>
+              <option value="held">Held</option>
+              <option value="processing">Processing</option>
+              <option value="approved">Approved</option>
+              <option value="completed">Completed</option>
+              <option value="rejected">Rejected</option>
+              <option value="cancelled">Cancelled</option>
+              <option value="available">Available</option>
+              <option value="reserved">Reserved</option>
+              <option value="failed">Failed</option>
+            </select>
+          </label>
+          <label className="grid gap-2">
+            <span className="text-sm text-muted">Currency</span>
+            <select className="input-base" value={currencyFilter} onChange={(event) => setCurrencyFilter(event.target.value)}>
+              {currencyOptions.map((value) => (
+                <option key={value} value={value}>
+                  {value === 'all' ? 'All currencies' : value}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </Card>
+
+      <Card className="border border-border bg-surface-elevated p-6">
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="text-sm uppercase tracking-[0.24em] text-accent/70">Wallet balances</p>
@@ -162,7 +284,7 @@ export function WalletManagementPage(): JSX.Element {
           <p className="text-sm text-muted">Total balance {formatCurrency(summary.totalBalance, currency)}</p>
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-          {(data.accounts ?? []).map((account) => (
+          {filteredAccounts.map((account) => (
             <div key={account.id} className="rounded-xl border border-border bg-surface p-4">
               <p className="text-xs uppercase tracking-[0.2em] text-muted">{walletAccountLabels[account.walletType]}</p>
               <p className="mt-2 text-2xl font-bold text-foreground">{formatCurrency(account.availableBalance, account.currency)}</p>
@@ -170,6 +292,7 @@ export function WalletManagementPage(): JSX.Element {
             </div>
           ))}
         </div>
+        {!filteredAccounts.length ? <p className="mt-3 text-sm text-muted">No wallet accounts matched the current filters.</p> : null}
       </Card>
 
       <Card className="border border-border bg-surface-elevated p-6">
@@ -204,6 +327,9 @@ export function WalletManagementPage(): JSX.Element {
           <Button onClick={() => void handleAdjustment()} disabled={isAdjusting}>
             {isAdjusting ? 'Applying...' : 'Apply adjustment'}
           </Button>
+          <Button onClick={() => void handleReconcile()} disabled={isReconciling}>
+            {isReconciling ? 'Reconciling...' : 'Reconcile wallets'}
+          </Button>
           <Button variant="ghost" onClick={() => { setAdjustmentAmount('100'); setAdjustmentReason('Manual admin adjustment'); }}>
             Reset
           </Button>
@@ -227,7 +353,7 @@ export function WalletManagementPage(): JSX.Element {
               </tr>
             </thead>
             <tbody>
-              {data.withdrawals.map((withdrawal) => (
+              {filteredWithdrawals.map((withdrawal) => (
                 <tr key={withdrawal.id} className="border-t border-border">
                   <td className="px-6 py-4">
                     <p className="font-medium text-foreground">{withdrawal.destinationLabel}</p>
@@ -241,10 +367,10 @@ export function WalletManagementPage(): JSX.Element {
                   <td className="px-6 py-4 text-foreground/85">{formatDate(withdrawal.createdAt)}</td>
                 </tr>
               ))}
-              {!data.withdrawals.length ? (
+              {!filteredWithdrawals.length ? (
                 <tr>
                   <td colSpan={5} className="px-6 py-10 text-center text-sm text-muted">
-                    No pending withdrawals were found.
+                    No withdrawals matched the current filters.
                   </td>
                 </tr>
               ) : null}
@@ -269,7 +395,7 @@ export function WalletManagementPage(): JSX.Element {
               </tr>
             </thead>
             <tbody>
-              {data.transactions.map((transaction) => (
+              {filteredTransactions.map((transaction) => (
                 <tr key={transaction.id} className="border-t border-border">
                   <td className="px-6 py-4 text-foreground/85">{transaction.referenceId ?? transaction.id}</td>
                   <td className="px-6 py-4 text-foreground/85">{transaction.transactionType.replace(/_/g, ' ')}</td>
@@ -278,10 +404,10 @@ export function WalletManagementPage(): JSX.Element {
                   <td className="px-6 py-4 text-foreground/85">{formatDate(transaction.createdAt)}</td>
                 </tr>
               ))}
-              {!data.transactions.length ? (
+              {!filteredTransactions.length ? (
                 <tr>
                   <td colSpan={5} className="px-6 py-10 text-center text-sm text-muted">
-                    No wallet transactions were found.
+                    No transactions matched the current filters.
                   </td>
                 </tr>
               ) : null}
@@ -306,7 +432,7 @@ export function WalletManagementPage(): JSX.Element {
               </tr>
             </thead>
             <tbody>
-              {(data.auditLogs ?? []).map((item) => (
+              {filteredAuditLogs.map((item) => (
                 <tr key={item.id} className="border-t border-border">
                   <td className="px-6 py-4 text-foreground/85">{item.eventType.replace(/_/g, ' ')}</td>
                   <td className="px-6 py-4 text-foreground/85">{item.walletType ? walletAccountLabels[item.walletType] : item.entryType.replace(/_/g, ' ')}</td>
@@ -315,10 +441,10 @@ export function WalletManagementPage(): JSX.Element {
                   <td className="px-6 py-4 text-foreground/85">{formatDate(item.createdAt)}</td>
                 </tr>
               ))}
-              {!data.auditLogs.length ? (
+              {!filteredAuditLogs.length ? (
                 <tr>
                   <td colSpan={5} className="px-6 py-10 text-center text-sm text-muted">
-                    No audit log entries were found.
+                    No audit log entries matched the current filters.
                   </td>
                 </tr>
               ) : null}

@@ -542,7 +542,7 @@ export interface WithdrawalRequest {
   exchangeRate: number;
   netAmount: number;
   approvalWorkflow: WalletApprovalWorkflow;
-  status: 'pending' | 'approved' | 'rejected' | 'processing' | 'completed' | 'cancelled';
+  status: 'pending' | 'held' | 'approved' | 'rejected' | 'processing' | 'completed' | 'cancelled';
   scheduledFor?: string | null;
   adminNotes?: string | null;
   reviewedBy?: string | null;

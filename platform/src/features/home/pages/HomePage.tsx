@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/DesignSystem';
 import { buildDefaultCmsConfig, listCmsConfig } from '@/services/api/cms';
 import { defaultCustomizationConfig } from '@/lib/customization';
 import { listAdminConsoleConfig } from '@/services/api/admin';
+import { listCampaigns } from '@/services/api/campaigns';
 
 const trustedAdvertisers = ['Northstar Capital', 'Harbor Health', 'BrightEdge Retail', 'Atlas Energy', 'Summit Finance', 'Pulse Media'];
 
@@ -94,6 +96,11 @@ export function HomePage(): JSX.Element {
   const [trustBadges, setTrustBadges] = useState<string[]>(['SSL verified', 'Audit logs', 'Verified advertisers']);
   const [statusIndicators, setStatusIndicators] = useState<string[]>(['System status live', 'Transparent payout history', 'Professional certification ready']);
 
+  const { data: liveCampaigns = [], isLoading: campaignsLoading } = useQuery({
+    queryKey: ['home-campaigns'],
+    queryFn: listCampaigns,
+  });
+
   useEffect(() => {
     void listCmsConfig()
       .then((config) => {
@@ -150,16 +157,17 @@ export function HomePage(): JSX.Element {
 
   const normalizedQuery = query.trim().toLowerCase();
 
-  const filteredCampaigns = useMemo(
+  const featuredCampaigns = useMemo(
     () =>
-      featuredItems.filter((item) => {
-        if (!normalizedQuery) {
-          return true;
-        }
-
-        return [item.title, item.body, item.meta ?? ''].some((field) => field.toLowerCase().includes(normalizedQuery));
-      }),
-    [featuredItems, normalizedQuery],
+      (liveCampaigns.length
+        ? liveCampaigns.slice(0, 6).map((campaign) => ({
+            title: campaign.title,
+            body: campaign.description ?? campaign.instructions,
+            meta: campaign.campaignType.replace(/_/g, ' '),
+          }))
+        : featuredItems
+      ).filter((item) => [item.title, item.body, item.meta ?? ''].some((field) => field.toLowerCase().includes(normalizedQuery))),
+    [featuredItems, liveCampaigns, normalizedQuery],
   );
 
   return (
@@ -333,7 +341,7 @@ export function HomePage(): JSX.Element {
                   <p className="text-xs uppercase tracking-[0.3em] text-muted">Quick search</p>
                   <p className="mt-1 text-sm text-foreground/80">Filter featured campaigns instantly.</p>
                 </div>
-                <Badge tone={normalizedQuery ? 'success' : 'neutral'}>{normalizedQuery ? `${filteredCampaigns.length} matches` : 'Live preview'}</Badge>
+                <Badge tone={normalizedQuery ? 'success' : 'neutral'}>{normalizedQuery ? `${featuredCampaigns.length} matches` : campaignsLoading ? 'Loading live campaigns' : 'Live preview'}</Badge>
               </div>
 
               <label className="block">
@@ -358,8 +366,8 @@ export function HomePage(): JSX.Element {
               <div className="rounded-3xl border border-border bg-surface/80 p-5">
                 <p className="text-xs uppercase tracking-[0.3em] text-muted">Featured campaigns</p>
                 <div id="campaigns" className="mt-4 grid gap-3">
-                  {filteredCampaigns.length ? (
-                    filteredCampaigns.slice(0, 3).map((item) => (
+                  {featuredCampaigns.length ? (
+                    featuredCampaigns.slice(0, 3).map((item) => (
                       <div key={`${item.title}-${item.meta ?? 'campaign'}`} className="rounded-2xl border border-border bg-surface-elevated p-4 transition duration-200 hover:-translate-y-0.5 hover:border-accent/40">
                         <div className="flex items-start justify-between gap-4">
                           <div>
@@ -373,7 +381,7 @@ export function HomePage(): JSX.Element {
                     ))
                   ) : (
                     <div className="rounded-2xl border border-dashed border-border bg-surface/70 p-6 text-center text-sm text-muted">
-                      No campaigns match that search. Try a broader term or clear the query.
+                      {campaignsLoading ? 'Loading live campaigns from Supabase...' : 'No campaigns match that search. Try a broader term or clear the query.'}
                     </div>
                   )}
                 </div>

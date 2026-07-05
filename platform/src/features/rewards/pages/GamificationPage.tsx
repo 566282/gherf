@@ -10,6 +10,7 @@ import {
   gamificationModules,
   listGamificationConfig,
   listGamificationPlayerState,
+  resolveDailyTaskPlanForLevel,
   upsertGamificationPlayerState,
   type GamificationConfig,
   type GamificationPlayerState,
@@ -195,6 +196,10 @@ export function GamificationPage() {
   const xpThreshold = Math.max(1, config.xpPerLevel);
   const xpIntoLevel = state.xp % xpThreshold;
   const xpProgress = progressValue(xpIntoLevel, xpThreshold);
+  const effectiveDailyTaskPlan = useMemo(
+    () => resolveDailyTaskPlanForLevel(config.dailyTaskPlan, profile?.levelTier ?? 1),
+    [config.dailyTaskPlan, profile?.levelTier],
+  );
 
   const leaderboards = useMemo(() => {
     const userEntry: LeaderboardEntry = {
@@ -288,12 +293,12 @@ export function GamificationPage() {
   const completeQuest = (questId: string) => {
     setState((current) => ({
       ...current,
-      xp: current.xp + 30,
+      xp: current.xp + effectiveDailyTaskPlan.xpReward,
       quests: current.quests.map((quest) =>
         quest.id === questId ? { ...quest, progress: quest.target, completed: true } : quest,
       ),
     }));
-    setStatusMessage('Quest completed and XP credited.');
+    setStatusMessage(`${effectiveDailyTaskPlan.title} completed. +${effectiveDailyTaskPlan.xpReward} XP credited.`);
     triggerConfetti();
   };
 
@@ -453,6 +458,20 @@ export function GamificationPage() {
               <p className="text-sm text-mist/60">Streak bonus</p>
               <p className="mt-2 text-xl font-semibold text-white">+{config.streakBonusPerDay} XP per day</p>
               <p className="mt-1 text-sm text-mist/70">Higher streaks keep compounding rewards active.</p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4 md:col-span-2">
+              <p className="text-sm text-mist/60">Daily task plan</p>
+              <p className="mt-2 text-xl font-semibold text-white">{effectiveDailyTaskPlan.title}</p>
+              <p className="mt-1 text-sm text-mist/70">{effectiveDailyTaskPlan.description}</p>
+              <p className="mt-1 text-xs uppercase tracking-[0.2em] text-mint/70">Tailored for {profile?.levelLabel ?? 'Starter'} members</p>
+              <div className="mt-3 flex flex-wrap gap-2 text-xs text-mist/80">
+                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">Mode: {effectiveDailyTaskPlan.mode}</span>
+                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">Reward: {effectiveDailyTaskPlan.rewardLabel}</span>
+                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">Target: {effectiveDailyTaskPlan.completionTarget}</span>
+                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">Cooldown: {effectiveDailyTaskPlan.cooldownHours}h</span>
+                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">Max claims: {effectiveDailyTaskPlan.maxDailyClaims}</span>
+                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">XP: +{effectiveDailyTaskPlan.xpReward}</span>
+              </div>
             </div>
           </div>
 

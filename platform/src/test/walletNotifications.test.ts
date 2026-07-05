@@ -95,7 +95,7 @@ describe('withdrawal notifications', () => {
     notificationState.sendUserNotification.mockResolvedValue(undefined);
 
     supabaseState.single
-      .mockResolvedValueOnce({ data: { wallet_balance: 500, full_name: 'Ada Example', email: 'ada@example.com' }, error: null })
+      .mockResolvedValueOnce({ data: { wallet_balance: 500, full_name: 'Ada Example', email: 'ada@example.com', level_tier: 1, level_label: 'Starter' }, error: null })
       .mockResolvedValueOnce({ data: { id: 'tx-1' }, error: null })
       .mockResolvedValueOnce({
         data: {
@@ -154,6 +154,67 @@ describe('withdrawal notifications', () => {
       expect.objectContaining({
         title: 'Withdrawal pending',
         message: expect.stringContaining('Withdrawals are not allowed until Jul 8, 2026.'),
+      }),
+    );
+  });
+
+  it('holds withdrawals for starter users after four successful withdrawals', async () => {
+    supabaseState.in.mockResolvedValueOnce({ data: [{}, {}, {}, {}], error: null });
+    supabaseState.single
+      .mockResolvedValueOnce({ data: { wallet_balance: 500, full_name: 'Ada Example', email: 'ada@example.com', level_tier: 1, level_label: 'Starter' }, error: null })
+      .mockResolvedValueOnce({ data: { id: 'tx-3' }, error: null })
+      .mockResolvedValueOnce({
+        data: {
+          id: 'withdrawal-3',
+          user_id: 'user-1',
+          wallet_transaction_id: 'tx-3',
+          method: 'bank_transfer',
+          destination_label: 'Primary payout account',
+          destination_value: '9876543210',
+          destination_currency: 'USD',
+          currency: 'USD',
+          amount: 75,
+          processing_fee: 1.13,
+          exchange_rate: 1,
+          net_amount: 73.87,
+          approval_workflow: 'manual',
+          status: 'held',
+          scheduled_for: null,
+          admin_notes: null,
+          reviewed_by: null,
+          reviewed_at: null,
+          created_at: '2026-07-05T12:00:00.000Z',
+          updated_at: '2026-07-05T12:00:00.000Z',
+        },
+        error: null,
+      });
+
+    const result = await createWithdrawalRequest('user-1', {
+      amount: 75,
+      method: 'bank_transfer',
+      destinationLabel: 'Primary payout account',
+      destinationValue: '9876543210',
+      destinationCurrency: 'USD',
+      note: 'Plan-gated payout',
+    });
+
+    expect(result.status).toBe('held');
+    expect(notificationState.notifySuperAdmins).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Withdrawal placed on hold',
+        metadata: expect.objectContaining({
+          successfulWithdrawalCount: 4,
+          holdThreshold: 4,
+          memberPlanTier: 1,
+        }),
+      }),
+    );
+
+    expect(notificationState.sendUserNotification).toHaveBeenCalledWith(
+      'user-1',
+      expect.objectContaining({
+        title: 'Withdrawal on hold',
+        message: expect.stringContaining('This request is on hold until you upgrade your plan.'),
       }),
     );
   });

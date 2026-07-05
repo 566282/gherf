@@ -307,6 +307,65 @@ export function GamificationAdminPage() {
             </label>
           </div>
 
+          <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4">
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-sm uppercase tracking-[0.24em] text-mint/70">Daily task plan</p>
+                <h3 className="mt-1 text-xl font-semibold text-white">Customize the daily quest experience</h3>
+                <p className="mt-1 text-sm text-mist/70">Plan presets tune the quest for starter, balanced, premium, or custom engagement tiers.</p>
+              </div>
+              <label className="grid gap-2 min-w-[12rem]">
+                <span className="text-xs uppercase tracking-[0.2em] text-mist/60">Plan mode</span>
+                <select
+                  className="input-base"
+                  value={config.dailyTaskPlan.mode}
+                  onChange={(event) =>
+                    setConfig((current) => ({
+                      ...current,
+                      dailyTaskPlan: { ...current.dailyTaskPlan, mode: event.target.value as GamificationConfig['dailyTaskPlan']['mode'] },
+                    }))
+                  }
+                >
+                  <option value="starter">Starter</option>
+                  <option value="balanced">Balanced</option>
+                  <option value="premium">Premium</option>
+                  <option value="custom">Custom</option>
+                </select>
+              </label>
+            </div>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              <label className="grid gap-2">
+                <span className="text-sm text-mist/70">Task title</span>
+                <input className="input-base" value={config.dailyTaskPlan.title} onChange={(event) => setConfig((current) => ({ ...current, dailyTaskPlan: { ...current.dailyTaskPlan, title: event.target.value } }))} />
+              </label>
+              <label className="grid gap-2 xl:col-span-2">
+                <span className="text-sm text-mist/70">Task description</span>
+                <input className="input-base" value={config.dailyTaskPlan.description} onChange={(event) => setConfig((current) => ({ ...current, dailyTaskPlan: { ...current.dailyTaskPlan, description: event.target.value } }))} />
+              </label>
+              <label className="grid gap-2">
+                <span className="text-sm text-mist/70">Reward label</span>
+                <input className="input-base" value={config.dailyTaskPlan.rewardLabel} onChange={(event) => setConfig((current) => ({ ...current, dailyTaskPlan: { ...current.dailyTaskPlan, rewardLabel: event.target.value } }))} />
+              </label>
+              <label className="grid gap-2">
+                <span className="text-sm text-mist/70">XP reward</span>
+                <input className="input-base" type="number" min="0" step="1" value={config.dailyTaskPlan.xpReward} onChange={(event) => setConfig((current) => ({ ...current, dailyTaskPlan: { ...current.dailyTaskPlan, xpReward: Number(event.target.value) } }))} />
+              </label>
+              <label className="grid gap-2">
+                <span className="text-sm text-mist/70">Completion target</span>
+                <input className="input-base" type="number" min="1" step="1" value={config.dailyTaskPlan.completionTarget} onChange={(event) => setConfig((current) => ({ ...current, dailyTaskPlan: { ...current.dailyTaskPlan, completionTarget: Number(event.target.value) } }))} />
+              </label>
+              <label className="grid gap-2">
+                <span className="text-sm text-mist/70">Cooldown hours</span>
+                <input className="input-base" type="number" min="0" step="1" value={config.dailyTaskPlan.cooldownHours} onChange={(event) => setConfig((current) => ({ ...current, dailyTaskPlan: { ...current.dailyTaskPlan, cooldownHours: Number(event.target.value) } }))} />
+              </label>
+              <label className="grid gap-2">
+                <span className="text-sm text-mist/70">Max daily claims</span>
+                <input className="input-base" type="number" min="1" step="1" value={config.dailyTaskPlan.maxDailyClaims} onChange={(event) => setConfig((current) => ({ ...current, dailyTaskPlan: { ...current.dailyTaskPlan, maxDailyClaims: Number(event.target.value) } }))} />
+              </label>
+            </div>
+          </div>
+
           <div className="mt-6 flex flex-wrap gap-3">
             <Button onClick={() => void handleSave()} disabled={isSaving}>
               {isSaving ? 'Saving...' : 'Save gamification settings'}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildDefaultGamificationConfig, buildDefaultGamificationState, gamificationModules } from '@/services/api/gamification';
+import { buildDefaultGamificationConfig, buildDefaultGamificationState, gamificationModules, resolveDailyTaskPlanForLevel } from '@/services/api/gamification';
 
 describe('gamification configuration', () => {
   it('includes every engagement module with safe defaults', () => {
@@ -27,5 +27,15 @@ describe('gamification configuration', () => {
     expect(state.dailyClaimed).toBe(false);
     expect(state.quests).toHaveLength(3);
     expect(state.achievements).toHaveLength(4);
+  });
+
+  it('tunes the daily task plan for upgraded member tiers', () => {
+    const config = buildDefaultGamificationConfig();
+    const resolved = resolveDailyTaskPlanForLevel(config.dailyTaskPlan, 2);
+
+    expect(resolved.mode).toBe(config.dailyTaskPlan.mode);
+    expect(resolved.xpReward).toBeGreaterThan(config.dailyTaskPlan.xpReward);
+    expect(resolved.cooldownHours).toBeLessThanOrEqual(config.dailyTaskPlan.cooldownHours);
+    expect(resolved.title).toContain('balanced');
   });
 });

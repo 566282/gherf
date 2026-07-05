@@ -163,6 +163,13 @@ export interface ReferralBackfillValidationCheck {
   detail: string;
 }
 
+export interface ReferralSmokeReport {
+  signupPlan: ReferralSignupPlan;
+  releaseWindow: ReferralCommissionReleaseWindow;
+  approvalPolicy: ReferralCommissionApprovalPolicy;
+  backfillChecks: ReferralBackfillValidationCheck[];
+}
+
 type ReferralProgramRow = {
   id: string;
   slug: string;
@@ -455,6 +462,44 @@ export function buildReferralBackfillValidationChecks(input: {
       detail: backfilledLeaderboard ? 'Backfill leaderboard snapshots were written.' : 'No leaderboard snapshot rows were marked as backfill sourced.',
     },
   ];
+}
+
+export function buildReferralSmokeReport(input: {
+  program: Pick<ReferralProgram, 'id' | 'campaignSlug' | 'inviteBonusAmount' | 'tierOneCommissionPercent' | 'tierTwoCommissionPercent' | 'maxTierDepth' | 'milestoneConfig' | 'payoutDelayDays'>;
+  signup: {
+    referredProfileId: string;
+    referrerProfileId: string;
+    referralCode: string;
+    createdAt?: string;
+    referrerReferrerProfileId?: string | null;
+    duplicateAccount?: boolean;
+  };
+  commissionStatus?: string;
+  backfill: {
+    programs: Pick<ReferralProgram, 'slug' | 'metadata'>[];
+    attributions: Pick<ReferralAttribution, 'metadata'>[];
+    fraudFlags: Pick<ReferralFraudFlag, 'ruleKey' | 'metadata'>[];
+    leaderboard: Pick<ReferralLeaderboardSnapshot, 'metadata'>[];
+  };
+}): ReferralSmokeReport {
+  const signupPlan = buildReferralSignupPlan(input.program, input.signup);
+  const releaseWindow = getReferralCommissionReleaseWindow(input.signup.createdAt ?? new Date().toISOString(), input.program.payoutDelayDays);
+  const primaryCommission = signupPlan.commissions[0];
+  const approvalPolicy = getReferralCommissionApprovalPolicy({
+    commissionCreatedAt: input.signup.createdAt ?? new Date().toISOString(),
+    payoutDelayDays: input.program.payoutDelayDays,
+    amount: primaryCommission?.amount ?? 0,
+    status: input.commissionStatus ?? 'pending',
+    holdThreshold: input.program.inviteBonusAmount * 50,
+    escalationThreshold: input.program.inviteBonusAmount * 250,
+  });
+
+  return {
+    signupPlan,
+    releaseWindow,
+    approvalPolicy,
+    backfillChecks: buildReferralBackfillValidationChecks(input.backfill),
+  };
 }
 
 export function buildReferralSignupPlan(

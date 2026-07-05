@@ -1,6 +1,7 @@
 import { generateReferralCode, getUserLevel } from '@/lib/auth';
 import { env } from '@/lib/env';
 import { getDeviceFingerprintInput, getOrCreateSessionId, sanitizeEmail } from '@/lib/security';
+import { releaseWithdrawalHolds } from '@/services/api/wallet';
 import type {
   ActivityLogItem,
   AdminUserFilters,
@@ -479,6 +480,40 @@ export async function updateProfile(
     .single<ProfileRow>();
 
   if (error) throw error;
+  return mapProfile(data, data.email);
+}
+
+function getPlanLabelForTier(levelTier: number): string {
+  if (levelTier >= 3) {
+    return 'Premium';
+  }
+
+  if (levelTier >= 2) {
+    return 'Balanced';
+  }
+
+  return 'Starter';
+}
+
+export async function updateMemberPlan(userId: string, levelTier: number): Promise<UserProfile> {
+  const resolvedTier = Math.max(1, Math.round(levelTier));
+  const { data, error } = await supabase
+    .from('profiles')
+    .update({
+      level_tier: resolvedTier,
+      level_label: getPlanLabelForTier(resolvedTier),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', userId)
+    .select('id,email,full_name,avatar_url,role,status,is_active,is_email_verified,two_factor_enabled,referral_code,referred_by_code,wallet_balance,reward_balance,reward_history_count,unread_notifications_count,reputation_score,level_label,level_tier,badges,last_login_at')
+    .single<ProfileRow>();
+
+  if (error) throw error;
+
+  if (resolvedTier >= 2) {
+    await releaseWithdrawalHolds(userId, resolvedTier);
+  }
+
   return mapProfile(data, data.email);
 }
 

@@ -32,6 +32,8 @@
 
 - Deploy schema changes before dependent frontend features.
 - Verify login, logout, password reset, and role-based routes after deploy.
+- Smoke-test `/admin/ad-platform` with live campaign and analytics data, and confirm the loading and empty states still read clearly when the feed is unavailable.
+- Smoke-test campaign creation/edit links, moderation status updates, analytics filters, and CSV export on `/admin/ad-platform`.
 - Confirm error logging and analytics endpoints still resolve.
 - Smoke-test mobile and desktop layouts on the live URL.
 - Validate that a withdrawal request immediately creates a user notice and a super-admin alert, and that the user message states withdrawals remain blocked until the fixed date.

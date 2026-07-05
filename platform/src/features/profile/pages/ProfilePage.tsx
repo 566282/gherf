@@ -13,6 +13,7 @@ import {
   revokeSession,
   unenrollMfaFactor,
   updateProfile,
+  updateMemberPlan,
   verifyTotpEnrollment,
 } from '@/services/api/auth';
 import type { DeviceSession, MfaFactor, NotificationItem, RewardLedgerItem, WalletActivity } from '@/types/auth';
@@ -28,6 +29,7 @@ export function ProfilePage(): JSX.Element {
   const [totpQrCode, setTotpQrCode] = useState<string | null>(null);
   const [totpCode, setTotpCode] = useState('');
   const [securityMessage, setSecurityMessage] = useState<string | null>(null);
+  const [planMessage, setPlanMessage] = useState<string | null>(null);
   const [displayName, setDisplayName] = useState(profile?.fullName ?? '');
   const [saving, setSaving] = useState(false);
 
@@ -68,6 +70,18 @@ export function ProfilePage(): JSX.Element {
       await refreshProfile();
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleUpgradePlan = async (targetTier: number) => {
+    setPlanMessage(null);
+
+    try {
+      await updateMemberPlan(profile.id, targetTier);
+      await refreshProfile();
+      setPlanMessage(targetTier >= 3 ? 'Premium plan activated. Withdrawal holds are cleared.' : 'Member plan upgraded. Withdrawal holds are cleared.');
+    } catch (error) {
+      setPlanMessage(error instanceof Error ? error.message : 'Unable to upgrade plan right now.');
     }
   };
 
@@ -153,6 +167,7 @@ export function ProfilePage(): JSX.Element {
             <span>Referral code: {profile.referralCode}</span>
             <span>Wallet balance: {formatCurrency(profile.walletBalance)}</span>
             <span>Reputation: {profile.reputationScore}</span>
+            <span>Member plan: {profile.levelLabel} · Tier {profile.levelTier}</span>
           </div>
         </div>
         <div className="mt-6 grid gap-3 md:grid-cols-2">
@@ -173,10 +188,17 @@ export function ProfilePage(): JSX.Element {
           <button className="rounded-xl bg-ember px-4 py-2 font-medium text-ink shadow-[0_10px_30px_rgba(201,130,78,0.2)] disabled:opacity-60" onClick={() => void handleSave()} disabled={saving}>
             {saving ? 'Saving...' : 'Save profile'}
           </button>
+          <button className="rounded-xl border border-white/10 px-4 py-2 text-mist hover:bg-white/5" onClick={() => void handleUpgradePlan(2)}>
+            Upgrade to Balanced
+          </button>
+          <button className="rounded-xl border border-white/10 px-4 py-2 text-mist hover:bg-white/5" onClick={() => void handleUpgradePlan(3)}>
+            Upgrade to Premium
+          </button>
           <button className="rounded-xl border border-white/10 px-4 py-2 text-mist hover:bg-white/5" onClick={() => void refreshProfile()}>
             Refresh
           </button>
         </div>
+        {planMessage ? <p className="mt-3 text-sm text-mint">{planMessage}</p> : null}
       </Card>
 
       <div className="grid gap-6 lg:grid-cols-3">

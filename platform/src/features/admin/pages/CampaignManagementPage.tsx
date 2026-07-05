@@ -291,7 +291,7 @@ export function CampaignManagementPage() {
           <div className="rounded-2xl border border-dashed border-white/10 bg-white/5 p-8 text-center">
             <p className="text-lg font-semibold text-white">No campaigns yet</p>
             <p className="mt-2 text-sm text-mist">Create the first campaign and define its dynamic engine config.</p>
-            <Button className="mt-4" onClick={() => navigate(`/business/campaigns/new?type=${campaignTypeOptions[0].value}`)}>
+            <Button className="mt-4" onClick={() => navigate(`/business/campaigns/new?type=${firstCampaignType}`)}>
               Create campaign
             </Button>
           </div>

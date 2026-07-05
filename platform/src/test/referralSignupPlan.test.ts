@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildReferralSignupPlan, getReferralCommissionReleaseWindow } from '@/services/api/referrals';
+import { buildReferralSmokeReport, buildReferralSignupPlan, getReferralCommissionReleaseWindow } from '@/services/api/referrals';
 
 describe('buildReferralSignupPlan', () => {
   it('builds attribution, commission, and leaderboard inputs for a single referral signup', () => {
@@ -83,5 +83,39 @@ describe('buildReferralSignupPlan', () => {
 
     expect(window.unlockAt).toBe('2026-07-08T00:00:00.000Z');
     expect(window.eligible).toBe(false);
+  });
+
+  it('builds a referral smoke report for signup and backfill validation', () => {
+    const report = buildReferralSmokeReport({
+      program: {
+        id: 'program-1',
+        campaignSlug: 'referral_campaigns',
+        inviteBonusAmount: 4,
+        tierOneCommissionPercent: 8,
+        tierTwoCommissionPercent: 3,
+        maxTierDepth: 2,
+        milestoneConfig: [{ key: 'first_referral', label: 'First referral', threshold: 1, rewardAmount: 4 }],
+        payoutDelayDays: 7,
+      },
+      signup: {
+        referredProfileId: 'profile-new',
+        referrerProfileId: 'profile-referrer',
+        referralCode: 'REF-1234',
+        createdAt: '2026-07-05T00:00:00.000Z',
+        referrerReferrerProfileId: 'profile-parent',
+      },
+      commissionStatus: 'pending',
+      backfill: {
+        programs: [{ slug: 'default-referral-program', metadata: { source: 'migration_014_referral_engine_backfill' } }],
+        attributions: [{ metadata: { source: 'backfill' } }],
+        fraudFlags: [{ ruleKey: 'invalid_referral_code', metadata: { source: 'backfill' } }],
+        leaderboard: [{ metadata: { source: 'backfill' } }],
+      },
+    });
+
+    expect(report.signupPlan.attribution.referrerProfileId).toBe('profile-referrer');
+    expect(report.releaseWindow.eligible).toBe(false);
+    expect(report.approvalPolicy.requiresHold).toBe(true);
+    expect(report.backfillChecks.every((check) => check.passed)).toBe(true);
   });
 });

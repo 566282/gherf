@@ -267,11 +267,11 @@ const enterpriseDashboardModules = [
     description: 'Ad format control, targeting, optimization, and fraud-aware delivery.',
   },
   {
-    moduleKey: 'video-management',
-    title: 'Video Management',
+    moduleKey: 'ad-platform',
+    title: 'Ad Platform',
     section: 'Content',
-    path: '/admin/video-management',
-    description: 'Video creative review, publishing windows, lifecycle states, and moderation.',
+    path: '/admin/ad-platform',
+    description: 'Ad format control, audience targeting, scheduling, analytics, and fraud-aware delivery.',
   },
   {
     moduleKey: 'reward-settings',

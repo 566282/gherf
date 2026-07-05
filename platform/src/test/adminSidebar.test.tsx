@@ -40,7 +40,7 @@ describe('AdminSidebar', () => {
     const adminRoutes = [
       ['Dashboard Analytics', '/admin/dashboard-analytics'],
       ['Ad Management', '/admin/ad-management'],
-      ['Video Management', '/admin/video-management'],
+      ['Ad Platform', '/admin/ad-platform'],
       ['Reward Settings', '/admin/reward-settings'],
       ['Referral Settings', '/admin/referral-settings'],
       ['Fraud Detection', '/admin/fraud-detection'],

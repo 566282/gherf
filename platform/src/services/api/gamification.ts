@@ -33,6 +33,21 @@ export interface GamificationModuleConfig {
   note: string;
 }
 
+export const dailyTaskPlanModes = ['starter', 'balanced', 'premium', 'custom'] as const;
+
+export type DailyTaskPlanMode = (typeof dailyTaskPlanModes)[number];
+
+export interface DailyTaskPlanConfig {
+  mode: DailyTaskPlanMode;
+  title: string;
+  description: string;
+  rewardLabel: string;
+  xpReward: number;
+  completionTarget: number;
+  cooldownHours: number;
+  maxDailyClaims: number;
+}
+
 export interface GamificationConfig {
   seasonName: string;
   seasonTheme: string;
@@ -44,6 +59,7 @@ export interface GamificationConfig {
   streakBonusPerDay: number;
   spinBonusXp: number;
   mysteryRewardPool: string[];
+  dailyTaskPlan: DailyTaskPlanConfig;
   modules: Record<GamificationModuleId, GamificationModuleConfig>;
 }
 
@@ -217,6 +233,51 @@ function buildDefaultModuleConfig(definition: GamificationModuleDefinition): Gam
   };
 }
 
+function buildDefaultDailyTaskPlan(): DailyTaskPlanConfig {
+  return {
+    mode: 'balanced',
+    title: 'Daily quest',
+    description: 'Give users one clear daily action that resets with the season window.',
+    rewardLabel: 'Daily quest reward',
+    xpReward: 30,
+    completionTarget: 1,
+    cooldownHours: 24,
+    maxDailyClaims: 1,
+  };
+}
+
+function getDailyTaskPlanTierLabel(levelTier: number): string {
+  if (levelTier >= 3) {
+    return 'premium';
+  }
+
+  if (levelTier >= 2) {
+    return 'balanced';
+  }
+
+  return 'starter';
+}
+
+export function resolveDailyTaskPlanForLevel(plan: DailyTaskPlanConfig, levelTier: number): DailyTaskPlanConfig {
+  const resolvedTier = Math.max(1, Math.floor(levelTier || 1));
+
+  if (plan.mode === 'custom' || resolvedTier === 1) {
+    return plan;
+  }
+
+  const xpMultiplier = resolvedTier >= 3 ? 1.5 : 1.2;
+  const cooldownMultiplier = resolvedTier >= 3 ? 0.75 : 0.9;
+
+  return {
+    ...plan,
+    title: `${plan.title} (${getDailyTaskPlanTierLabel(resolvedTier)})`,
+    description: `${plan.description} Tailored for ${getDailyTaskPlanTierLabel(resolvedTier)} member plans.`,
+    xpReward: Math.max(0, Math.round(plan.xpReward * xpMultiplier)),
+    cooldownHours: Math.max(0, Math.round(plan.cooldownHours * cooldownMultiplier)),
+    maxDailyClaims: Math.max(1, plan.maxDailyClaims + (resolvedTier >= 3 ? 1 : 0)),
+  };
+}
+
 export function buildDefaultGamificationConfig(): GamificationConfig {
   return {
     seasonName: 'Season of Momentum',
@@ -229,6 +290,7 @@ export function buildDefaultGamificationConfig(): GamificationConfig {
     streakBonusPerDay: 8,
     spinBonusXp: 40,
     mysteryRewardPool: ['25 XP', '1 wheel spin', 'streak shield', 'exclusive badge'],
+    dailyTaskPlan: buildDefaultDailyTaskPlan(),
     modules: Object.fromEntries(gamificationModules.map((definition) => [definition.id, buildDefaultModuleConfig(definition)])) as Record<
       GamificationModuleId,
       GamificationModuleConfig
@@ -316,6 +378,25 @@ function mergeModuleConfig(definition: GamificationModuleDefinition, value: unkn
   };
 }
 
+function mergeDailyTaskPlan(value: unknown): DailyTaskPlanConfig {
+  const fallback = buildDefaultDailyTaskPlan();
+
+  if (!isRecord(value)) {
+    return fallback;
+  }
+
+  return {
+    mode: (typeof value.mode === 'string' && dailyTaskPlanModes.includes(value.mode as DailyTaskPlanMode) ? value.mode : fallback.mode) as DailyTaskPlanMode,
+    title: typeof value.title === 'string' && value.title.trim() ? value.title.trim() : fallback.title,
+    description: typeof value.description === 'string' && value.description.trim() ? value.description.trim() : fallback.description,
+    rewardLabel: typeof value.rewardLabel === 'string' && value.rewardLabel.trim() ? value.rewardLabel.trim() : fallback.rewardLabel,
+    xpReward: typeof value.xpReward === 'number' && Number.isFinite(value.xpReward) ? Math.max(0, Math.round(value.xpReward)) : fallback.xpReward,
+    completionTarget: typeof value.completionTarget === 'number' && Number.isFinite(value.completionTarget) ? Math.max(1, Math.round(value.completionTarget)) : fallback.completionTarget,
+    cooldownHours: typeof value.cooldownHours === 'number' && Number.isFinite(value.cooldownHours) ? Math.max(0, Math.round(value.cooldownHours)) : fallback.cooldownHours,
+    maxDailyClaims: typeof value.maxDailyClaims === 'number' && Number.isFinite(value.maxDailyClaims) ? Math.max(1, Math.round(value.maxDailyClaims)) : fallback.maxDailyClaims,
+  };
+}
+
 function mergeGamificationConfig(value: unknown): GamificationConfig {
   const fallback = buildDefaultGamificationConfig();
 
@@ -357,6 +438,7 @@ function mergeGamificationConfig(value: unknown): GamificationConfig {
         ? Math.max(0, Math.round(value.spinBonusXp))
         : fallback.spinBonusXp,
     mysteryRewardPool: isStringArray(value.mysteryRewardPool) && value.mysteryRewardPool.length ? value.mysteryRewardPool : fallback.mysteryRewardPool,
+    dailyTaskPlan: mergeDailyTaskPlan(value.dailyTaskPlan),
     modules,
   };
 }

@@ -1,5 +1,6 @@
 import { supabase } from '@/services/supabase/client';
 import { notifySuperAdmins, sendUserNotification } from '@/services/api/communications';
+import { canTransferFromWallet, isWalletTransferAllowed } from '@/services/api/walletPolicies';
 import type {
   WalletAccount,
   WalletAccountType,
@@ -22,6 +23,8 @@ type ProfileBalanceRow = {
   wallet_balance: number | null;
   full_name?: string | null;
   email?: string | null;
+  level_tier?: number | null;
+  level_label?: string | null;
 };
 
 type WalletAccountRow = {
@@ -90,6 +93,71 @@ type WithdrawalRequestRow = {
   created_at: string;
   updated_at: string;
 };
+
+const SUCCESSFUL_WITHDRAWAL_STATUSES: WithdrawalRequest['status'][] = ['approved', 'completed'];
+
+function getWithdrawalHoldThreshold(_levelTier: number): number {
+  return 4;
+}
+
+function getMemberPlanLabel(levelTier: number, levelLabel?: string | null): string {
+  if (levelLabel?.trim()) {
+    return levelLabel.trim();
+  }
+
+  if (levelTier >= 3) {
+    return 'Premium';
+  }
+
+  if (levelTier >= 2) {
+    return 'Balanced';
+  }
+
+  return 'Starter';
+}
+
+async function countSuccessfulWithdrawals(userId: string): Promise<number> {
+  const { data, error } = await supabase
+    .from('withdrawal_requests')
+    .select('status')
+    .eq('user_id', userId)
+    .in('status', SUCCESSFUL_WITHDRAWAL_STATUSES);
+
+  if (error || !data) {
+    return 0;
+  }
+
+  return data.length;
+}
+
+export async function releaseWithdrawalHolds(userId: string, levelTier: number): Promise<number> {
+  if (Math.max(1, Math.floor(levelTier || 1)) < 2) {
+    return 0;
+  }
+
+  const { data, error } = await supabase.rpc('release_user_withdrawal_holds', {
+    p_user_id: userId,
+  });
+
+  if (error) throw error;
+
+  const releasedCount = typeof data === 'number' ? data : Number((data as Record<string, unknown> | null)?.released_count ?? 0);
+
+  if (releasedCount > 0) {
+    void sendUserNotification(userId, {
+      title: 'Withdrawal hold released',
+      message: `Your upgraded member plan released ${releasedCount} held withdrawal request${releasedCount === 1 ? '' : 's'}. New withdrawals can now be submitted normally.`,
+      type: 'success',
+      category: 'transactional',
+      metadata: {
+        releasedCount,
+        levelTier,
+      },
+    }).catch(() => undefined);
+  }
+
+  return releasedCount;
+}
 
 const DEFAULT_WALLET_SETTINGS: WalletSettings = {
   minWithdrawal: 25,
@@ -356,6 +424,20 @@ export async function applyWalletAdjustment(
   if (error) throw error;
 }
 
+export async function reconcileWalletBalances(userId?: string): Promise<{ reconciledCount: number; adjustedCount: number; userId: string | null }> {
+  const { data, error } = await supabase.rpc('reconcile_wallet_accounts', {
+    p_user_id: userId ?? null,
+  });
+
+  if (error) throw error;
+
+  return {
+    reconciledCount: Number((data as Record<string, unknown> | null)?.reconciled_count ?? 0),
+    adjustedCount: Number((data as Record<string, unknown> | null)?.adjusted_count ?? 0),
+    userId: (data as Record<string, unknown> | null)?.user_id ? String((data as Record<string, unknown>).user_id) : null,
+  };
+}
+
 export async function transferWalletBalance(
   userId: string,
   fromWalletType: WalletAccountType,
@@ -364,6 +446,10 @@ export async function transferWalletBalance(
   note?: string,
   currency = 'USD',
 ): Promise<void> {
+  if (!canTransferFromWallet(fromWalletType) || !isWalletTransferAllowed(fromWalletType, toWalletType)) {
+    throw new Error('Transfers are only allowed from bonus, referral, cashback, or reward wallets into the main wallet.');
+  }
+
   const { error } = await supabase.rpc('transfer_wallet_balance', {
     p_user_id: userId,
     p_from_wallet_type: fromWalletType,
@@ -434,7 +520,7 @@ export async function listPendingWithdrawalRequests(limit = 12): Promise<Withdra
     .select(
       'id,user_id,wallet_transaction_id,method,destination_label,destination_value,destination_currency,currency,amount,processing_fee,exchange_rate,net_amount,approval_workflow,status,scheduled_for,admin_notes,reviewed_by,reviewed_at,created_at,updated_at',
     )
-    .eq('status', 'pending')
+    .in('status', ['pending', 'held'])
     .order('created_at', { ascending: false })
     .limit(limit);
 
@@ -472,7 +558,7 @@ export async function createWithdrawalRequest(userId: string, input: WithdrawalR
 
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
-    .select('wallet_balance,full_name,email')
+    .select('wallet_balance,full_name,email,level_tier,level_label')
     .eq('id', userId)
     .single<ProfileBalanceRow>();
 
@@ -480,6 +566,12 @@ export async function createWithdrawalRequest(userId: string, input: WithdrawalR
 
   const currentBalance = profile.wallet_balance ?? 0;
   const effectiveWithdrawalLimit = Math.min(settings.maxWithdrawal, currentBalance);
+  const memberPlanTier = Math.max(1, Math.round(profile.level_tier ?? 1));
+  const memberPlanLabel = getMemberPlanLabel(memberPlanTier, profile.level_label);
+  const successfulWithdrawalCount = await countSuccessfulWithdrawals(userId);
+  const holdThreshold = getWithdrawalHoldThreshold(memberPlanTier);
+  const isAccountOnHold = memberPlanTier < 2 && successfulWithdrawalCount >= holdThreshold;
+
   if (input.amount > currentBalance) {
     throw new Error('Withdrawal amount exceeds your withdrawable balance.');
   }
@@ -490,8 +582,8 @@ export async function createWithdrawalRequest(userId: string, input: WithdrawalR
   const exchangeRate = resolveExchangeRate(settings, destinationCurrency);
   const approvalWorkflow = settings.approvalWorkflow;
   const isAutoApproved = approvalWorkflow === 'automatic';
-  const status: WithdrawalRequest['status'] = isAutoApproved ? 'approved' : 'pending';
-  const transactionStatus = isAutoApproved ? 'completed' : 'pending';
+  const status: WithdrawalRequest['status'] = isAccountOnHold ? 'held' : isAutoApproved ? 'approved' : 'pending';
+  const transactionStatus = isAccountOnHold ? 'reserved' : isAutoApproved ? 'completed' : 'pending';
   const nextBalance = Number((currentBalance - input.amount).toFixed(2));
   let transactionId: string | null = null;
   const withdrawalDate = scheduledFor ?? new Date();
@@ -554,6 +646,17 @@ export async function createWithdrawalRequest(userId: string, input: WithdrawalR
         scheduled_for: scheduledFor ? scheduledFor.toISOString() : null,
         status,
         admin_notes: input.note ?? null,
+        hold_reason: isAccountOnHold ? 'member_plan_limit_reached' : null,
+        hold_metadata: isAccountOnHold
+          ? {
+              successfulWithdrawalCount,
+              holdThreshold,
+              memberPlanTier,
+              memberPlanLabel,
+              requiredLevelTier: 2,
+            }
+          : {},
+        hold_released_at: null,
       })
       .select('id,user_id,wallet_transaction_id,method,destination_label,destination_value,destination_currency,currency,amount,processing_fee,exchange_rate,net_amount,approval_workflow,status,scheduled_for,admin_notes,reviewed_by,reviewed_at,created_at,updated_at')
       .single<WithdrawalRequestRow>();
@@ -562,12 +665,14 @@ export async function createWithdrawalRequest(userId: string, input: WithdrawalR
       throw requestError ?? new Error('Unable to create withdrawal request.');
     }
 
-    const requestLabel = isAutoApproved ? 'approved' : 'pending';
+    const requestLabel = isAccountOnHold ? 'held' : isAutoApproved ? 'approved' : 'pending';
 
     void Promise.all([
       notifySuperAdmins({
-        title: isAutoApproved ? 'Withdrawal auto-approved' : 'Withdrawal request submitted',
-        message: `${displayName} ${isAutoApproved ? 'received an auto-approved withdrawal' : 'submitted a withdrawal request'} for ${settings.currency} ${input.amount.toFixed(2)} on ${withdrawalDateLabel}.`,
+        title: isAccountOnHold ? 'Withdrawal placed on hold' : isAutoApproved ? 'Withdrawal auto-approved' : 'Withdrawal request submitted',
+        message: isAccountOnHold
+          ? `${displayName} reached ${successfulWithdrawalCount} successful withdrawals on the ${memberPlanLabel} plan, so the new withdrawal has been placed on hold for ${settings.currency} ${input.amount.toFixed(2)} until the user upgrades.`
+          : `${displayName} ${isAutoApproved ? 'received an auto-approved withdrawal' : 'submitted a withdrawal request'} for ${settings.currency} ${input.amount.toFixed(2)} on ${withdrawalDateLabel}.`,
         type: 'info',
         category: 'transactional',
         metadata: {
@@ -578,14 +683,20 @@ export async function createWithdrawalRequest(userId: string, input: WithdrawalR
           effectiveWithdrawalLimit,
           scheduledFor: scheduledFor ? scheduledFor.toISOString() : null,
           withdrawalRequestId: request.id,
+          successfulWithdrawalCount,
+          holdThreshold,
+          memberPlanTier,
+          memberPlanLabel,
         },
       }),
       sendUserNotification(userId, {
-        title: `Withdrawal ${requestLabel}`,
-        message: isAutoApproved
+        title: isAccountOnHold ? 'Withdrawal on hold' : `Withdrawal ${requestLabel}`,
+        message: isAccountOnHold
+          ? `Your ${memberPlanLabel} plan has reached the withdrawal limit of ${holdThreshold} successful withdrawal${holdThreshold === 1 ? '' : 's'}. This request is on hold until you upgrade your plan.`
+          : isAutoApproved
           ? `Your ${settings.currency} ${input.amount.toFixed(2)} withdrawal is within your limit of ${settings.currency} ${effectiveWithdrawalLimit.toFixed(2)} and has been approved for ${withdrawalDateLabel}.`
           : `Withdrawals are not allowed until ${withdrawalDateLabel}. Your ${settings.currency} ${input.amount.toFixed(2)} request is within your limit of ${settings.currency} ${effectiveWithdrawalLimit.toFixed(2)} and will remain pending until that fixed date.`,
-        type: isAutoApproved ? 'success' : 'info',
+        type: isAccountOnHold ? 'warning' : isAutoApproved ? 'success' : 'info',
         category: 'transactional',
         metadata: {
           withdrawalRequestId: request.id,
@@ -593,6 +704,10 @@ export async function createWithdrawalRequest(userId: string, input: WithdrawalR
           currency: settings.currency,
           effectiveWithdrawalLimit,
           scheduledFor: scheduledFor ? scheduledFor.toISOString() : null,
+          successfulWithdrawalCount,
+          holdThreshold,
+          memberPlanTier,
+          memberPlanLabel,
         },
       }),
     ]).catch(() => undefined);

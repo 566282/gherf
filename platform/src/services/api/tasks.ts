@@ -148,6 +148,266 @@ export interface TaskEngineFormValues {
   status: CampaignTask['status'];
 }
 
+export type TaskTemplateId =
+  | 'telegram_membership'
+  | 'website_visit'
+  | 'screenshot_proof'
+  | 'video_proof'
+  | 'api_verification'
+  | 'survey_completion'
+  | 'app_install'
+  | 'social_follow';
+
+export interface TaskTemplateDefinition {
+  id: TaskTemplateId;
+  label: string;
+  description: string;
+  taskType: string;
+  rewardAmount: number;
+  requirements: TaskRequirementDraft[];
+  cooldownSeconds: number;
+  maximumAttempts: number | null;
+  verificationMethod: string;
+  fraudChecksText: string;
+  taskConfig: Record<string, unknown>;
+  maxCompletions: number | null;
+  status: CampaignTask['status'];
+}
+
+export interface TaskValidationIssue {
+  field: keyof TaskEngineFormValues | 'requirements' | 'taskConfigText' | 'template';
+  message: string;
+  severity: 'error' | 'warning';
+}
+
+export interface TaskEngineAnalyticsRow {
+  taskType: string;
+  taskCount: number;
+  submissionCount: number;
+  approvalRate: number;
+  fraudRate: number;
+  averageReward: number;
+  rewardCost: number;
+}
+
+export interface TaskEngineCampaignAnalyticsRow {
+  campaignId: string;
+  campaignTitle: string;
+  campaignStatus: Campaign['status'];
+  taskCount: number;
+  submissionCount: number;
+  completionRate: number;
+  fraudRate: number;
+  averageReviewHours: number;
+  averageReward: number;
+  rewardCost: number;
+}
+
+export interface TaskEngineTrendAnalyticsRow {
+  period: string;
+  submissionCount: number;
+  fraudFlags: number;
+  averageReviewHours: number;
+}
+
+export interface TaskEngineAnalytics {
+  totalTasks: number;
+  draftTasks: number;
+  activeTasks: number;
+  pausedTasks: number;
+  totalSubmissions: number;
+  approvedSubmissions: number;
+  rejectedSubmissions: number;
+  pendingSubmissions: number;
+  approvalRate: number;
+  fraudRate: number;
+  averageReviewHours: number;
+  averageRewardAmount: number;
+  averageCompletions: number;
+  rewardCost: number;
+  byTaskType: TaskEngineAnalyticsRow[];
+  byCampaign: TaskEngineCampaignAnalyticsRow[];
+  fraudFlagsByMonth: TaskEngineTrendAnalyticsRow[];
+}
+
+const TASK_TEMPLATE_LIBRARY: TaskTemplateDefinition[] = [
+  {
+    id: 'telegram_membership',
+    label: 'Telegram membership',
+    description: 'Join the community channel and verify membership before payout.',
+    taskType: 'join_telegram',
+    rewardAmount: 2,
+    requirements: [
+      { key: 'join', label: 'Join the Telegram channel', value: 'required' },
+      { key: 'screenshot', label: 'Upload proof if needed', value: 'optional' },
+    ],
+    cooldownSeconds: 3600,
+    maximumAttempts: 1,
+    verificationMethod: 'manual_review',
+    fraudChecksText: 'fraud_detection, duplicate_detection, vpn_detection',
+    taskConfig: {
+      instructions: 'Join the Telegram community and keep membership active.',
+      proofType: 'telegram_membership',
+    },
+    maxCompletions: 1,
+    status: 'draft',
+  },
+  {
+    id: 'website_visit',
+    label: 'Website visit',
+    description: 'Send users to a landing page with minimum dwell time.',
+    taskType: 'visit_website',
+    rewardAmount: 1.5,
+    requirements: [
+      { key: 'url', label: 'Visit URL', value: 'required' },
+      { key: 'dwell_time', label: 'Minimum time on page', value: '30 seconds' },
+    ],
+    cooldownSeconds: 600,
+    maximumAttempts: 3,
+    verificationMethod: 'timer_verification',
+    fraudChecksText: 'fraud_detection, duplicate_detection, bot_detection',
+    taskConfig: {
+      instructions: 'Open the page and remain on-screen for the minimum timer.',
+      proofType: 'visit_tracker',
+      minimumDwellSeconds: 30,
+    },
+    maxCompletions: 1000,
+    status: 'draft',
+  },
+  {
+    id: 'screenshot_proof',
+    label: 'Screenshot proof',
+    description: 'Collect visual proof of completion for manual moderation.',
+    taskType: 'upload_screenshot',
+    rewardAmount: 3,
+    requirements: [
+      { key: 'evidence', label: 'Upload screenshot evidence', value: 'required' },
+      { key: 'quality', label: 'Image must be legible', value: 'required' },
+    ],
+    cooldownSeconds: 1800,
+    maximumAttempts: 2,
+    verificationMethod: 'screenshot_upload',
+    fraudChecksText: 'fraud_detection, duplicate_detection, proxy_detection',
+    taskConfig: {
+      instructions: 'Upload a clear screenshot showing the completed action.',
+      proofType: 'image',
+      minImages: 1,
+    },
+    maxCompletions: 500,
+    status: 'draft',
+  },
+  {
+    id: 'video_proof',
+    label: 'Video proof',
+    description: 'Capture a longer proof flow that benefits from manual review.',
+    taskType: 'video_proof',
+    rewardAmount: 5,
+    requirements: [
+      { key: 'upload', label: 'Upload a short video clip', value: 'required' },
+      { key: 'clarity', label: 'Show the full flow', value: 'required' },
+    ],
+    cooldownSeconds: 3600,
+    maximumAttempts: 1,
+    verificationMethod: 'video_proof',
+    fraudChecksText: 'fraud_detection, duplicate_detection, bot_detection, proxy_detection',
+    taskConfig: {
+      instructions: 'Record the full flow and upload a short clip for review.',
+      proofType: 'video',
+      minDurationSeconds: 15,
+    },
+    maxCompletions: 250,
+    status: 'draft',
+  },
+  {
+    id: 'api_verification',
+    label: 'API verification',
+    description: 'Send webhooks or integration-based tasks through a direct verification flow.',
+    taskType: 'api_verification',
+    rewardAmount: 4,
+    requirements: [
+      { key: 'callback', label: 'Trigger callback endpoint', value: 'required' },
+      { key: 'auth', label: 'Signed request required', value: 'required' },
+    ],
+    cooldownSeconds: 900,
+    maximumAttempts: 5,
+    verificationMethod: 'api_verification',
+    fraudChecksText: 'fraud_detection, duplicate_detection, bot_detection',
+    taskConfig: {
+      instructions: 'Ping the partner API and verify the callback signature.',
+      proofType: 'api',
+      requiresSignature: true,
+    },
+    maxCompletions: 10000,
+    status: 'draft',
+  },
+  {
+    id: 'survey_completion',
+    label: 'Survey completion',
+    description: 'Collect structured answers for research or lead-generation campaigns.',
+    taskType: 'complete_survey',
+    rewardAmount: 2.5,
+    requirements: [
+      { key: 'survey', label: 'Answer every required question', value: 'required' },
+      { key: 'quality', label: 'Submit complete responses', value: 'required' },
+    ],
+    cooldownSeconds: 7200,
+    maximumAttempts: 2,
+    verificationMethod: 'manual_review',
+    fraudChecksText: 'fraud_detection, duplicate_detection, bot_detection, speed_check',
+    taskConfig: {
+      instructions: 'Complete the survey without skipping required questions.',
+      proofType: 'form_submission',
+      minimumResponses: 5,
+    },
+    maxCompletions: 2000,
+    status: 'draft',
+  },
+  {
+    id: 'app_install',
+    label: 'App install',
+    description: 'Track mobile app installs with launch or install confirmation.',
+    taskType: 'install_app',
+    rewardAmount: 6,
+    requirements: [
+      { key: 'install', label: 'Install the mobile app', value: 'required' },
+      { key: 'launch', label: 'Open the app after install', value: 'required' },
+    ],
+    cooldownSeconds: 86400,
+    maximumAttempts: 1,
+    verificationMethod: 'api_verification',
+    fraudChecksText: 'fraud_detection, duplicate_detection, device_fingerprint, emulator_detection',
+    taskConfig: {
+      instructions: 'Install the app and confirm the first launch event.',
+      proofType: 'mobile_install',
+      requiresDeepLink: true,
+    },
+    maxCompletions: 500,
+    status: 'draft',
+  },
+  {
+    id: 'social_follow',
+    label: 'Social follow',
+    description: 'Grow social channels with a verified follow or subscribe action.',
+    taskType: 'follow_social',
+    rewardAmount: 1.25,
+    requirements: [
+      { key: 'follow', label: 'Follow the target account', value: 'required' },
+      { key: 'proof', label: 'Capture proof if review is manual', value: 'optional' },
+    ],
+    cooldownSeconds: 1800,
+    maximumAttempts: 3,
+    verificationMethod: 'manual_review',
+    fraudChecksText: 'fraud_detection, duplicate_detection, proxy_detection',
+    taskConfig: {
+      instructions: 'Follow the social account and keep proof available if asked.',
+      proofType: 'social_follow',
+      platform: 'social',
+    },
+    maxCompletions: 5000,
+    status: 'draft',
+  },
+];
+
 function createEmptyRequirement(index = 1): TaskRequirementDraft {
   return {
     key: `requirement-${index}`,
@@ -174,6 +434,99 @@ export function createTaskDraft(campaignId = '', taskType = 'custom_html_task'):
     maxCompletions: 1,
     status: 'draft',
   };
+}
+
+export function listTaskTemplates(): TaskTemplateDefinition[] {
+  return TASK_TEMPLATE_LIBRARY;
+}
+
+export function createTaskDraftFromTemplate(templateId: TaskTemplateId, campaignId = ''): TaskEngineFormValues {
+  const template = TASK_TEMPLATE_LIBRARY.find((item) => item.id === templateId);
+  if (!template) {
+    return createTaskDraft(campaignId);
+  }
+
+  return {
+    ...createTaskDraft(campaignId, template.taskType),
+    title: template.label,
+    description: template.description,
+    rewardAmount: template.rewardAmount,
+    requirements: template.requirements.map((requirement, index) => ({
+      key: requirement.key || `requirement-${index + 1}`,
+      label: requirement.label,
+      value: typeof requirement.value === 'string' ? requirement.value : String(requirement.value ?? ''),
+    })),
+    cooldownSeconds: template.cooldownSeconds,
+    maximumAttempts: template.maximumAttempts,
+    verificationMethod: template.verificationMethod,
+    fraudChecksText: template.fraudChecksText,
+    taskConfigText: JSON.stringify(template.taskConfig, null, 2),
+    maxCompletions: template.maxCompletions,
+    status: template.status,
+  };
+}
+
+export function validateTaskDraft(form: TaskEngineFormValues): TaskValidationIssue[] {
+  const issues: TaskValidationIssue[] = [];
+
+  if (!form.campaignId.trim()) {
+    issues.push({ field: 'campaignId', message: 'Select a campaign for this task.', severity: 'error' });
+  }
+
+  if (!form.title.trim()) {
+    issues.push({ field: 'title', message: 'Task title is required.', severity: 'error' });
+  }
+
+  if (!form.taskType.trim()) {
+    issues.push({ field: 'taskType', message: 'Task type cannot be empty.', severity: 'error' });
+  }
+
+  if (!form.verificationMethod.trim()) {
+    issues.push({ field: 'verificationMethod', message: 'Choose a verification method.', severity: 'error' });
+  }
+
+  if (form.rewardAmount <= 0) {
+    issues.push({ field: 'rewardAmount', message: 'Reward amount must be greater than zero.', severity: 'error' });
+  }
+
+  if (form.cooldownSeconds < 0) {
+    issues.push({ field: 'cooldownSeconds', message: 'Cooldown cannot be negative.', severity: 'error' });
+  }
+
+  if (form.maximumAttempts !== null && form.maximumAttempts < 1) {
+    issues.push({ field: 'maximumAttempts', message: 'Maximum attempts must be at least 1.', severity: 'error' });
+  }
+
+  if (form.maxCompletions !== null && form.maxCompletions < 1) {
+    issues.push({ field: 'maxCompletions', message: 'Maximum completions must be at least 1.', severity: 'error' });
+  }
+
+  if (!form.description.trim()) {
+    issues.push({ field: 'description', message: 'Add a short description so users know what to do.', severity: 'warning' });
+  }
+
+  if (!form.fraudChecksText.trim()) {
+    issues.push({ field: 'requirements', message: 'Add at least one fraud check for safer review.', severity: 'warning' });
+  }
+
+  if (form.expiresAt.trim()) {
+    const expiresAt = new Date(form.expiresAt);
+    if (Number.isNaN(expiresAt.getTime())) {
+      issues.push({ field: 'expiresAt', message: 'Expiration date must be valid.', severity: 'error' });
+    }
+  }
+
+  try {
+    parseJsonObject(form.taskConfigText);
+  } catch (error) {
+    issues.push({ field: 'taskConfigText', message: error instanceof Error ? error.message : 'Task configuration must be valid JSON.', severity: 'error' });
+  }
+
+  if (!form.requirements.some((requirement) => requirement.key.trim().length || requirement.label.trim().length || requirement.value.trim().length)) {
+    issues.push({ field: 'requirements', message: 'Add at least one requirement row.', severity: 'warning' });
+  }
+
+  return issues;
 }
 
 export function taskViewToDraft(task: CampaignTaskView): TaskEngineFormValues {
@@ -281,7 +634,8 @@ export async function getCampaignTask(taskId: string): Promise<CampaignTaskView 
   }
 }
 
-export async function saveCampaignTask(form: TaskEngineFormValues, taskId?: string): Promise<CampaignTaskView> {
+export async function saveCampaignTask(form: TaskEngineFormValues, taskId?: string, actorId?: string): Promise<CampaignTaskView> {
+  const previousTask = taskId ? await getCampaignTask(taskId) : null;
   const payload = buildTaskPayload(form);
   const query = taskId
     ? supabase.from('campaign_tasks').update(payload).eq('id', taskId)
@@ -290,7 +644,19 @@ export async function saveCampaignTask(form: TaskEngineFormValues, taskId?: stri
   const { data, error } = await query.select('id').single<{ id: string }>();
   if (error) throw error;
 
-  return hydrateTaskView(data.id);
+  const savedTask = await hydrateTaskView(data.id);
+
+  await recordTaskAudit({
+    actorId,
+    action: taskId ? 'task_updated' : 'task_created',
+    resourceType: 'campaign_task',
+    resourceId: savedTask.id,
+    oldValues: previousTask ?? null,
+    newValues: savedTask,
+    reason: taskId ? 'Task updated from the task engine' : 'Task created from the task engine',
+  });
+
+  return savedTask;
 }
 
 function mapTaskRow(row: TaskRow, campaign: CampaignRow): CampaignTaskView {
@@ -571,6 +937,29 @@ async function issueReward(bundle: { submission: SubmissionRow; task: TaskRow; c
     .eq('id', bundle.campaign.id);
 
   if (campaignError) throw campaignError;
+
+  if (reviewerId !== bundle.submission.user_id) {
+    const { error: auditError } = await supabase.from('admin_action_audit').insert({
+      admin_id: reviewerId,
+      action: 'task_reward_issued',
+      resource_type: 'reward',
+      resource_id: rewardData.id,
+      old_values: {
+        reward_balance: currentRewardBalance,
+        reward_history_count: currentRewardHistory,
+      },
+      new_values: {
+        reward_balance: Number((currentRewardBalance + rewardAmount).toFixed(2)),
+        reward_history_count: currentRewardHistory + 1,
+        reward_amount: rewardAmount,
+        task_id: bundle.task.id,
+        submission_id: bundle.submission.id,
+      },
+      reason,
+    });
+
+    if (auditError) throw auditError;
+  }
 }
 
 function shouldAutoApprove(engineConfig: CampaignEngineConfig): boolean {
@@ -648,6 +1037,30 @@ export async function submitTaskSubmission(
   return submission;
 }
 
+async function recordTaskAudit(input: {
+  actorId?: string | null;
+  action: string;
+  resourceType: string;
+  resourceId: string;
+  oldValues?: Record<string, unknown> | null;
+  newValues?: Record<string, unknown> | null;
+  reason?: string | null;
+}): Promise<void> {
+  if (!input.actorId) return;
+
+  const { error } = await supabase.from('admin_action_audit').insert({
+    admin_id: input.actorId,
+    action: input.action,
+    resource_type: input.resourceType,
+    resource_id: input.resourceId,
+    old_values: input.oldValues ?? null,
+    new_values: input.newValues ?? null,
+    reason: input.reason ?? null,
+  });
+
+  if (error) throw error;
+}
+
 export async function reviewTaskSubmission(
   submissionId: string,
   reviewerId: string,
@@ -672,6 +1085,25 @@ export async function reviewTaskSubmission(
   if (status === 'approved') {
     await issueReward(bundle, reviewerId, 'Approved after manual review');
   }
+
+  await recordTaskAudit({
+    actorId: reviewerId,
+    action: `task_submission_${status}`,
+    resourceType: 'task_submission',
+    resourceId: submissionId,
+    oldValues: {
+      status: bundle.submission.status,
+      reviewedBy: bundle.submission.reviewedBy ?? null,
+      reviewedAt: bundle.submission.reviewedAt ?? null,
+    },
+    newValues: {
+      status,
+      reviewedBy: reviewerId,
+      reviewedAt: new Date().toISOString(),
+      rejectionReason: status === 'rejected' ? rejectionReason ?? 'Submission rejected by reviewer.' : null,
+    },
+    reason: rejectionReason ?? null,
+  });
 }
 
 export async function listPendingTaskReviews(limit = 50): Promise<SubmissionReviewItem[]> {
@@ -694,6 +1126,243 @@ export async function listPendingTaskReviews(limit = 50): Promise<SubmissionRevi
       task: { ...mapTaskRow(bundle.task, bundle.campaign), userSubmission: null },
       campaignBudgetCurrency: bundle.campaign.budget_currency ?? 'USD',
     }));
+}
+
+export interface TaskEngineAnalyticsInput {
+  tasks: Array<Pick<TaskRow, 'id' | 'campaign_id' | 'task_type' | 'reward_amount' | 'current_completions' | 'status'>>;
+  submissions: Array<Pick<SubmissionRow, 'task_id' | 'status' | 'created_at' | 'reviewed_at'>>;
+  rewards: Array<Pick<RewardRow, 'task_id' | 'amount' | 'status'>>;
+  campaigns: Array<Pick<CampaignRow, 'id' | 'title' | 'status'>>;
+}
+
+function getReviewLatencyHours(createdAt: string, reviewedAt: string): number {
+  return (new Date(reviewedAt).getTime() - new Date(createdAt).getTime()) / (1000 * 60 * 60);
+}
+
+function getMonthPeriod(value: string): string {
+  return value.slice(0, 7);
+}
+
+export function buildTaskEngineAnalytics(input: TaskEngineAnalyticsInput): TaskEngineAnalytics {
+  const campaignMap = new Map(input.campaigns.map((campaign) => [campaign.id, campaign]));
+  const submissionsByTaskId = new Map<string, Array<Pick<SubmissionRow, 'task_id' | 'status' | 'created_at' | 'reviewed_at'>>>();
+  const rewardsByTaskId = new Map<string, Array<Pick<RewardRow, 'task_id' | 'amount' | 'status'>>>();
+
+  for (const submission of input.submissions) {
+    const bucket = submissionsByTaskId.get(submission.task_id) ?? [];
+    bucket.push(submission);
+    submissionsByTaskId.set(submission.task_id, bucket);
+  }
+
+  for (const reward of input.rewards) {
+    if (!reward.task_id) continue;
+    const bucket = rewardsByTaskId.get(reward.task_id) ?? [];
+    bucket.push(reward);
+    rewardsByTaskId.set(reward.task_id, bucket);
+  }
+
+  const byTaskTypeMap = new Map<string, TaskEngineAnalyticsRow>();
+  const byCampaignMap = new Map<string, {
+    campaignId: string;
+    campaignTitle: string;
+    campaignStatus: Campaign['status'];
+    taskCount: number;
+    submissionCount: number;
+    approvedSubmissions: number;
+    rejectedSubmissions: number;
+    reviewedSubmissions: number;
+    reviewLatencyHoursTotal: number;
+    averageRewardTotal: number;
+    rewardCost: number;
+  }>();
+  const fraudTrendMap = new Map<string, {
+    period: string;
+    submissionCount: number;
+    fraudFlags: number;
+    reviewedSubmissions: number;
+    reviewLatencyHoursTotal: number;
+  }>();
+
+  for (const task of input.tasks) {
+    const campaign = campaignMap.get(task.campaign_id);
+    const taskSubmissions = submissionsByTaskId.get(task.id) ?? [];
+    const taskRewards = rewardsByTaskId.get(task.id) ?? [];
+    const approvedCount = taskSubmissions.filter((submission) => submission.status === 'approved').length;
+    const rejectedCount = taskSubmissions.filter((submission) => submission.status === 'rejected').length;
+    const reviewedSubmissions = taskSubmissions.filter((submission) => submission.reviewed_at);
+    const rewardCostForTask = taskRewards
+      .filter((reward) => reward.status === 'approved' || reward.status === 'claimed')
+      .reduce((sum, reward) => sum + Number(reward.amount), 0);
+
+    const taskTypeBucket = byTaskTypeMap.get(task.task_type) ?? {
+      taskType: task.task_type,
+      taskCount: 0,
+      submissionCount: 0,
+      approvalRate: 0,
+      fraudRate: 0,
+      averageReward: 0,
+      rewardCost: 0,
+    };
+
+    taskTypeBucket.taskCount += 1;
+    taskTypeBucket.submissionCount += taskSubmissions.length;
+    taskTypeBucket.approvalRate += taskSubmissions.length ? (approvedCount / taskSubmissions.length) * 100 : 0;
+    taskTypeBucket.fraudRate += taskSubmissions.length ? (rejectedCount / taskSubmissions.length) * 100 : 0;
+    taskTypeBucket.averageReward += Number(task.reward_amount ?? 0);
+    taskTypeBucket.rewardCost += rewardCostForTask;
+    byTaskTypeMap.set(task.task_type, taskTypeBucket);
+
+    const campaignBucket = byCampaignMap.get(task.campaign_id) ?? {
+      campaignId: task.campaign_id,
+      campaignTitle: campaign?.title ?? 'Unknown campaign',
+      campaignStatus: campaign?.status ?? 'draft',
+      taskCount: 0,
+      submissionCount: 0,
+      approvedSubmissions: 0,
+      rejectedSubmissions: 0,
+      reviewedSubmissions: 0,
+      reviewLatencyHoursTotal: 0,
+      averageRewardTotal: 0,
+      rewardCost: 0,
+    };
+
+    campaignBucket.taskCount += 1;
+    campaignBucket.submissionCount += taskSubmissions.length;
+    campaignBucket.approvedSubmissions += approvedCount;
+    campaignBucket.rejectedSubmissions += rejectedCount;
+    campaignBucket.reviewedSubmissions += reviewedSubmissions.length;
+    campaignBucket.reviewLatencyHoursTotal += reviewedSubmissions.reduce((sum, submission) => sum + getReviewLatencyHours(submission.created_at, submission.reviewed_at as string), 0);
+    campaignBucket.averageRewardTotal += Number(task.reward_amount ?? 0);
+    campaignBucket.rewardCost += rewardCostForTask;
+    byCampaignMap.set(task.campaign_id, campaignBucket);
+
+    for (const submission of taskSubmissions) {
+      const period = getMonthPeriod((submission.reviewed_at ?? submission.created_at));
+      const trendBucket = fraudTrendMap.get(period) ?? {
+        period,
+        submissionCount: 0,
+        fraudFlags: 0,
+        reviewedSubmissions: 0,
+        reviewLatencyHoursTotal: 0,
+      };
+
+      trendBucket.submissionCount += 1;
+      if (submission.status === 'rejected') {
+        trendBucket.fraudFlags += 1;
+      }
+      if (submission.reviewed_at) {
+        trendBucket.reviewedSubmissions += 1;
+        trendBucket.reviewLatencyHoursTotal += getReviewLatencyHours(submission.created_at, submission.reviewed_at);
+      }
+
+      fraudTrendMap.set(period, trendBucket);
+    }
+  }
+
+  const groupedTaskTypes = [...byTaskTypeMap.values()]
+    .map((entry) => ({
+      ...entry,
+      averageReward: entry.taskCount ? Number((entry.averageReward / entry.taskCount).toFixed(2)) : 0,
+      approvalRate: entry.taskCount ? Number((entry.approvalRate / entry.taskCount).toFixed(2)) : 0,
+      fraudRate: entry.taskCount ? Number((entry.fraudRate / entry.taskCount).toFixed(2)) : 0,
+    }))
+    .sort((left, right) => right.rewardCost - left.rewardCost);
+
+  const groupedCampaigns = [...byCampaignMap.values()]
+    .map((entry) => ({
+      campaignId: entry.campaignId,
+      campaignTitle: entry.campaignTitle,
+      campaignStatus: entry.campaignStatus,
+      taskCount: entry.taskCount,
+      submissionCount: entry.submissionCount,
+      completionRate: entry.submissionCount ? Number(((entry.approvedSubmissions / entry.submissionCount) * 100).toFixed(2)) : 0,
+      fraudRate: entry.submissionCount ? Number(((entry.rejectedSubmissions / entry.submissionCount) * 100).toFixed(2)) : 0,
+      averageReviewHours: entry.reviewedSubmissions ? Number((entry.reviewLatencyHoursTotal / entry.reviewedSubmissions).toFixed(2)) : 0,
+      averageReward: entry.taskCount ? Number((entry.averageRewardTotal / entry.taskCount).toFixed(2)) : 0,
+      rewardCost: Number(entry.rewardCost.toFixed(2)),
+    }))
+    .sort((left, right) => right.submissionCount - left.submissionCount || right.rewardCost - left.rewardCost);
+
+  const fraudFlagsByMonth = [...fraudTrendMap.values()]
+    .map((entry) => ({
+      period: entry.period,
+      submissionCount: entry.submissionCount,
+      fraudFlags: entry.fraudFlags,
+      averageReviewHours: entry.reviewedSubmissions ? Number((entry.reviewLatencyHoursTotal / entry.reviewedSubmissions).toFixed(2)) : 0,
+    }))
+    .sort((left, right) => right.period.localeCompare(left.period));
+
+  const reviewedSubmissions = input.submissions.filter((submission) => submission.reviewed_at);
+  const averageReviewHours = reviewedSubmissions.length
+    ? Number((reviewedSubmissions.reduce((sum, submission) => sum + getReviewLatencyHours(submission.created_at, submission.reviewed_at as string), 0) / reviewedSubmissions.length).toFixed(2))
+    : 0;
+
+  const totalTasks = input.tasks.length;
+  const totalSubmissions = input.submissions.length;
+  const approvedSubmissions = input.submissions.filter((submission) => submission.status === 'approved').length;
+  const rejectedSubmissions = input.submissions.filter((submission) => submission.status === 'rejected').length;
+  const pendingSubmissions = input.submissions.filter((submission) => submission.status === 'pending').length;
+  const averageRewardAmount = totalTasks
+    ? Number((input.tasks.reduce((sum, task) => sum + Number(task.reward_amount ?? 0), 0) / totalTasks).toFixed(2))
+    : 0;
+  const averageCompletions = totalTasks
+    ? Number((input.tasks.reduce((sum, task) => sum + Number(task.current_completions ?? 0), 0) / totalTasks).toFixed(2))
+    : 0;
+  const rewardCost = input.rewards
+    .filter((reward) => reward.status === 'approved' || reward.status === 'claimed')
+    .reduce((sum, reward) => sum + Number(reward.amount), 0);
+
+  return {
+    totalTasks,
+    draftTasks: input.tasks.filter((task) => task.status === 'draft').length,
+    activeTasks: input.tasks.filter((task) => task.status === 'active').length,
+    pausedTasks: input.tasks.filter((task) => task.status === 'paused').length,
+    totalSubmissions,
+    approvedSubmissions,
+    rejectedSubmissions,
+    pendingSubmissions,
+    approvalRate: totalSubmissions ? Number(((approvedSubmissions / totalSubmissions) * 100).toFixed(2)) : 0,
+    fraudRate: totalSubmissions ? Number(((rejectedSubmissions / totalSubmissions) * 100).toFixed(2)) : 0,
+    averageReviewHours,
+    averageRewardAmount,
+    averageCompletions,
+    rewardCost: Number(rewardCost.toFixed(2)),
+    byTaskType: groupedTaskTypes,
+    byCampaign: groupedCampaigns,
+    fraudFlagsByMonth,
+  };
+}
+
+export async function listTaskEngineAnalytics(): Promise<TaskEngineAnalytics> {
+  const [taskResult, submissionResult, rewardResult, campaignResult] = await Promise.all([
+    supabase
+      .from('campaign_tasks')
+      .select('id,campaign_id,task_type,reward_amount,current_completions,max_completions,status,created_at,updated_at'),
+    supabase
+      .from('task_submissions')
+      .select('id,task_id,user_id,submission_data,status,reviewed_by,reviewed_at,rejection_reason,created_at,updated_at'),
+    supabase
+      .from('rewards')
+      .select('id,user_id,campaign_id,task_id,submission_id,amount,currency,status,created_at,updated_at'),
+    supabase
+      .from('campaigns')
+      .select('id,title,status'),
+  ]);
+
+  const [tasks, submissions, rewards, campaigns] = [taskResult, submissionResult, rewardResult, campaignResult].map((result) => {
+    if (result.error || !result.data) {
+      return [] as Array<Record<string, unknown>>;
+    }
+
+    return result.data as Array<Record<string, unknown>>;
+  });
+
+  return buildTaskEngineAnalytics({
+    tasks: tasks as TaskEngineAnalyticsInput['tasks'],
+    submissions: submissions as TaskEngineAnalyticsInput['submissions'],
+    rewards: rewards as TaskEngineAnalyticsInput['rewards'],
+    campaigns: campaigns as TaskEngineAnalyticsInput['campaigns'],
+  });
 }
 
 export async function listUserTaskViews(userId: string): Promise<CampaignTaskView[]> {
