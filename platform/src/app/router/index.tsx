@@ -1,6 +1,7 @@
 import { createBrowserRouter, RouteObject, Navigate } from 'react-router-dom';
 import { ProtectedRoute } from '@/hooks/ProtectedRoute';
 import { UserRole } from '@/types';
+import { guestOnlyMiddleware, requireAuthMiddleware } from '@/app/router/middleware';
 
 // Layouts
 import { PublicLayout } from '@/app/layouts/PublicLayout';
@@ -58,10 +59,10 @@ const routes: RouteObject[] = [
       { path: 'landing-pages', element: <CmsPublicPage pageKey="landing-pages" /> },
       { path: 'advertiser-pages', element: <CmsPublicPage pageKey="advertiser-pages" /> },
       { path: 'user-guides', element: <CmsPublicPage pageKey="user-guides" /> },
-      { path: 'login', element: <LoginPage /> },
-      { path: 'signup', element: <SignupPage /> },
-      { path: 'forgot-password', element: <ForgotPasswordPage /> },
-      { path: 'reset-password', element: <ResetPasswordPage /> },
+      { path: 'login', loader: guestOnlyMiddleware(), element: <LoginPage /> },
+      { path: 'signup', loader: guestOnlyMiddleware(), element: <SignupPage /> },
+      { path: 'forgot-password', loader: guestOnlyMiddleware(), element: <ForgotPasswordPage /> },
+      { path: 'reset-password', loader: guestOnlyMiddleware(), element: <ResetPasswordPage /> },
       { path: 'unauthorized', element: <UnauthorizedPage /> },
     ],
   },
@@ -69,6 +70,7 @@ const routes: RouteObject[] = [
   // Authenticated user routes
   {
     path: '/app',
+    loader: requireAuthMiddleware([UserRole.REGISTERED_USER]),
     element: (
       <ProtectedRoute requiredRoles={[UserRole.REGISTERED_USER]}>
         <AppLayout />
@@ -89,6 +91,7 @@ const routes: RouteObject[] = [
   // Advertiser/Campaign Manager routes
   {
     path: '/business',
+    loader: requireAuthMiddleware([UserRole.ADVERTISER, UserRole.CAMPAIGN_MANAGER]),
     element: (
       <ProtectedRoute requiredRoles={[UserRole.ADVERTISER, UserRole.CAMPAIGN_MANAGER]}>
         <AppLayout />
@@ -109,6 +112,7 @@ const routes: RouteObject[] = [
   // Super Admin routes
   {
     path: '/admin',
+    loader: requireAuthMiddleware([UserRole.SUPER_ADMIN]),
     element: (
       <ProtectedRoute requiredRoles={[UserRole.SUPER_ADMIN]}>
         <AdminLayout />

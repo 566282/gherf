@@ -1,14 +1,40 @@
 import { generateReferralCode, getUserLevel } from '@/lib/auth';
+import { env } from '@/lib/env';
+import { getDeviceFingerprintInput, getOrCreateSessionId, sanitizeEmail } from '@/lib/security';
 import type {
   ActivityLogItem,
   AdminUserFilters,
   AppRole,
+  DeviceSession,
+  MfaFactor,
   NotificationItem,
   RewardLedgerItem,
   UserProfile,
   WalletActivity,
 } from '@/types/auth';
 import { supabase } from '@/services/supabase/client';
+
+type OAuthProvider = 'google' | 'facebook' | 'apple';
+
+type LockStatusRow = {
+  is_locked: boolean;
+  locked_until: string | null;
+  remaining_seconds: number;
+  failed_attempts: number;
+};
+
+type SecuritySessionRow = {
+  id: string;
+  session_id: string;
+  is_trusted: boolean;
+  is_revoked: boolean;
+  revoked_reason: string | null;
+  created_at: string;
+  last_seen_at: string;
+  expires_at: string;
+  device_hash: string | null;
+  user_agent_hash: string | null;
+};
 
 type ProfileRow = {
   id: string;
@@ -60,6 +86,59 @@ function mapProfile(row: ProfileRow, email: string | null): UserProfile {
   };
 }
 
+async function checkAuthLock(email: string): Promise<LockStatusRow> {
+  const normalizedEmail = sanitizeEmail(email);
+  const { data, error } = await supabase.rpc('security_is_auth_locked', {
+    p_email: normalizedEmail,
+  });
+
+  if (error || !Array.isArray(data) || data.length === 0) {
+    return {
+      is_locked: false,
+      locked_until: null,
+      remaining_seconds: 0,
+      failed_attempts: 0,
+    };
+  }
+
+  const row = data[0] as LockStatusRow;
+  return {
+    is_locked: Boolean(row.is_locked),
+    locked_until: row.locked_until,
+    remaining_seconds: Number(row.remaining_seconds ?? 0),
+    failed_attempts: Number(row.failed_attempts ?? 0),
+  };
+}
+
+async function registerCurrentSession(rememberLogin = false): Promise<void> {
+  const sessionId = getOrCreateSessionId();
+  const now = Date.now();
+  const ttlHours = rememberLogin ? 24 * 7 : Math.max(1, env.authMaxSessionHours);
+  const expiresAt = new Date(now + ttlHours * 60 * 60 * 1000).toISOString();
+
+  await supabase.rpc('security_register_session', {
+    p_session_id: sessionId,
+    p_expires_at: expiresAt,
+    p_device_fingerprint: getDeviceFingerprintInput(),
+    p_user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
+    p_is_trusted: rememberLogin,
+  });
+}
+
+async function signInWithOAuthProvider(provider: OAuthProvider, rememberLogin = false): Promise<void> {
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider,
+    options: {
+      redirectTo: `${window.location.origin}/app`,
+      queryParams: rememberLogin ? { prompt: 'consent' } : undefined,
+    },
+  });
+
+  if (error) {
+    throw error;
+  }
+}
+
 export async function getCurrentProfile(): Promise<UserProfile | null> {
   const { data: authData, error: authError } = await supabase.auth.getUser();
   if (authError || !authData.user) return null;
@@ -74,12 +153,36 @@ export async function getCurrentProfile(): Promise<UserProfile | null> {
   return mapProfile(data, authData.user.email ?? null);
 }
 
-export async function signIn(email: string, password: string): Promise<void> {
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) throw error;
+export async function signIn(email: string, password: string, rememberLogin = false): Promise<void> {
+  const normalizedEmail = sanitizeEmail(email);
+  const lockStatus = await checkAuthLock(normalizedEmail);
+
+  if (lockStatus.is_locked) {
+    throw new Error(`Account temporarily locked. Try again in ${Math.max(1, Math.ceil(lockStatus.remaining_seconds / 60))} minute(s).`);
+  }
+
+  const { error } = await supabase.auth.signInWithPassword({ email: normalizedEmail, password });
+
+  if (error) {
+    await supabase.rpc('security_handle_auth_failure', {
+      p_email: normalizedEmail,
+      p_reason: 'invalid_credentials',
+    });
+    throw error;
+  }
+
+  await supabase.rpc('security_handle_auth_success', {
+    p_email: normalizedEmail,
+  });
+  await registerCurrentSession(rememberLogin);
 
   const { data: userData } = await supabase.auth.getUser();
   if (userData.user) {
+    await supabase.rpc('security_attach_auth_state_user', {
+      p_email: normalizedEmail,
+      p_user_id: userData.user.id,
+    });
+
     const now = new Date().toISOString();
     await supabase.from('profiles').update({ last_login_at: now }).eq('id', userData.user.id);
     await supabase.from('user_activity_logs').insert({
@@ -91,14 +194,53 @@ export async function signIn(email: string, password: string): Promise<void> {
 }
 
 export async function signInWithGoogle(): Promise<void> {
-  const { error } = await supabase.auth.signInWithOAuth({
-    provider: 'google',
+  await signInWithOAuthProvider('google');
+}
+
+export async function signInWithFacebook(): Promise<void> {
+  await signInWithOAuthProvider('facebook');
+}
+
+export async function signInWithApple(): Promise<void> {
+  await signInWithOAuthProvider('apple');
+}
+
+export async function requestPhoneOtp(phone: string): Promise<void> {
+  const { error } = await supabase.auth.signInWithOtp({
+    phone,
     options: {
-      redirectTo: `${window.location.origin}/app`,
+      shouldCreateUser: false,
     },
   });
 
-  if (error) throw error;
+  if (error) {
+    throw error;
+  }
+}
+
+export async function verifyPhoneOtp(phone: string, token: string, rememberLogin = false): Promise<void> {
+  const { error } = await supabase.auth.verifyOtp({
+    phone,
+    token,
+    type: 'sms',
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  await registerCurrentSession(rememberLogin);
+
+  const { data: userData } = await supabase.auth.getUser();
+  if (userData.user?.email) {
+    await supabase.rpc('security_attach_auth_state_user', {
+      p_email: userData.user.email,
+      p_user_id: userData.user.id,
+    });
+    await supabase.rpc('security_handle_auth_success', {
+      p_email: userData.user.email,
+    });
+  }
 }
 
 export async function signUp(
@@ -135,8 +277,136 @@ export async function signOut(): Promise<void> {
     });
   }
 
+  await supabase.rpc('security_revoke_session', {
+    p_session_id: getOrCreateSessionId(),
+    p_reason: 'logout',
+  });
+
   const { error } = await supabase.auth.signOut();
   if (error) throw error;
+}
+
+export async function listMfaFactors(): Promise<MfaFactor[]> {
+  const { data, error } = await supabase.auth.mfa.listFactors();
+  if (error) {
+    throw error;
+  }
+
+  const factors = [...(data.totp ?? []), ...(data.phone ?? [])];
+  return factors.map((factor) => ({
+    id: factor.id,
+    factorType: factor.factor_type,
+    status: factor.status,
+    friendlyName: factor.friendly_name ?? null,
+    createdAt: factor.created_at,
+  }));
+}
+
+export async function enrollTotpFactor(friendlyName?: string): Promise<{ factorId: string; qrCode: string }> {
+  const { data, error } = await supabase.auth.mfa.enroll({
+    factorType: 'totp',
+    friendlyName: friendlyName ?? 'InvestPro Authenticator',
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  return {
+    factorId: data.id,
+    qrCode: data.totp.qr_code,
+  };
+}
+
+export async function verifyTotpEnrollment(factorId: string, code: string): Promise<void> {
+  const { data: challengeData, error: challengeError } = await supabase.auth.mfa.challenge({ factorId });
+  if (challengeError) {
+    throw challengeError;
+  }
+
+  const { error } = await supabase.auth.mfa.verify({
+    factorId,
+    challengeId: challengeData.id,
+    code,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  const { data: authData } = await supabase.auth.getUser();
+  if (authData.user) {
+    await supabase.from('profiles').update({ two_factor_enabled: true }).eq('id', authData.user.id);
+  }
+}
+
+export async function challengeMfa(factorId: string): Promise<string> {
+  const { data, error } = await supabase.auth.mfa.challenge({ factorId });
+  if (error) {
+    throw error;
+  }
+
+  return data.id;
+}
+
+export async function verifyMfaChallenge(factorId: string, challengeId: string, code: string): Promise<void> {
+  const { error } = await supabase.auth.mfa.verify({ factorId, challengeId, code });
+  if (error) {
+    throw error;
+  }
+}
+
+export async function unenrollMfaFactor(factorId: string): Promise<void> {
+  const { error } = await supabase.auth.mfa.unenroll({ factorId });
+  if (error) {
+    throw error;
+  }
+
+  const factors = await listMfaFactors();
+  const hasVerifiedFactor = factors.some((factor) => factor.status === 'verified');
+  const { data: authData } = await supabase.auth.getUser();
+  if (authData.user) {
+    await supabase.from('profiles').update({ two_factor_enabled: hasVerifiedFactor }).eq('id', authData.user.id);
+  }
+}
+
+export async function listActiveSessions(): Promise<DeviceSession[]> {
+  const { data, error } = await supabase
+    .from('security_sessions')
+    .select('id,session_id,is_trusted,is_revoked,revoked_reason,created_at,last_seen_at,expires_at,device_hash,user_agent_hash')
+    .order('last_seen_at', { ascending: false });
+
+  if (error) {
+    throw error;
+  }
+
+  return (data ?? []).map((row) => {
+    const typed = row as SecuritySessionRow;
+    return {
+      id: typed.id,
+      sessionId: typed.session_id,
+      isTrusted: typed.is_trusted,
+      isRevoked: typed.is_revoked,
+      revokedReason: typed.revoked_reason,
+      createdAt: typed.created_at,
+      lastSeenAt: typed.last_seen_at,
+      expiresAt: typed.expires_at,
+      deviceHash: typed.device_hash,
+      userAgentHash: typed.user_agent_hash,
+      isCurrentSession: typed.session_id === getOrCreateSessionId(),
+    };
+  });
+}
+
+export async function revokeSession(sessionId: string, reason = 'manual_revocation'): Promise<void> {
+  const { error } = await supabase.rpc('security_revoke_session', {
+    p_session_id: sessionId,
+    p_reason: reason,
+  });
+
+  if (error) {
+    throw error;
+  }
 }
 
 export async function requestPasswordReset(email: string): Promise<void> {

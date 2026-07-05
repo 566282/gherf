@@ -23,4 +23,4 @@
 
 - Google login depends on Supabase OAuth provider configuration.
 - Admin password reset is implemented as a reset-email dispatch.
-- Two-factor authentication is exposed as a profile setting and can be wired to Supabase MFA in a follow-up pass if project-level MFA is enabled.
+- Advanced auth controls (Facebook, Apple, phone OTP, MFA enrollment/challenge, account locking, device/session management) are implemented in Phase 16. See `docs/PHASE_16_ADVANCED_AUTH.md`.

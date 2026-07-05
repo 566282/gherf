@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import type { PropsWithChildren } from 'react';
 import { env } from '@/lib/env';
-import { clearSecuritySessionState } from '@/lib/security';
+import { clearSecuritySessionState, getDeviceFingerprintInput, getOrCreateSessionId } from '@/lib/security';
 import { getCurrentProfile } from '@/services/api/auth';
 import { supabase } from '@/services/supabase/client';
 import type { AuthState } from '@/types/auth';
@@ -34,6 +34,18 @@ export function AuthProvider({ children }: PropsWithChildren): JSX.Element {
   useEffect(() => {
     void refreshProfile();
 
+    const registerSession = async (isTrusted = false) => {
+      const sessionId = getOrCreateSessionId();
+      const expiresAt = new Date(Date.now() + Math.max(1, env.authMaxSessionHours) * 60 * 60 * 1000).toISOString();
+      await supabase.rpc('security_register_session', {
+        p_session_id: sessionId,
+        p_expires_at: expiresAt,
+        p_device_fingerprint: getDeviceFingerprintInput(),
+        p_user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
+        p_is_trusted: isTrusted,
+      });
+    };
+
     const idleTimeoutMs = Math.max(5, env.authSessionIdleTimeoutMinutes) * 60 * 1000;
     let timeoutHandle: number | undefined;
 
@@ -65,6 +77,10 @@ export function AuthProvider({ children }: PropsWithChildren): JSX.Element {
     } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_OUT') {
         clearSecuritySessionState();
+      }
+
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        void registerSession(false);
       }
 
       onActivity();

@@ -77,3 +77,25 @@ export interface ActivityLogItem {
   reason?: string | null;
   createdAt: string;
 }
+
+export interface MfaFactor {
+  id: string;
+  factorType: 'totp' | 'phone';
+  status: 'unverified' | 'verified';
+  friendlyName: string | null;
+  createdAt: string;
+}
+
+export interface DeviceSession {
+  id: string;
+  sessionId: string;
+  isTrusted: boolean;
+  isRevoked: boolean;
+  revokedReason: string | null;
+  createdAt: string;
+  lastSeenAt: string;
+  expiresAt: string;
+  deviceHash: string | null;
+  userAgentHash: string | null;
+  isCurrentSession: boolean;
+}
