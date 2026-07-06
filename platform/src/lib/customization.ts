@@ -95,52 +95,58 @@ export function mergeCustomizationConfig(value: unknown): AdminCustomizationConf
     return defaultCustomizationConfig;
   }
 
+  const branding = isRecord(value.branding) ? value.branding : undefined;
+  const layout = isRecord(value.layout) ? value.layout : undefined;
+  const trust = isRecord(value.trust) ? value.trust : undefined;
+  const templates = isRecord(value.templates) ? value.templates : undefined;
+  const tokens = isRecord(value.tokens) ? value.tokens : undefined;
+
   return {
     themePreset: themePresetOptions.some((option) => option.value === value.themePreset) ? (value.themePreset as ThemePreset) : defaultCustomizationConfig.themePreset,
     customCss: typeof value.customCss === 'string' ? value.customCss : defaultCustomizationConfig.customCss,
     branding: {
-      logoMark: toStringValue(value.branding?.logoMark, defaultBranding.logoMark),
-      logoText: toStringValue(value.branding?.logoText, defaultBranding.logoText),
-      iconStyle: value.branding?.iconStyle === 'line' || value.branding?.iconStyle === 'solid' || value.branding?.iconStyle === 'duotone' ? value.branding.iconStyle : defaultBranding.iconStyle,
+      logoMark: toStringValue(branding?.logoMark, defaultBranding.logoMark),
+      logoText: toStringValue(branding?.logoText, defaultBranding.logoText),
+      iconStyle: branding?.iconStyle === 'line' || branding?.iconStyle === 'solid' || branding?.iconStyle === 'duotone' ? branding.iconStyle : defaultBranding.iconStyle,
     },
     layout: {
-      mode: value.layout?.mode === 'stacked' || value.layout?.mode === 'sidebar' || value.layout?.mode === 'split' ? value.layout.mode : defaultLayout.mode,
-      sidebar: value.layout?.sidebar === 'compact' ? 'compact' : defaultLayout.sidebar,
-      dashboardWidgets: value.layout?.dashboardWidgets === 'stacked' || value.layout?.dashboardWidgets === 'bento' || value.layout?.dashboardWidgets === 'dense' ? value.layout.dashboardWidgets : defaultLayout.dashboardWidgets,
-      landingPageSections: value.layout?.landingPageSections === 'full' || value.layout?.landingPageSections === 'focused' || value.layout?.landingPageSections === 'minimal' ? value.layout.landingPageSections : defaultLayout.landingPageSections,
-      navigation: value.layout?.navigation === 'top' || value.layout?.navigation === 'side' || value.layout?.navigation === 'hybrid' ? value.layout.navigation : defaultLayout.navigation,
-      buttonStyle: value.layout?.buttonStyle === 'rounded' || value.layout?.buttonStyle === 'pill' || value.layout?.buttonStyle === 'sharp' ? value.layout.buttonStyle : defaultLayout.buttonStyle,
-      cardStyle: value.layout?.cardStyle === 'flat' || value.layout?.cardStyle === 'elevated' || value.layout?.cardStyle === 'glass' ? value.layout.cardStyle : defaultLayout.cardStyle,
+      mode: layout?.mode === 'stacked' || layout?.mode === 'sidebar' || layout?.mode === 'split' ? layout.mode : defaultLayout.mode,
+      sidebar: layout?.sidebar === 'compact' ? 'compact' : defaultLayout.sidebar,
+      dashboardWidgets: layout?.dashboardWidgets === 'stacked' || layout?.dashboardWidgets === 'bento' || layout?.dashboardWidgets === 'dense' ? layout.dashboardWidgets : defaultLayout.dashboardWidgets,
+      landingPageSections: layout?.landingPageSections === 'full' || layout?.landingPageSections === 'focused' || layout?.landingPageSections === 'minimal' ? layout.landingPageSections : defaultLayout.landingPageSections,
+      navigation: layout?.navigation === 'top' || layout?.navigation === 'side' || layout?.navigation === 'hybrid' ? layout.navigation : defaultLayout.navigation,
+      buttonStyle: layout?.buttonStyle === 'rounded' || layout?.buttonStyle === 'pill' || layout?.buttonStyle === 'sharp' ? layout.buttonStyle : defaultLayout.buttonStyle,
+      cardStyle: layout?.cardStyle === 'flat' || layout?.cardStyle === 'elevated' || layout?.cardStyle === 'glass' ? layout.cardStyle : defaultLayout.cardStyle,
     },
     trust: {
-      sslSecurityIndicators: toBoolean(value.trust?.sslSecurityIndicators, defaultTrust.sslSecurityIndicators),
-      verifiedAdvertiserBadges: toBoolean(value.trust?.verifiedAdvertiserBadges, defaultTrust.verifiedAdvertiserBadges),
-      verifiedUserBadges: toBoolean(value.trust?.verifiedUserBadges, defaultTrust.verifiedUserBadges),
-      realTimeStatistics: toBoolean(value.trust?.realTimeStatistics, defaultTrust.realTimeStatistics),
-      transparentPayoutHistory: toBoolean(value.trust?.transparentPayoutHistory, defaultTrust.transparentPayoutHistory),
-      auditLogs: toBoolean(value.trust?.auditLogs, defaultTrust.auditLogs),
-      fraudProtectionMessaging: toBoolean(value.trust?.fraudProtectionMessaging, defaultTrust.fraudProtectionMessaging),
-      userTestimonials: toBoolean(value.trust?.userTestimonials, defaultTrust.userTestimonials),
-      professionalCertifications: toBoolean(value.trust?.professionalCertifications, defaultTrust.professionalCertifications),
-      systemStatusIndicators: toBoolean(value.trust?.systemStatusIndicators, defaultTrust.systemStatusIndicators),
+      sslSecurityIndicators: toBoolean(trust?.sslSecurityIndicators, defaultTrust.sslSecurityIndicators),
+      verifiedAdvertiserBadges: toBoolean(trust?.verifiedAdvertiserBadges, defaultTrust.verifiedAdvertiserBadges),
+      verifiedUserBadges: toBoolean(trust?.verifiedUserBadges, defaultTrust.verifiedUserBadges),
+      realTimeStatistics: toBoolean(trust?.realTimeStatistics, defaultTrust.realTimeStatistics),
+      transparentPayoutHistory: toBoolean(trust?.transparentPayoutHistory, defaultTrust.transparentPayoutHistory),
+      auditLogs: toBoolean(trust?.auditLogs, defaultTrust.auditLogs),
+      fraudProtectionMessaging: toBoolean(trust?.fraudProtectionMessaging, defaultTrust.fraudProtectionMessaging),
+      userTestimonials: toBoolean(trust?.userTestimonials, defaultTrust.userTestimonials),
+      professionalCertifications: toBoolean(trust?.professionalCertifications, defaultTrust.professionalCertifications),
+      systemStatusIndicators: toBoolean(trust?.systemStatusIndicators, defaultTrust.systemStatusIndicators),
     },
     templates: {
-      campaignTemplate: value.templates?.campaignTemplate === 'starter' || value.templates?.campaignTemplate === 'balanced' || value.templates?.campaignTemplate === 'premium' ? value.templates.campaignTemplate : defaultTemplates.campaignTemplate,
-      emailTemplate: value.templates?.emailTemplate === 'starter' || value.templates?.emailTemplate === 'balanced' || value.templates?.emailTemplate === 'premium' ? value.templates.emailTemplate : defaultTemplates.emailTemplate,
-      notificationTemplate: value.templates?.notificationTemplate === 'starter' || value.templates?.notificationTemplate === 'balanced' || value.templates?.notificationTemplate === 'premium' ? value.templates.notificationTemplate : defaultTemplates.notificationTemplate,
-      rewardRules: value.templates?.rewardRules === 'starter' || value.templates?.rewardRules === 'balanced' || value.templates?.rewardRules === 'premium' ? value.templates.rewardRules : defaultTemplates.rewardRules,
+      campaignTemplate: templates?.campaignTemplate === 'starter' || templates?.campaignTemplate === 'balanced' || templates?.campaignTemplate === 'premium' ? templates.campaignTemplate : defaultTemplates.campaignTemplate,
+      emailTemplate: templates?.emailTemplate === 'starter' || templates?.emailTemplate === 'balanced' || templates?.emailTemplate === 'premium' ? templates.emailTemplate : defaultTemplates.emailTemplate,
+      notificationTemplate: templates?.notificationTemplate === 'starter' || templates?.notificationTemplate === 'balanced' || templates?.notificationTemplate === 'premium' ? templates.notificationTemplate : defaultTemplates.notificationTemplate,
+      rewardRules: templates?.rewardRules === 'starter' || templates?.rewardRules === 'balanced' || templates?.rewardRules === 'premium' ? templates.rewardRules : defaultTemplates.rewardRules,
     },
     tokens: {
-      spacing: value.tokens?.spacing === 'compact' || value.tokens?.spacing === 'balanced' || value.tokens?.spacing === 'cozy' ? value.tokens.spacing : defaultTokens.spacing,
-      typography: themeFontOptions.some((option) => option.value === value.tokens?.typography) ? value.tokens.typography : defaultTokens.typography,
-      radius: value.tokens?.radius === 'sharp' || value.tokens?.radius === 'balanced' || value.tokens?.radius === 'soft' ? value.tokens.radius : defaultTokens.radius,
-      elevation: value.tokens?.elevation === 'flat' || value.tokens?.elevation === 'layered' || value.tokens?.elevation === 'floating' ? value.tokens.elevation : defaultTokens.elevation,
-      animations: value.tokens?.animations === 'calm' || value.tokens?.animations === 'polished' || value.tokens?.animations === 'expressive' ? value.tokens.animations : defaultTokens.animations,
-      icons: value.tokens?.icons === 'line' || value.tokens?.icons === 'solid' || value.tokens?.icons === 'duotone' ? value.tokens.icons : defaultTokens.icons,
-      transitions: value.tokens?.transitions === 'snappy' || value.tokens?.transitions === 'standard' || value.tokens?.transitions === 'slow' ? value.tokens.transitions : defaultTokens.transitions,
-      opacity: value.tokens?.opacity === 'subtle' || value.tokens?.opacity === 'balanced' || value.tokens?.opacity === 'bold' ? value.tokens.opacity : defaultTokens.opacity,
-      gridSystem: value.tokens?.gridSystem === '12-column' || value.tokens?.gridSystem === '14-column' || value.tokens?.gridSystem === '16-column' ? value.tokens.gridSystem : defaultTokens.gridSystem,
-      breakpoints: value.tokens?.breakpoints === 'standard' || value.tokens?.breakpoints === 'touch-optimized' || value.tokens?.breakpoints === 'foldable-aware' ? value.tokens.breakpoints : defaultTokens.breakpoints,
+      spacing: tokens?.spacing === 'compact' || tokens?.spacing === 'balanced' || tokens?.spacing === 'cozy' ? tokens.spacing : defaultTokens.spacing,
+      typography: themeFontOptions.some((option) => option.value === tokens?.typography) ? tokens.typography : defaultTokens.typography,
+      radius: tokens?.radius === 'sharp' || tokens?.radius === 'balanced' || tokens?.radius === 'soft' ? tokens.radius : defaultTokens.radius,
+      elevation: tokens?.elevation === 'flat' || tokens?.elevation === 'layered' || tokens?.elevation === 'floating' ? tokens.elevation : defaultTokens.elevation,
+      animations: tokens?.animations === 'calm' || tokens?.animations === 'polished' || tokens?.animations === 'expressive' ? tokens.animations : defaultTokens.animations,
+      icons: tokens?.icons === 'line' || tokens?.icons === 'solid' || tokens?.icons === 'duotone' ? tokens.icons : defaultTokens.icons,
+      transitions: tokens?.transitions === 'snappy' || tokens?.transitions === 'standard' || tokens?.transitions === 'slow' ? tokens.transitions : defaultTokens.transitions,
+      opacity: tokens?.opacity === 'subtle' || tokens?.opacity === 'balanced' || tokens?.opacity === 'bold' ? tokens.opacity : defaultTokens.opacity,
+      gridSystem: tokens?.gridSystem === '12-column' || tokens?.gridSystem === '14-column' || tokens?.gridSystem === '16-column' ? tokens.gridSystem : defaultTokens.gridSystem,
+      breakpoints: tokens?.breakpoints === 'standard' || tokens?.breakpoints === 'touch-optimized' || tokens?.breakpoints === 'foldable-aware' ? tokens.breakpoints : defaultTokens.breakpoints,
     },
   };
 }

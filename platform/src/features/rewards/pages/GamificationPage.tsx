@@ -52,27 +52,31 @@ const baseLeaderboard: LeaderboardEntry[] = [
   { name: 'Ethan Cruz', xp: 2155, streak: 16, level: 9, badge: 'Mission Pro' },
 ];
 
-function loadDemoState() {
-  if (typeof window === 'undefined') {
-    return null;
+function progressValue(value: number, target: number) {
+  if (target <= 0) {
+    return 0;
   }
 
-  const raw = window.localStorage.getItem(storageKey);
-  if (!raw) return null;
+  return Math.max(0, Math.min(100, (value / target) * 100));
+}
 
-  try {
-    return JSON.parse(raw) as {
-      xp: number;
-      streak: number;
-      dailyClaimed: boolean;
-      return (
-        <div className="pointer-events-none absolute inset-0 overflow-hidden">
-          {pieces.map(([position, color, offset], index) => (
-            <span key={`${position}-${index}`} className={`confetti-piece ${position} ${color} ${offset}`} style={{ top: `${12 + index * 2}%`, animationDelay: `${index * 80}ms` }} />
-          ))}
-        </div>
-      );
-    }
+function AnimatedCounter({ value, className }: { value: number; className?: string }) {
+  const [displayValue, setDisplayValue] = useState(value);
+
+  useEffect(() => {
+    let frame = 0;
+    const duration = 420;
+    const startTime = performance.now();
+    const startValue = displayValue;
+    const delta = value - startValue;
+
+    const step = (now: number) => {
+      const progress = Math.min(1, (now - startTime) / duration);
+      const nextValue = startValue + delta * progress;
+      setDisplayValue(Math.round(nextValue));
+
+      if (progress < 1) {
+        frame = window.requestAnimationFrame(step);
       }
     };
 

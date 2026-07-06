@@ -294,11 +294,7 @@ export function RewardHistoryPage() {
                 <span className="text-sm text-mist/70">Wallet type</span>
                 <select className="input-base" value={transferFilterWalletType} onChange={(event) => setTransferFilterWalletType(event.target.value as 'all' | WalletAccountType)}>
                   <option value="all">All wallets</option>
-                  {walletAccountTypes.map((value) => (
-                    <option key={value} value={value}>
-                      {walletAccountLabels[value]}
-                    </option>
-                  ))}
+                  {walletAccountTypes.map((value) => <option key={value} value={value}>{walletAccountLabels[value]}</option>)}
                 </select>
               </label>
               <label className="grid gap-2">

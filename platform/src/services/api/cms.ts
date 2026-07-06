@@ -30,6 +30,8 @@ const pageLabels: Record<CmsPageKey, string> = {
   'user-guides': 'User guides',
 };
 
+export const cmsPageKeys = Object.keys(pageLabels) as CmsPageKey[];
+
 const defaultItems: Record<CmsPageKey, CmsContentItem[]> = {
   home: [
     { title: 'Premium advertiser controls', body: 'Launch and optimize campaigns with clear spend governance, brand-safe approvals, and fast execution.', meta: 'Trust' },
