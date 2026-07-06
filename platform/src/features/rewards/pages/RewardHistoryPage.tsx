@@ -285,38 +285,42 @@ export function RewardHistoryPage() {
               <a href="#internal-transfer" className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white transition hover:border-mint/30 hover:bg-mint/10">
                 Move funds
               </a>
-                <div className="mt-4 grid gap-3 md:grid-cols-3">
-                  <label className="grid gap-2">
-                    <span className="text-sm text-mist/70">Wallet type</span>
-                    <select className="input-base" value={transferFilterWalletType} onChange={(event) => setTransferFilterWalletType(event.target.value as 'all' | WalletAccountType)}>
-                      <option value="all">All wallets</option>
-                      {walletAccountTypes.map((value) => <option key={value} value={value}>{walletAccountLabels[value]}</option>)}
-                    </select>
-                  </label>
-                  <label className="grid gap-2">
-                    <span className="text-sm text-mist/70">Status</span>
-                    <select className="input-base" value={transferFilterStatus} onChange={(event) => setTransferFilterStatus(event.target.value as 'all' | WalletTransfer['status'])}>
-                      <option value="all">All statuses</option>
-                      <option value="completed">Completed</option>
-                      <option value="pending">Pending</option>
-                      <option value="failed">Failed</option>
-                      <option value="cancelled">Cancelled</option>
-                    </select>
-                  </label>
-                  <label className="grid gap-2">
-                    <span className="text-sm text-mist/70">Currency</span>
-                    <select className="input-base" value={transferFilterCurrency} onChange={(event) => setTransferFilterCurrency(event.target.value)}>
-                      {transferCurrencyOptions.map((value) => (
-                        <option key={value} value={value}>
-                          {value === 'all' ? 'All currencies' : value}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
               <a href="#wallet-summary" className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white transition hover:border-mint/30 hover:bg-mint/10">
-                  {filteredTransfers.length ? filteredTransfers.map((transfer) => (
+                View wallet summary
               </a>
+            </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              <label className="grid gap-2">
+                <span className="text-sm text-mist/70">Wallet type</span>
+                <select className="input-base" value={transferFilterWalletType} onChange={(event) => setTransferFilterWalletType(event.target.value as 'all' | WalletAccountType)}>
+                  <option value="all">All wallets</option>
+                  {walletAccountTypes.map((value) => (
+                    <option key={value} value={value}>
+                      {walletAccountLabels[value]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="grid gap-2">
+                <span className="text-sm text-mist/70">Status</span>
+                <select className="input-base" value={transferFilterStatus} onChange={(event) => setTransferFilterStatus(event.target.value as 'all' | WalletTransfer['status'])}>
+                  <option value="all">All statuses</option>
+                  <option value="completed">Completed</option>
+                  <option value="pending">Pending</option>
+                  <option value="failed">Failed</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              </label>
+              <label className="grid gap-2">
+                <span className="text-sm text-mist/70">Currency</span>
+                <select className="input-base" value={transferFilterCurrency} onChange={(event) => setTransferFilterCurrency(event.target.value)}>
+                  {transferCurrencyOptions.map((value) => (
+                    <option key={value} value={value}>
+                      {value === 'all' ? 'All currencies' : value}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
           </div>
           <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-sm text-mist/80 shadow-soft">
