@@ -22,12 +22,47 @@ export function AuthProvider({ children }: PropsWithChildren): JSX.Element {
   const [state, setState] = useState<AuthState>(defaultState);
 
   const refreshProfile = async () => {
-    setState((prev) => ({ ...prev, isLoading: true }));
+    setState((prev) => ({ ...prev, isLoading: prev.profile ? prev.isLoading : true }));
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session?.user) {
+      setState({
+        isLoading: false,
+        isAuthenticated: false,
+        profile: null,
+      });
+      return;
+    }
+
     const profile = await getCurrentProfile();
-    setState({
-      isLoading: false,
-      isAuthenticated: Boolean(profile),
-      profile,
+
+    if (profile) {
+      setState({
+        isLoading: false,
+        isAuthenticated: true,
+        profile,
+      });
+      return;
+    }
+
+    // Avoid dropping a valid signed-in session on transient profile fetch failures.
+    setState((prev) => {
+      if (prev.profile?.id === session.user.id) {
+        return {
+          isLoading: false,
+          isAuthenticated: true,
+          profile: prev.profile,
+        };
+      }
+
+      return {
+        isLoading: false,
+        isAuthenticated: false,
+        profile: null,
+      };
     });
   };
 
