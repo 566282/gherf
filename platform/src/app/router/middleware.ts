@@ -11,6 +11,21 @@ type ProfileGuardRow = {
   is_active: boolean;
 };
 
+function getDefaultRouteForRole(role: AppRole | null | undefined): string {
+  switch (role) {
+    case 'super_admin':
+      return '/admin';
+    case 'advertiser':
+    case 'campaign_manager':
+      return '/business';
+    case 'registered_user':
+    case 'moderator':
+    case 'guest':
+    default:
+      return '/app';
+  }
+}
+
 function hasAnyRequiredRole(userRole: AppRole, requiredRoles: UserRole[]): boolean {
   if (userRole === 'super_admin') {
     return true;
@@ -32,7 +47,13 @@ export function guestOnlyMiddleware() {
     } = await supabase.auth.getSession();
 
     if (session) {
-      throw redirect('/app');
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', session.user.id)
+        .maybeSingle<{ role: AppRole }>();
+
+      throw redirect(getDefaultRouteForRole(profile?.role));
     }
 
     return null;
