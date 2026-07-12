@@ -1,37 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
-import { getDeviceFingerprintInput, getOrCreateCsrfToken, getOrCreateSessionId } from '@/lib/security';
-
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase environment variables');
-}
-
-const secureFetch: typeof fetch = async (input, init) => {
-  const headers = new Headers(init?.headers ?? undefined);
-  headers.set('X-CSRF-Token', getOrCreateCsrfToken());
-  headers.set('X-Client-Session', getOrCreateSessionId());
-  headers.set('X-Client-Device', getDeviceFingerprintInput());
-
-  return fetch(input, {
-    ...init,
-    headers,
-  });
-};
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  global: {
-    fetch: secureFetch,
-  },
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-    flowType: 'pkce',
-    storageKey: 'investpro.auth.token',
-  },
-});
+import { supabase } from '@/services/supabase/client';
 
 /**
  * Get the authenticated user's session.
