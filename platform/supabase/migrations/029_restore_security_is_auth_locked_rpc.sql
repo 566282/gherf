@@ -32,7 +32,7 @@ RETURNS TABLE(
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 DECLARE
   normalized_email TEXT;
@@ -48,7 +48,7 @@ BEGIN
     RETURN;
   END IF;
 
-  email_digest := ENCODE(DIGEST(normalized_email, 'sha256'), 'hex');
+  email_digest := ENCODE(extensions.DIGEST(normalized_email, 'sha256'), 'hex');
 
   SELECT s.locked_until, s.failed_attempts
     INTO state_locked_until, state_failed_attempts
