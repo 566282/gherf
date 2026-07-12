@@ -38,6 +38,8 @@ type LockStatusRow = {
   failed_attempts: number;
 };
 
+let authLockRpcAvailable: boolean | null = null;
+
 type SecuritySessionRow = {
   id: string;
   session_id: string;
@@ -102,12 +104,42 @@ function mapProfile(row: ProfileRow, email: string | null): UserProfile {
 }
 
 async function checkAuthLock(email: string): Promise<LockStatusRow> {
+  if (authLockRpcAvailable === false) {
+    return {
+      is_locked: false,
+      locked_until: null,
+      remaining_seconds: 0,
+      failed_attempts: 0,
+    };
+  }
+
   const normalizedEmail = sanitizeEmail(email);
   const { data, error } = await supabase.rpc('security_is_auth_locked', {
     p_email: normalizedEmail,
   });
 
-  if (error || !Array.isArray(data) || data.length === 0) {
+  if (error) {
+    const serializedError = JSON.stringify(error);
+    if (
+      serializedError.includes('security_is_auth_locked') ||
+      serializedError.includes('PGRST') ||
+      serializedError.includes('404') ||
+      serializedError.includes('406')
+    ) {
+      authLockRpcAvailable = false;
+    }
+
+    return {
+      is_locked: false,
+      locked_until: null,
+      remaining_seconds: 0,
+      failed_attempts: 0,
+    };
+  }
+
+  authLockRpcAvailable = true;
+
+  if (!Array.isArray(data) || data.length === 0) {
     return {
       is_locked: false,
       locked_until: null,

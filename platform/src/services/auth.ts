@@ -10,11 +10,14 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
     .from('profiles')
     .select('id, email, full_name, avatar_url, role, status, created_at, updated_at')
     .eq('id', userId)
-    .single();
+    .maybeSingle();
 
   if (error) {
-    if (error.code === 'PGRST116') return null; // Not found
     throw error;
+  }
+
+  if (!data) {
+    return null;
   }
 
   return {
