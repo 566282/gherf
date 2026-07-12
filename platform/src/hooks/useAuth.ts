@@ -18,6 +18,10 @@ export function useHasRole(...roles: UserRole[]): boolean {
 
   if (!profile) return false;
 
+  if (profile.role === UserRole.SUPER_ADMIN) {
+    return true;
+  }
+
   return roles.includes(profile.role as UserRole);
 }
 

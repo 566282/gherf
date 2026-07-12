@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import {
+  getCurrentProfile,
   requestPhoneOtp,
   signIn,
   signInWithApple,
@@ -13,6 +14,21 @@ import {
 
 function isValidEmail(value: string): boolean {
   return /^\S+@\S+\.\S+$/.test(value);
+}
+
+function getPostLoginRoute(role: string | undefined): string {
+  switch (role) {
+    case 'super_admin':
+      return '/admin';
+    case 'advertiser':
+    case 'campaign_manager':
+      return '/business';
+    case 'registered_user':
+    case 'moderator':
+    case 'guest':
+    default:
+      return '/app';
+  }
 }
 
 export function LoginPage(): JSX.Element {
@@ -64,8 +80,9 @@ export function LoginPage(): JSX.Element {
 
     try {
       await signIn(email, password, rememberLogin);
+      const profile = await getCurrentProfile();
       setSuccessMessage('Signed in successfully. Redirecting to your dashboard.');
-      navigate('/app', { replace: true });
+      navigate(getPostLoginRoute(profile?.role), { replace: true });
     } catch (authenticationError) {
       setError(authenticationError instanceof Error ? authenticationError.message : 'Unable to sign in.');
     } finally {
@@ -106,8 +123,9 @@ export function LoginPage(): JSX.Element {
     setIsSubmitting(true);
     try {
       await verifyPhoneOtp(phone.trim(), otpCode.trim(), rememberLogin);
+      const profile = await getCurrentProfile();
       setSuccessMessage('Phone verified. Redirecting to your dashboard.');
-      navigate('/app', { replace: true });
+      navigate(getPostLoginRoute(profile?.role), { replace: true });
     } catch (otpError) {
       setError(otpError instanceof Error ? otpError.message : 'Unable to verify OTP.');
     } finally {
