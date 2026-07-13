@@ -148,6 +148,9 @@ const routes: RouteObject[] = [
     ),
     children: [
       { index: true, element: <AdminPanelPage /> },
+      { path: 'campaigns', element: <CampaignManagementPage /> },
+      { path: 'campaigns/new', element: <CampaignEditorPage /> },
+      { path: 'campaigns/:id/edit', element: <CampaignEditorPage /> },
       { path: 'dashboard-analytics', element: <DashboardAnalyticsPage /> },
       { path: 'ad-management', element: <AdManagementPage /> },
       { path: 'ad-platform', element: <VideoManagementPage /> },

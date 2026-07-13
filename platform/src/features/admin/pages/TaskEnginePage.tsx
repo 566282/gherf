@@ -267,7 +267,7 @@ export function TaskEnginePage(): JSX.Element {
           then save the row directly to Supabase.
         </p>
         <div className="flex flex-wrap gap-3">
-          <Link to="/business/campaigns/new" className="rounded-xl border border-border bg-surface px-4 py-2 text-sm text-foreground transition hover:border-accent/50 hover:text-accent">
+          <Link to="/admin/campaigns/new" className="rounded-xl border border-border bg-surface px-4 py-2 text-sm text-foreground transition hover:border-accent/50 hover:text-accent">
             Create a campaign
           </Link>
           <Link to="/admin/verification" className="rounded-xl border border-border bg-surface px-4 py-2 text-sm text-foreground transition hover:border-accent/50 hover:text-accent">

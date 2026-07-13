@@ -14,6 +14,7 @@ import { listSupportTickets } from '@/services/api/support';
 import { listNotificationQueue } from '@/services/api/communications';
 import { listWalletAccounts, listWalletTransactions } from '@/services/api/wallet';
 import type { AdminCustomizationConfig, AdminFeatureConfig, AdminThemeConfig } from '@/types';
+import { useLocation } from 'react-router-dom';
 
 type FeatureModule = {
   id: string;
@@ -460,6 +461,7 @@ function getModuleStatus(records: number, activity: number): MetricStatus {
 }
 
 export function AdminPanelPage() {
+  const location = useLocation();
   const [savedMessage, setSavedMessage] = useState('All admin modules are editable in this console.');
   const [themeState, setThemeState] = useState<ThemeState>(defaultThemeState);
   const [customizationState, setCustomizationState] = useState<CustomizationState>(defaultCustomizationConfig);
@@ -583,6 +585,13 @@ export function AdminPanelPage() {
       ...patch,
     }));
   };
+
+  useEffect(() => {
+    if (!location.hash) return;
+
+    const targetElement = document.getElementById(location.hash.slice(1));
+    targetElement?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [location.hash]);
 
   return (
     <div className="space-y-8 p-6">

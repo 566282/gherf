@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import {
@@ -45,6 +45,8 @@ function formatType(value: string) {
 
 export function CampaignManagementPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const campaignBasePath = location.pathname.startsWith('/admin') ? '/admin' : '/business';
   const [campaignTypeDraft, setCampaignTypeDraft] = useState({
     slug: '',
     label: '',
@@ -118,7 +120,7 @@ export function CampaignManagementPage() {
           <Button variant="ghost" onClick={() => refetch()}>
             Refresh
           </Button>
-          <Button onClick={() => navigate(`/business/campaigns/new?type=${firstCampaignType}`)}>
+          <Button onClick={() => navigate(`${campaignBasePath}/campaigns/new?type=${firstCampaignType}`)}>
             New campaign
           </Button>
         </div>
@@ -149,7 +151,7 @@ export function CampaignManagementPage() {
             <h2 className="text-2xl font-semibold text-white">Campaign templates</h2>
             <p className="text-sm text-mist/80">Start from a preset, then tune the engine settings in the editor.</p>
           </div>
-          <Link to="/business/campaigns/new" className="text-sm text-ember/90 hover:text-ember">
+          <Link to={`${campaignBasePath}/campaigns/new`} className="text-sm text-ember/90 hover:text-ember">
             Open blank editor
           </Link>
         </div>
@@ -158,7 +160,7 @@ export function CampaignManagementPage() {
           {availableCampaignTypes.map((option) => (
             <button
               key={option.value}
-              onClick={() => navigate(`/business/campaigns/new?type=${option.value}`)}
+              onClick={() => navigate(`${campaignBasePath}/campaigns/new?type=${option.value}`)}
               className="rounded-2xl border border-white/10 bg-white/5 p-4 text-left transition hover:border-ember/50 hover:bg-ember/5"
             >
               <p className="text-lg font-semibold text-white">{option.label}</p>
@@ -291,7 +293,7 @@ export function CampaignManagementPage() {
           <div className="rounded-2xl border border-dashed border-white/10 bg-white/5 p-8 text-center">
             <p className="text-lg font-semibold text-white">No campaigns yet</p>
             <p className="mt-2 text-sm text-mist">Create the first campaign and define its dynamic engine config.</p>
-            <Button className="mt-4" onClick={() => navigate(`/business/campaigns/new?type=${firstCampaignType}`)}>
+            <Button className="mt-4" onClick={() => navigate(`${campaignBasePath}/campaigns/new?type=${firstCampaignType}`)}>
               Create campaign
             </Button>
           </div>
@@ -336,7 +338,7 @@ export function CampaignManagementPage() {
                       <span className={statusStyle(campaign.status)}>{campaign.status}</span>
                     </td>
                     <td className="px-4 py-4 text-right">
-                      <Button variant="ghost" onClick={() => navigate(`/business/campaigns/${campaign.id}/edit`)}>
+                      <Button variant="ghost" onClick={() => navigate(`${campaignBasePath}/campaigns/${campaign.id}/edit`)}>
                         Edit
                       </Button>
                     </td>

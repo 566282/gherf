@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { useAuth } from '@/app/providers/AuthProvider';
@@ -174,6 +174,7 @@ function hasType(value: string | null, options: Array<{ value: string }>) {
 export function CampaignEditorPage() {
   const { profile } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const { id } = useParams();
   const [searchParams] = useSearchParams();
   const [currentStep, setCurrentStep] = useState<WizardStep>('type');
@@ -182,6 +183,7 @@ export function CampaignEditorPage() {
   const [presetApplied, setPresetApplied] = useState(false);
   const [taskDrafts, setTaskDrafts] = useState<CampaignTaskDraft[]>([createCampaignTaskDraft()]);
   const [taskDraftsHydrated, setTaskDraftsHydrated] = useState(false);
+  const campaignBasePath = location.pathname.startsWith('/admin') ? '/admin' : '/business';
 
   const { data: campaignTypes = [] } = useQuery({
     queryKey: ['campaign-types'],
@@ -239,7 +241,7 @@ export function CampaignEditorPage() {
       setLastSavedTime(new Date().toLocaleTimeString());
       setTaskDrafts(savedTasks.map((task) => ({ ...taskViewToDraft(task), id: task.id })));
       setTaskDraftsHydrated(true);
-      navigate(`/business/campaigns/${savedCampaign.id}/edit`);
+      navigate(`${campaignBasePath}/campaigns/${savedCampaign.id}/edit`);
     },
   });
 
@@ -370,7 +372,7 @@ export function CampaignEditorPage() {
         <Card className="space-y-4">
           <h1 className="text-3xl font-bold text-ember">Campaign not found</h1>
           <p className="text-mist">The campaign you requested does not exist or was removed.</p>
-          <Link to="/business/campaigns" className="text-ember hover:text-[#ffb56b]">
+          <Link to={`${campaignBasePath}/campaigns`} className="text-ember hover:text-[#ffb56b]">
             Back to campaign management
           </Link>
         </Card>
@@ -851,7 +853,7 @@ export function CampaignEditorPage() {
                 />
                 Auto-save enabled
               </label>
-              <Button variant="ghost" onClick={() => navigate('/business/campaigns')}>
+              <Button variant="ghost" onClick={() => navigate(`${campaignBasePath}/campaigns`)}>
                 Cancel
               </Button>
               <Button onClick={onSubmit} disabled={saveMutation.isPending}>

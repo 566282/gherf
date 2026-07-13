@@ -538,11 +538,11 @@ export function VideoManagementPage(): JSX.Element {
               <Button type="button" variant="ghost" onClick={() => setActiveTab('fraud')}>
                 Inspect fraud controls
               </Button>
-              <Link to="/business/campaigns/new" className="inline-flex items-center rounded-xl border border-border bg-surface px-4 py-2.5 font-medium text-foreground transition hover:border-accent/40 hover:bg-accent-soft">
+              <Link to="/admin/campaigns/new" className="inline-flex items-center rounded-xl border border-border bg-surface px-4 py-2.5 font-medium text-foreground transition hover:border-accent/40 hover:bg-accent-soft">
                 Create campaign
               </Link>
               <Link
-                to={selectedCampaign ? `/business/campaigns/${selectedCampaign.id}/edit` : '/business/campaigns'}
+                to={selectedCampaign ? `/admin/campaigns/${selectedCampaign.id}/edit` : '/admin/campaigns'}
                 className="inline-flex items-center rounded-xl border border-border bg-surface px-4 py-2.5 font-medium text-foreground transition hover:border-accent/40 hover:bg-accent-soft"
               >
                 {selectedCampaign ? 'Edit selected campaign' : 'Open campaign editor'}
