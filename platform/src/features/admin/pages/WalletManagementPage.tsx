@@ -67,65 +67,68 @@ export function WalletManagementPage(): JSX.Element {
     retry: false,
   });
 
-  const summary = useMemo(() => {
-    const withdrawals = data?.withdrawals ?? [];
-    const transactions = data?.transactions ?? [];
-    const accounts = data?.accounts ?? [];
+  const walletSettings = data?.settings;
+  const walletAccounts = data?.accounts ?? [];
+  const walletTransactions = data?.transactions ?? [];
+  const walletWithdrawals = data?.withdrawals ?? [];
+  const walletAuditLogs = data?.auditLogs ?? [];
+  const walletCurrency = walletSettings?.currency ?? 'USD';
 
+  const summary = useMemo(() => {
     return {
-      pendingWithdrawals: withdrawals.filter((item) => item.status === 'pending' || item.status === 'held').length,
-      processingWithdrawals: withdrawals.filter((item) => item.status === 'processing').length,
-      approvedWithdrawals: withdrawals.filter((item) => item.status === 'approved' || item.status === 'completed' || item.status === 'paid').length,
-      transactionCount: transactions.length,
-      accountCount: accounts.length,
-      totalBalance: accounts.reduce((sum, account) => sum + account.availableBalance, 0),
+      pendingWithdrawals: walletWithdrawals.filter((item) => item.status === 'pending' || item.status === 'held').length,
+      processingWithdrawals: walletWithdrawals.filter((item) => item.status === 'processing').length,
+      approvedWithdrawals: walletWithdrawals.filter((item) => item.status === 'approved' || item.status === 'completed' || item.status === 'paid').length,
+      transactionCount: walletTransactions.length,
+      accountCount: walletAccounts.length,
+      totalBalance: walletAccounts.reduce((sum, account) => sum + account.availableBalance, 0),
     };
-  }, [data]);
+  }, [walletAccounts, walletTransactions, walletWithdrawals]);
 
   const currencyOptions = useMemo(() => {
     const currencies = new Set<string>();
-    currencies.add(data.settings.currency);
+    currencies.add(walletCurrency);
 
-    for (const account of data.accounts ?? []) currencies.add(account.currency);
-    for (const transaction of data.transactions ?? []) currencies.add(transaction.currency);
-    for (const withdrawal of data.withdrawals ?? []) currencies.add(withdrawal.currency);
+    for (const account of walletAccounts) currencies.add(account.currency);
+    for (const transaction of walletTransactions) currencies.add(transaction.currency);
+    for (const withdrawal of walletWithdrawals) currencies.add(withdrawal.currency);
 
     return ['all', ...Array.from(currencies).filter(Boolean)];
-  }, [data.accounts, data.settings.currency, data.transactions, data.withdrawals]);
+  }, [walletAccounts, walletCurrency, walletTransactions, walletWithdrawals]);
 
   const filteredAccounts = useMemo(() => {
-    return (data.accounts ?? []).filter((account) => {
+    return walletAccounts.filter((account) => {
       const walletTypeMatches = walletTypeFilter === 'all' || account.walletType === walletTypeFilter;
       const currencyMatches = currencyFilter === 'all' || account.currency === currencyFilter;
       return walletTypeMatches && currencyMatches;
     });
-  }, [currencyFilter, data.accounts, walletTypeFilter]);
+  }, [currencyFilter, walletAccounts, walletTypeFilter]);
 
   const filteredTransactions = useMemo(() => {
-    return (data.transactions ?? []).filter((transaction) => {
+    return walletTransactions.filter((transaction) => {
       const walletTypeMatches = walletTypeFilter === 'all' || transaction.walletType === walletTypeFilter || transaction.counterpartyWalletType === walletTypeFilter;
       const currencyMatches = currencyFilter === 'all' || transaction.currency === currencyFilter;
       const statusMatches = statusFilter === 'all' || transaction.status === statusFilter;
       return walletTypeMatches && currencyMatches && statusMatches;
     });
-  }, [currencyFilter, data.transactions, statusFilter, walletTypeFilter]);
+  }, [currencyFilter, statusFilter, walletTransactions, walletTypeFilter]);
 
   const filteredWithdrawals = useMemo(() => {
-    return (data.withdrawals ?? []).filter((withdrawal) => {
+    return walletWithdrawals.filter((withdrawal) => {
       const currencyMatches = currencyFilter === 'all' || withdrawal.currency === currencyFilter;
       const statusMatches = statusFilter === 'all' || withdrawal.status === statusFilter;
       return currencyMatches && statusMatches;
     });
-  }, [currencyFilter, data.withdrawals, statusFilter]);
+  }, [currencyFilter, statusFilter, walletWithdrawals]);
 
   const filteredAuditLogs = useMemo(() => {
-    return (data.auditLogs ?? []).filter((item) => {
+    return walletAuditLogs.filter((item) => {
       const walletTypeMatches = walletTypeFilter === 'all' || item.walletType === walletTypeFilter;
       const currencyMatches = currencyFilter === 'all' || item.currency === currencyFilter;
       const statusMatches = statusFilter === 'all' || item.status === statusFilter;
       return walletTypeMatches && currencyMatches && statusMatches;
     });
-  }, [currencyFilter, data.auditLogs, statusFilter, walletTypeFilter]);
+  }, [currencyFilter, statusFilter, walletAuditLogs, walletTypeFilter]);
 
   const handleAdjustment = async () => {
     if (!adjustmentUserId.trim()) {
@@ -198,7 +201,7 @@ export function WalletManagementPage(): JSX.Element {
     );
   }
 
-  const currency = data.settings.currency;
+  const currency = walletCurrency;
 
   return (
     <div className="space-y-6 p-6">
