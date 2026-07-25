@@ -1,0 +1,290 @@
+Optimized tool selectionI’m reviewing the project docs and current app structure to identify which areas appear incomplete or still pending, then I’ll summarize the gaps by feature area.
+
+Searched for regex `TODO|todo|placeholder|coming soon|not implemented|pending|partially|incomplete|phase` (`**/{README.md,project-state.md,docs/**,platform/docs/**,platform/src/**,lib/src/**}`), 200 results
+
+Read [](file:///workspaces/gherf/project-state.md#1-1), lines 1 to 260
+
+Read [](file:///workspaces/gherf/docs/PROJECT_REBUILD_PLAN.md#1-1), lines 1 to 260
+
+The documentation makes it clear this is still a phased rebuild rather than a finished product, so I’m narrowing that to the admin, UI, and advertiser-facing areas that are explicitly incomplete or only scaffolded.
+
+Searched for text `advertiser|business_owner|business|admin dashboard|dashboard|sidebar|module|pending review|campaign CRUD|settings module` (`**/platform/src/**`), 200 results
+
+Read [](file:///workspaces/gherf/platform/src/features/admin/components/EnterpriseModulePage.tsx#1-1), lines 1 to 220
+
+Read [](file:///workspaces/gherf/platform/src/features/dashboard/pages/DashboardPage.tsx#1-1), lines 1 to 220
+
+Read [](file:///workspaces/gherf/platform/src/app/router/index.tsx)
+
+Read [](file:///workspaces/gherf/platform/src/features/admin/pages/BusinessDashboardPage.tsx#1-1), lines 1 to 220
+
+Read [](file:///workspaces/gherf/platform/src/features/admin/pages/CampaignManagementPage.tsx#1-1), lines 1 to 220
+
+Read [](file:///workspaces/gherf/platform/src/features/admin/pages/CampaignEditorPage.tsx#1-1), lines 1 to 220
+
+## Current status
+
+From the project docs and current app structure, the site is not fully completed yet. The repository is still in a rebuild/phase-based state rather than a finished production product. The clearest evidence is in project-state.md and PROJECT_REBUILD_PLAN.md.
+
+## What is still incomplete
+
+### 1) Admin dashboard features
+These are only partly complete:
+- The admin control plane is still described as a planned phase, not a fully finished system.
+- Approval, moderation, and operational workflows are present in structure, but they are not fully production-ready end to end.
+- Admin modules such as analytics, reporting, wallet management, support, permissions, and CMS are scaffolded, but the full live operational experience is still incomplete.
+- The docs explicitly call out that full configurable admin controls, audit trails, and change history are still pending.
+
+### 2) User interface and UX
+The UI has a solid foundation, but several gaps remain:
+- The design system and main pages exist, but the experience is not yet polished to production standard.
+- Form accessibility still needs improvement, especially explicit labels, validation messaging, and better keyboard support.
+- Some auth and navigation flows still show state-management or consistency issues.
+- Mobile responsiveness and broader accessibility testing are still listed as pending work.
+- Error handling and monitoring are improved, but external reporting and deeper reliability hardening are still incomplete.
+
+### 3) Advertiser / business dashboard features
+This area is also not fully finished:
+- The business/advertiser routes and dashboard pages exist, but the full advertiser experience is still mostly a scaffold.
+- Campaign creation/editing flows are present, but the full end-to-end workflow for launch, review, approvals, budget control, and reporting is not fully completed.
+- The docs describe the advertiser-side campaign engine as a major planned domain, not a finished implementation.
+- In short, the platform has the skeleton of an advertiser portal, but not the fully complete operational dashboard expected for real usage.
+
+### 4) Cross-cutting completion gaps
+A few blockers remain across the whole site:
+- Supabase database migrations and RLS policies still need to be fully applied and verified.
+- Test coverage is still too limited for production confidence.
+- Environment configuration and deployment secrets are not fully hardened yet.
+- The system is still closer to an advanced prototype than a fully launched platform.
+
+## Bottom line
+
+The website has:
+- a strong base structure,
+- many planned features already routed and partially implemented,
+- but it is still missing full completion in:
+  - admin dashboard operations,
+  - polished UI/UX,
+  - and advertiser/business dashboard functionality.
+
+If you want, I can turn this into a prioritized checklist of “what to complete first” for the admin, UI, and advertiser areas.
+____________________________________________________________________________________________________Reviewing campaign/task engine shape and missing enterprise pieces by inspecting task definitions, campaign API, and docs.
+
+Searched for regex `engine_config|task_type|campaign_tasks|task_submissions|event.*track|event.*tracking|automatically tracks|automatic event|event name|trigger|tracking` (`**/platform/src/**/*.{ts,tsx,md}`), 200 results
+
+Read [](file:///workspaces/gherf/platform/src/services/api/tasks.ts#1-1), lines 1 to 180
+
+Read [](file:///workspaces/gherf/platform/src/services/api/tasks.ts#180-180), lines 180 to 360
+
+Read [](file:///workspaces/gherf/platform/src/types/index.ts#1-1), lines 1 to 260
+
+Read [](file:///workspaces/gherf/platform/src/services/api/tasks.ts#900-900), lines 900 to 1060
+
+Searched for regex `normalizeEngineConfig|const normalizeEngineConfig|engineConfig` (`**/platform/src/services/api/campaigns.ts`), 32 results
+
+Read [](file:///workspaces/gherf/platform/src/services/api/campaigns.ts#120-120), lines 120 to 200
+
+Searched for regex `event|events|webhook|callback|trigger|subscription` (`**/platform/src/services/api/tasks.ts`), 6 results
+
+Read [](file:///workspaces/gherf/platform/src/services/api/tasks.ts#360-360), lines 360 to 460
+
+Read [](file:///workspaces/gherf/platform/src/services/api/tasks.ts#580-580), lines 580 to 680
+
+## What exists in code
+
+From campaigns.ts and tasks.ts:
+
+- Campaign model with engine config, budget, target audience, schedule, verification policy, recurring config, and campaign/task metadata.
+- Task model with:
+  - `verificationMethod`
+  - `fraudChecks`
+  - `cooldownSeconds`
+  - `maximumAttempts`
+  - `taskConfig`
+  - manual `task_submissions`
+  - auto-approval logic via `campaign.engine_config.autoApproval`
+- Reward issuance and ledger updates for approved task submissions
+- Task templates for things like social follow, app install, website visit, API verification, screenshot/video proof
+- A campaign browse page and admin task engine UI
+- Existing specific logic for reward-video sessions with unique claim/blocking
+
+## What is missing for a full enterprise automatic event-tracking campaign/task engine
+
+### 1. No automatic event ingestion / event-to-task mapping
+- There is no event pipeline or event store in code for tracking real user actions.
+- `task_submissions` are created manually from client submission data, not from automatically captured events.
+- No server-side endpoint or event processing service maps a real event like “page follow” to task completion.
+
+### 2. No automatic completion verification from external events
+- The system can auto-approve submitted tasks, but it cannot automatically verify that a tracked event actually happened.
+- There is no SDK/webhook integration for:
+  - page follows
+  - app installs
+  - link clicks
+  - purchases
+  - social media follow signals
+- The `api_verification` template is only a task template, not a general event-tracking engine.
+
+### 3. No enterprise-grade eligibility / delivery filtering
+- Campaign browse/listing pages do not filter based on user completion history or eligibility.
+- There is no user-level suppression engine to hide tasks already completed by the same user.
+- Existing code attaches `userSubmission` to tasks, but does not remove/disable already completed tasks.
+
+### 4. Limited campaign enforcement
+- Campaign status is checked, but there is no comprehensive enforcement of:
+  - per-user frequency caps
+  - daily limits
+  - completion limits across campaigns
+  - budget pacing
+  - audience segment enforcement
+- `CampaignEngineConfig` contains fields like `countryRestrictions` and `targetAudience`, but I did not find code enforcing those restrictions.
+
+### 5. No event-based attribution or analytics
+- Analytics are built from `campaign_tasks`, `task_submissions`, and `rewards`.
+- There is no raw event attribution layer for automatic event tracking or conversion funnels.
+
+### 6. No advanced automated workflow for enterprise rules
+- No rule engine for dynamic campaign behavior such as:
+  - auto-pausing on budget exhaustion
+  - reward scaling by user segment
+  - dynamic task prioritization
+  - campaign pacing and spend capping
+- No audit/logging around event-triggered task completion beyond basic submission/reward audit.
+
+### 7. No data model for event history
+- There is no dedicated `events` or `campaign_events` table in the codebase.
+- The current model is tasks → submissions → rewards, which is manual-review oriented.
+
+## Short answer
+
+Based on the code, the current implementation is a campaign/task configuration and submission system, but it is missing the core enterprise capability of automatically tracking real events and auto-completing tasks from those events. That means a full enterprise feature would still need:
+
+- event ingestion / webhook + SDK integration
+- event-to-task mapping rules
+- automatic task fulfillment and verification
+- user deduplication/suppression for completed tasks
+- eligibility filtering and campaign segmentation
+- budget/pacing/frequency enforcement
+- richer event-based analytics and auditing
+
+
+
+
+Optimized tool selectionI’m tracing the advertiser auth flow in the platform app to confirm whether the sign-up and login paths are wired correctly and to identify why post-verification login is landing on a restricted page.
+
+Searched for regex `advertiser|restricted|ProtectedRoute|role|email_verified|verify` (`**/platform/src/**`), 200 results
+
+Searched for text `advertiser` (`**/platform/docs/**`), 11 results
+
+The routing guard and the auth service are the main suspects, so I’m reading those paths side by side to see whether the role is being preserved from signup through to login.
+
+Searched for regex `enum UserRole|export enum UserRole|type AppRole` (`**/platform/src/**`), 2 results
+
+Read [](file:///workspaces/gherf/platform/src/hooks/ProtectedRoute.tsx)
+
+Read [](file:///workspaces/gherf/platform/src/hooks/useAuth.ts)
+
+Read [](file:///workspaces/gherf/platform/src/services/api/auth.ts#1-1), lines 1 to 360
+
+Read [](file:///workspaces/gherf/platform/src/types/auth.ts)
+
+Read [](file:///workspaces/gherf/platform/src/types/index.ts#1-1), lines 1 to 200
+
+Searched for regex `<ProtectedRoute|requiredRoles|/business|/unauthorized|navigate\(|redirect` (`**/platform/src/**`), 111 results
+
+Read [](file:///workspaces/gherf/platform/src/features/auth/pages/LoginPage.tsx#1-1), lines 1 to 220
+
+Read [](file:///workspaces/gherf/platform/src/app/providers/AuthProvider.tsx)
+
+Searched for text `profiles|role|advertiser|signup|auth.users|trigger` (`**/platform/supabase/migrations/**`), 200 results
+
+Read [](file:///workspaces/gherf/platform/supabase/migrations/026_admin_bootstrap_and_signup_hardening.sql)
+
+Read [](file:///workspaces/gherf/platform/src/features/auth/pages/SignupPage.tsx)
+
+Read [](file:///workspaces/gherf/platform/src/app/router/index.tsx)
+
+Read [](file:///workspaces/gherf/platform/src/app/router/middleware.ts)
+
+The behavior is now narrowing down to the server-side profile state rather than the advertiser role itself, and I’m validating that with the signup and verification logic.
+
+Searched for regex `verifyUser\(|is_email_verified|pending_verification|email_confirmed_at` (`**/platform/src/**`), 13 results
+
+Read [](file:///workspaces/gherf/platform/src/services/api/auth.ts#500-500), lines 500 to 630
+
+## Findings
+
+The advertiser sign-up and login flow is only partially wired up in code, and the redirect to a restricted page is being caused by the account status gate, not by the advertiser role itself.
+
+### Why it happens
+- The sign-up flow does pass the selected role through to the auth service, so advertisers are created with the expected role in the profile data.
+- The problem appears after email verification:
+  - the profile is initially created with status `pending_verification` when the email is not yet confirmed;
+  - after verification, the code only marks the user as email-verified, but does not update the profile status from `pending_verification` to `active`;
+  - the router auth middleware then rejects the account as not active and sends the user to `/unauthorized`.
+
+### Evidence in the code
+- Sign-up page sends the chosen role to the signup service: SignupPage.tsx
+- Signup service builds the role into the user metadata: auth.ts
+- The database trigger creates the profile with `pending_verification` until email confirmation is present: 026_admin_bootstrap_and_signup_hardening.sql
+- The route middleware blocks non-active profiles and redirects to `/unauthorized`: middleware.ts
+- The verification helper updates email verification flags but not the profile status: auth.ts
+
+### Bottom line
+The flow is failing because verified advertisers are still being treated as `pending_verification` accounts, so the protected `/business` route is denied.
+
+
+Optimized tool selectionI’m reviewing the existing admin and membership-related structure in the workspace so I can point to the strongest insertion point for this feature.
+
+Searched for regex `membership|subscription|plan|tier|withdraw|wallet|reward` (`**/platform/src/**`), 200 results
+
+Searched for regex `admin|dashboard|rbac|role` (`**/platform/src/**`), 200 results
+
+The existing code already has a partial foundation for tiered plans and wallet restrictions, so I’m tracing the flow from admin controls into wallet enforcement to find the cleanest place to extend it.
+
+Read [](file:///workspaces/gherf/platform/src/services/api/auth.ts#1-1), lines 1 to 260
+
+Read [](file:///workspaces/gherf/platform/src/services/api/wallet.ts#1-1), lines 1 to 260
+
+Read [](file:///workspaces/gherf/platform/src/services/api/walletPolicies.ts)
+
+Searched for text `updateMemberPlan|releaseWithdrawalHolds|member plan` (`**/platform/src/**`), 26 results
+
+Read [](file:///workspaces/gherf/platform/src/services/api/auth.ts#500-500), lines 500 to 570
+
+Read [](file:///workspaces/gherf/platform/src/features/admin/pages/UsersManagementPage.tsx)
+
+Searched for text `UsersManagementPage|/admin/users|admin/users` (`**/platform/src/**`), 7 results
+
+Read [](file:///workspaces/gherf/platform/src/app/router/index.tsx#140-140), lines 140 to 184
+
+Searched for text `canWithdraw|withdrawal request|levelTier|successfulWithdrawalCount|hold` (`**/platform/src/services/api/wallet.ts`), 60 results
+
+Read [](file:///workspaces/gherf/platform/src/services/api/wallet.ts#520-520), lines 520 to 720
+
+## Best insertion point
+
+The strongest place to add this is the existing admin user-management flow in UsersManagementPage.tsx, not a brand-new feature area.
+
+### Why this is the right spot
+- It is already the central admin surface for user state, including plan assignment.
+- It is already wired into the admin router at index.tsx, so it fits naturally into the current admin experience.
+- The current codebase already has the right supporting layers:
+  - plan updates in auth.ts
+  - withdrawal enforcement and hold logic in wallet.ts
+
+### Recommended structure
+1. Extend the existing admin user panel to manage membership as:
+   - Free membership
+   - Paid membership
+   - Paid plan variants if you want more granularity later
+
+2. Keep the business rule in one place:
+   - Free members can participate in tasks and other platform activity
+   - Free members cannot withdraw funds
+   - Paid members can withdraw according to their plan rules
+
+3. Enforce that rule in the wallet/payment path, not only in the UI, so the restriction is reliable.
+
+### Bottom line
+Use the existing admin “Users” management area as the primary insertion point, and connect it to the current plan-update and wallet-policy flow already present in the codebase. That gives you the cleanest, most maintainable implementation.
