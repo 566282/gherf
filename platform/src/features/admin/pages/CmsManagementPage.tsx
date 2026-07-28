@@ -372,7 +372,7 @@ export function CmsManagementPage(): JSX.Element {
             <p className="text-sm uppercase tracking-[0.24em] text-ember/70">Publishing controls</p>
             <h2 className="mt-2 text-3xl font-semibold text-white">Editable site-wide content</h2>
             <p className="mt-2 max-w-3xl text-mist/75">
-              Each section below persists to platform settings, so administrators can update public-facing copy without a deploy.
+              Each section below persists to operational CMS documents, so administrators can update public-facing copy without a deploy.
             </p>
           </div>
 

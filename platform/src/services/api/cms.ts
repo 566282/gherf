@@ -488,29 +488,7 @@ function toDocumentState(row: CmsDocumentRow): CmsDocumentState {
   };
 }
 
-export async function listCmsOperationalSnapshot(): Promise<CmsOperationalSnapshot> {
-  const { data, error } = await supabase.from('cms_documents').select('*').in('page_key', [...cmsPageKeys]);
-  if (error || !data || data.length === 0) {
-    return { config: await listCmsConfig(), documents: {} as Record<CmsPageKey, CmsDocumentState> };
-  }
-
-  const rows = data as CmsDocumentRow[];
-  const first = rows[0];
-  const pages = rows.reduce<Record<CmsPageKey, CmsPageContent>>((accumulator, row) => {
-    accumulator[row.page_key] = toPageContent(row.draft_content, DEFAULT_CONFIG.pages[row.page_key]);
-    return accumulator;
-  }, { ...DEFAULT_CONFIG.pages });
-
-  return {
-    config: mergeCmsConfig({ siteName: first.site_name, pages }),
-    documents: rows.reduce<Record<CmsPageKey, CmsDocumentState>>((accumulator, row) => {
-      accumulator[row.page_key] = toDocumentState(row);
-      return accumulator;
-    }, {} as Record<CmsPageKey, CmsDocumentState>),
-  };
-}
-
-export async function publishCmsConfig(config: CmsConfig, changeSummary = 'Published CMS content'): Promise<void> {
+async function publishCmsConfigLocally(config: CmsConfig, changeSummary: string): Promise<void> {
   const { data: userData } = await supabase.auth.getUser();
   const actorUserId = userData.user?.id ?? null;
   const { data: documents, error: documentsError } = await supabase.from('cms_documents').select('id,page_key,version,status').in('page_key', [...cmsPageKeys]);
@@ -554,7 +532,7 @@ export async function publishCmsConfig(config: CmsConfig, changeSummary = 'Publi
   }
 }
 
-export async function scheduleCmsPublish(config: CmsConfig, scheduledPublishAt: string, changeSummary = 'Scheduled CMS publication'): Promise<void> {
+async function scheduleCmsPublishLocally(config: CmsConfig, scheduledPublishAt: string, changeSummary: string): Promise<void> {
   const { data: userData } = await supabase.auth.getUser();
   const actorUserId = userData.user?.id ?? null;
   const { data: documents, error } = await supabase.from('cms_documents').select('id,page_key,version,status,published_content').in('page_key', [...cmsPageKeys]);
@@ -578,6 +556,53 @@ export async function scheduleCmsPublish(config: CmsConfig, scheduledPublishAt: 
     await supabase.from('cms_document_revisions').insert({ document_id: document.id, version: nextVersion, content: config.pages[pageKey], status: 'scheduled', change_summary: changeSummary, created_by: actorUserId });
     await supabase.from('cms_publication_events').insert({ document_id: document.id, event_type: 'scheduled', from_status: current?.status ?? null, to_status: 'scheduled', version: nextVersion, actor_user_id: actorUserId, scheduled_for: scheduledPublishAt, metadata: { changeSummary } });
   }
+}
+
+export async function listCmsOperationalSnapshot(): Promise<CmsOperationalSnapshot> {
+  const { data, error } = await supabase.from('cms_documents').select('*').in('page_key', [...cmsPageKeys]);
+  if (error || !data || data.length === 0) {
+    return { config: await listCmsConfig(), documents: {} as Record<CmsPageKey, CmsDocumentState> };
+  }
+
+  const rows = data as CmsDocumentRow[];
+  const first = rows[0];
+  const pages = rows.reduce<Record<CmsPageKey, CmsPageContent>>((accumulator, row) => {
+    accumulator[row.page_key] = toPageContent(row.draft_content, DEFAULT_CONFIG.pages[row.page_key]);
+    return accumulator;
+  }, { ...DEFAULT_CONFIG.pages });
+
+  return {
+    config: mergeCmsConfig({ siteName: first.site_name, pages }),
+    documents: rows.reduce<Record<CmsPageKey, CmsDocumentState>>((accumulator, row) => {
+      accumulator[row.page_key] = toDocumentState(row);
+      return accumulator;
+    }, {} as Record<CmsPageKey, CmsDocumentState>),
+  };
+}
+
+export async function publishCmsConfig(config: CmsConfig, changeSummary = 'Published CMS content'): Promise<void> {
+  const { error } = await supabase.rpc('publish_cms_documents', {
+    p_config: config,
+    p_change_summary: changeSummary,
+  });
+  if (!error) {
+    return;
+  }
+
+  await publishCmsConfigLocally(config, changeSummary);
+}
+
+export async function scheduleCmsPublish(config: CmsConfig, scheduledPublishAt: string, changeSummary = 'Scheduled CMS publication'): Promise<void> {
+  const { error } = await supabase.rpc('schedule_cms_documents', {
+    p_config: config,
+    p_scheduled_publish_at: scheduledPublishAt,
+    p_change_summary: changeSummary,
+  });
+  if (!error) {
+    return;
+  }
+
+  await scheduleCmsPublishLocally(config, scheduledPublishAt, changeSummary);
 }
 
 export async function listCmsRevisions(pageKey: CmsPageKey): Promise<CmsRevision[]> {
