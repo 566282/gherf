@@ -85,7 +85,7 @@ export function CampaignManagementPage() {
         defaultInstructions: '',
         defaultVerificationMethod: 'manual_review',
       });
-      refetchCampaignTypes();
+      void refetchCampaignTypes();
     },
   });
 
@@ -93,7 +93,7 @@ export function CampaignManagementPage() {
     mutationFn: createCampaignCategory,
     onSuccess: () => {
       setCampaignCategoryDraft({ slug: '', name: '', description: '' });
-      refetchCampaignCategories();
+      void refetchCampaignCategories();
     },
   });
 
@@ -117,7 +117,7 @@ export function CampaignManagementPage() {
         </div>
 
         <div className="flex flex-wrap gap-3">
-          <Button variant="ghost" onClick={() => refetch()}>
+          <Button variant="ghost" onClick={() => void refetch()}>
             Refresh
           </Button>
           <Button onClick={() => navigate(`${campaignBasePath}/campaigns/new?type=${firstCampaignType}`)}>

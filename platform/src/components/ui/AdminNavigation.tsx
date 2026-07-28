@@ -20,7 +20,7 @@ export function AdminNavigation({ onSidebarToggle }: { onSidebarToggle?: () => v
       <div className="flex items-center gap-4">
         <button
           type="button"
-          onClick={handleLogout}
+          onClick={() => void handleLogout()}
           disabled={isLoggingOut}
           className="rounded-lg border border-accent/30 bg-accent-soft px-4 py-2 text-sm text-accent transition hover:bg-accent hover:text-accent-foreground"
         >

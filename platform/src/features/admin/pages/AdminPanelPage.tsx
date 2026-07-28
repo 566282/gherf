@@ -463,6 +463,7 @@ function getModuleStatus(records: number, activity: number): MetricStatus {
 export function AdminPanelPage() {
   const location = useLocation();
   const [savedMessage, setSavedMessage] = useState('All admin modules are editable in this console.');
+  const [isSaving, setIsSaving] = useState(false);
   const [themeState, setThemeState] = useState<ThemeState>(defaultThemeState);
   const [customizationState, setCustomizationState] = useState<CustomizationState>(defaultCustomizationConfig);
   const [moduleCatalog, setModuleCatalog] = useState<Record<string, { records: number; activity: number }>>({});
@@ -573,10 +574,18 @@ export function AdminPanelPage() {
   };
 
   const handleSave = async () => {
-    const nextConfig = { features: featureStates, theme: themeState, customization: customizationState };
-    await updateAdminConsoleConfig(nextConfig);
-    window.dispatchEvent(new CustomEvent(themeStorageEvent, { detail: { theme: themeState } }));
-    setSavedMessage('Configuration saved to platform settings.');
+    setIsSaving(true);
+
+    try {
+      const nextConfig = { features: featureStates, theme: themeState, customization: customizationState };
+      await updateAdminConsoleConfig(nextConfig);
+      window.dispatchEvent(new CustomEvent(themeStorageEvent, { detail: { theme: themeState } }));
+      setSavedMessage('Configuration saved to platform settings.');
+    } catch {
+      setSavedMessage('Unable to save configuration right now.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const updateCustomization = (patch: Partial<CustomizationState>) => {
@@ -860,10 +869,12 @@ export function AdminPanelPage() {
             <Link to="/admin/cms" className="rounded-xl border border-border bg-surface-elevated px-4 py-2 text-sm text-foreground transition hover:border-accent/50 hover:text-accent">
               Open CMS editor
             </Link>
-            <Button variant="ghost" onClick={resetAll}>
+            <Button variant="ghost" onClick={resetAll} disabled={isSaving}>
               Reset defaults
             </Button>
-            <Button onClick={() => void handleSave()}>Save configuration</Button>
+            <Button onClick={() => void handleSave()} disabled={isSaving}>
+              {isSaving ? 'Saving...' : 'Save configuration'}
+            </Button>
           </div>
         </div>
 

@@ -42,6 +42,8 @@ export function UsersManagementPage(): JSX.Element {
   const [memberPlanTier, setMemberPlanTier] = useState('1');
 
   const selectedUser = useMemo(() => users.find((user) => user.id === selectedUserId) ?? null, [selectedUserId, users]);
+  const selectedMembershipAccess = selectedUser?.levelTier && selectedUser.levelTier >= 2 ? 'Paid member' : 'Free member';
+  const selectedWithdrawalAccess = selectedUser?.levelTier && selectedUser.levelTier >= 2 ? 'Enabled' : 'Disabled';
 
   const loadUsers = async () => {
     const data = await listUsers({
@@ -155,18 +157,21 @@ export function UsersManagementPage(): JSX.Element {
                 <input className="input-base" type="number" value={adjustment} onChange={(event) => setAdjustment(event.target.value)} />
               </label>
               <label className="grid gap-2">
-                <span>Member plan</span>
+                <span>Membership plan</span>
                 <select className="input-base" value={memberPlanTier} onChange={(event) => setMemberPlanTier(event.target.value)}>
-                  <option value="1">Starter</option>
-                  <option value="2">Balanced</option>
-                  <option value="3">Premium</option>
+                  <option value="1">Free member - Starter</option>
+                  <option value="2">Paid member - Balanced</option>
+                  <option value="3">Paid member - Premium</option>
                 </select>
+                <p className="text-xs text-mist/60">Tier 1 is the free membership level. Paid members can withdraw funds.</p>
               </label>
               <div className="space-y-2 rounded-xl border border-white/10 bg-white/5 p-4">
                 <p>Wallet: {formatCurrency(selectedUser.walletBalance)}</p>
                 <p>Rewards: {formatCurrency(selectedUser.rewardBalance)}</p>
                 <p>Reputation: {selectedUser.reputationScore}</p>
                 <p>Level: {selectedUser.levelLabel}</p>
+                <p>Membership: {selectedMembershipAccess}</p>
+                <p>Withdrawal access: {selectedWithdrawalAccess}</p>
                 <p>Verification: {selectedUser.isEmailVerified ? 'Verified' : 'Pending'}</p>
               </div>
               <div className="flex flex-wrap gap-2">

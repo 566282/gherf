@@ -32,6 +32,18 @@ vi.mock('@/services/api/communications', () => ({
 
 describe('withdrawal notifications', () => {
   beforeEach(() => {
+    supabaseState.from.mockReset();
+    supabaseState.rpc.mockReset();
+    supabaseState.update.mockReset();
+    supabaseState.insert.mockReset();
+    supabaseState.select.mockReset();
+    supabaseState.in.mockReset();
+    supabaseState.eq.mockReset();
+    supabaseState.single.mockReset();
+    supabaseState.delete.mockReset();
+    notificationState.notifySuperAdmins.mockReset();
+    notificationState.sendUserNotification.mockReset();
+
     const profileQuery = {
       select: supabaseState.select,
       eq: supabaseState.eq,
@@ -83,19 +95,45 @@ describe('withdrawal notifications', () => {
       update: supabaseState.update,
       delete: supabaseState.delete,
       select: supabaseState.select,
+      in: supabaseState.in,
       order: vi.fn().mockReturnThis(),
       limit: vi.fn().mockReturnThis(),
       eq: supabaseState.eq,
     });
 
-    supabaseState.update.mockResolvedValue({ error: null });
-    supabaseState.delete.mockResolvedValue({ error: null });
+    supabaseState.update.mockReturnValue({ eq: supabaseState.eq });
+    supabaseState.insert.mockReturnValue({ select: supabaseState.select, single: supabaseState.single });
+    supabaseState.delete.mockReturnValue({ eq: supabaseState.eq });
     supabaseState.rpc.mockResolvedValue({ data: 1, error: null });
     notificationState.notifySuperAdmins.mockResolvedValue(1);
     notificationState.sendUserNotification.mockResolvedValue(undefined);
+  });
 
+  it('rejects free members before creating a withdrawal request', async () => {
+    supabaseState.single.mockResolvedValueOnce({
+      data: { wallet_balance: 500, full_name: 'Ada Example', email: 'ada@example.com', level_tier: 1, level_label: 'Starter' },
+      error: null,
+    });
+
+    await expect(
+      createWithdrawalRequest('user-1', {
+        amount: 125,
+        method: 'bank_transfer',
+        destinationLabel: 'Primary payout account',
+        destinationValue: '9876543210',
+        destinationCurrency: 'USD',
+        scheduledFor: '2026-07-30',
+        note: 'Monthly payout',
+      }),
+    ).rejects.toThrow('Free members cannot withdraw funds');
+
+    expect(notificationState.notifySuperAdmins).not.toHaveBeenCalled();
+    expect(notificationState.sendUserNotification).not.toHaveBeenCalled();
+  });
+
+  it('notifies admins and users with the withdrawal limit and date for paid members', async () => {
     supabaseState.single
-      .mockResolvedValueOnce({ data: { wallet_balance: 500, full_name: 'Ada Example', email: 'ada@example.com', level_tier: 1, level_label: 'Starter' }, error: null })
+      .mockResolvedValueOnce({ data: { wallet_balance: 500, full_name: 'Ada Example', email: 'ada@example.com', level_tier: 2, level_label: 'Balanced' }, error: null })
       .mockResolvedValueOnce({ data: { id: 'tx-1' }, error: null })
       .mockResolvedValueOnce({
         data: {
@@ -113,7 +151,7 @@ describe('withdrawal notifications', () => {
           net_amount: 123.12,
           approval_workflow: 'manual',
           status: 'pending',
-          scheduled_for: '2026-07-08T00:00:00.000Z',
+          scheduled_for: '2026-07-30T00:00:00.000Z',
           admin_notes: null,
           reviewed_by: null,
           reviewed_at: null,
@@ -122,16 +160,14 @@ describe('withdrawal notifications', () => {
         },
         error: null,
       });
-  });
 
-  it('notifies admins and users with the withdrawal limit and date', async () => {
     const result = await createWithdrawalRequest('user-1', {
       amount: 125,
       method: 'bank_transfer',
       destinationLabel: 'Primary payout account',
       destinationValue: '9876543210',
       destinationCurrency: 'USD',
-      scheduledFor: '2026-07-08',
+      scheduledFor: '2026-07-30',
       note: 'Monthly payout',
     });
 
@@ -139,12 +175,12 @@ describe('withdrawal notifications', () => {
     expect(notificationState.notifySuperAdmins).toHaveBeenCalledWith(
       expect.objectContaining({
         title: 'Withdrawal request submitted',
-        message: expect.stringContaining('Ada Example submitted a USD 125.00 withdrawal request for Jul 8, 2026.'),
+        message: expect.stringContaining('Ada Example submitted a withdrawal request for USD 125.00 on Jul 30, 2026.'),
         metadata: expect.objectContaining({
           userId: 'user-1',
           amount: 125,
           effectiveWithdrawalLimit: 500,
-          scheduledFor: '2026-07-08T00:00:00.000Z',
+          scheduledFor: '2026-07-30T00:00:00.000Z',
         }),
       }),
     );
@@ -153,15 +189,16 @@ describe('withdrawal notifications', () => {
       'user-1',
       expect.objectContaining({
         title: 'Withdrawal pending',
-        message: expect.stringContaining('Withdrawals are not allowed until Jul 8, 2026.'),
+        message: expect.stringContaining('Withdrawals are not allowed until Jul 30, 2026.'),
       }),
     );
   });
 
-  it('holds withdrawals for starter users after four successful withdrawals', async () => {
+  it('holds withdrawals for paid users after four successful withdrawals', async () => {
+    supabaseState.in.mockResolvedValueOnce({ data: [], error: null });
     supabaseState.in.mockResolvedValueOnce({ data: [{}, {}, {}, {}], error: null });
     supabaseState.single
-      .mockResolvedValueOnce({ data: { wallet_balance: 500, full_name: 'Ada Example', email: 'ada@example.com', level_tier: 1, level_label: 'Starter' }, error: null })
+      .mockResolvedValueOnce({ data: { wallet_balance: 500, full_name: 'Ada Example', email: 'ada@example.com', level_tier: 2, level_label: 'Balanced' }, error: null })
       .mockResolvedValueOnce({ data: { id: 'tx-3' }, error: null })
       .mockResolvedValueOnce({
         data: {
@@ -205,7 +242,7 @@ describe('withdrawal notifications', () => {
         metadata: expect.objectContaining({
           successfulWithdrawalCount: 4,
           holdThreshold: 4,
-          memberPlanTier: 1,
+          memberPlanTier: 2,
         }),
       }),
     );
@@ -221,7 +258,7 @@ describe('withdrawal notifications', () => {
 
   it('keeps admin alerts immediate while the withdrawal stays restricted until the fixed date', async () => {
     supabaseState.single
-      .mockResolvedValueOnce({ data: { wallet_balance: 500, full_name: 'Ada Example', email: 'ada@example.com' }, error: null })
+      .mockResolvedValueOnce({ data: { wallet_balance: 500, full_name: 'Ada Example', email: 'ada@example.com', level_tier: 2, level_label: 'Balanced' }, error: null })
       .mockResolvedValueOnce({ data: { id: 'tx-2' }, error: null })
       .mockResolvedValueOnce({
         data: {
@@ -239,7 +276,7 @@ describe('withdrawal notifications', () => {
           net_amount: 49.25,
           approval_workflow: 'manual',
           status: 'pending',
-          scheduled_for: '2026-07-10T00:00:00.000Z',
+          scheduled_for: '2026-07-31T00:00:00.000Z',
           admin_notes: null,
           reviewed_by: null,
           reviewed_at: null,
@@ -255,7 +292,7 @@ describe('withdrawal notifications', () => {
       destinationLabel: 'Primary payout account',
       destinationValue: '9876543210',
       destinationCurrency: 'USD',
-      scheduledFor: '2026-07-10',
+      scheduledFor: '2026-07-31',
       note: 'Future payout',
     });
 
@@ -265,7 +302,7 @@ describe('withdrawal notifications', () => {
       'user-1',
       expect.objectContaining({
         title: 'Withdrawal pending',
-        message: expect.stringContaining('Withdrawals are not allowed until Jul 10, 2026.'),
+        message: expect.stringContaining('Withdrawals are not allowed until Jul 31, 2026.'),
       }),
     );
   });

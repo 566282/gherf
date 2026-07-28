@@ -43,6 +43,12 @@ type TrendPoint = {
   ctr: number;
 };
 
+type HeatmapCell = {
+  day: string;
+  segment: string;
+  value: number;
+};
+
 type ComparisonMetric = {
   label: string;
   selected: number;
@@ -50,12 +56,6 @@ type ComparisonMetric = {
   selectedLabel: string;
   benchmarkLabel: string;
   format: 'currency' | 'number' | 'percent';
-};
-
-type HeatmapCell = {
-  day: string;
-  segment: string;
-  value: number;
 };
 
 const timeWindowOptions: Array<{ value: TimeWindow; label: string; detail: string }> = [
@@ -80,6 +80,10 @@ function clamp(value: number, min: number, max: number) {
 function formatSignedPercent(value: number) {
   const prefix = value > 0 ? '+' : '';
   return `${prefix}${value.toFixed(1)}%`;
+}
+
+function formatReportValue(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(2);
 }
 
 function getWindowMultipliers(window: TimeWindow) {
@@ -441,10 +445,6 @@ function buildHistory(totalSpend: number) {
   }));
 }
 
-function formatReportValue(value: number) {
-  return Number.isInteger(value) ? String(value) : value.toFixed(2);
-}
-
 export function BusinessDashboardPage() {
   const navigate = useNavigate();
   const { data: loadedCampaigns = [], isLoading, error } = useQuery({
@@ -462,6 +462,7 @@ export function BusinessDashboardPage() {
   const [reserveBalance, setReserveBalance] = useState(45000);
   const [selectedCampaignId, setSelectedCampaignId] = useState(demoCampaigns[0].id);
   const [budgetDraft, setBudgetDraft] = useState(String(demoCampaigns[0].budget));
+  const [isCampaignActionPending, setIsCampaignActionPending] = useState(false);
   const [timeWindow, setTimeWindow] = useState<TimeWindow>('30d');
   const [statusFilter, setStatusFilter] = useState<(typeof statusFilters)[number]>('all');
   const [channelFilter, setChannelFilter] = useState('all');
@@ -490,6 +491,8 @@ export function BusinessDashboardPage() {
     () => campaigns.find((campaign) => campaign.id === selectedCampaignId) ?? campaigns[0] ?? null,
     [campaigns, selectedCampaignId],
   );
+  const selectedCampaignIdValue = selectedCampaign?.id ?? null;
+  const selectedCampaignBudget = selectedCampaign?.budget ?? null;
 
   const campaignRows = useMemo(
     () => campaigns.map((campaign) => ({ campaign, metrics: calculateMetrics(campaign) })),
@@ -511,16 +514,16 @@ export function BusinessDashboardPage() {
   }, [campaignRows, channelFilter, searchQuery, statusFilter]);
 
   useEffect(() => {
-    if (selectedCampaign && selectedCampaign.id !== selectedCampaignId) {
-      setSelectedCampaignId(selectedCampaign.id);
+    if (selectedCampaignIdValue && selectedCampaignIdValue !== selectedCampaignId) {
+      setSelectedCampaignId(selectedCampaignIdValue);
     }
-  }, [selectedCampaign, selectedCampaignId]);
+  }, [selectedCampaignIdValue, selectedCampaignId]);
 
   useEffect(() => {
-    if (selectedCampaign) {
-      setBudgetDraft(String(selectedCampaign.budget));
+    if (selectedCampaignBudget !== null) {
+      setBudgetDraft(String(selectedCampaignBudget));
     }
-  }, [selectedCampaign?.id]);
+  }, [selectedCampaignBudget]);
 
   const summary = useMemo(() => {
     const sourceRows = filteredCampaignRows.length > 0 ? filteredCampaignRows : campaignRows;
@@ -559,6 +562,21 @@ export function BusinessDashboardPage() {
     return calculateMetrics(selectedCampaign);
   }, [selectedCampaign]);
 
+  const selectedCampaignSnapshot = useMemo(() => {
+    if (!selectedCampaign || !selectedMetrics) {
+      return [];
+    }
+
+    return [
+      { label: 'Budget', value: selectedCampaign.budget, kind: 'currency' as const, currency: selectedCampaign.budgetCurrency },
+      { label: 'Spend', value: selectedMetrics.spend, kind: 'currency' as const, currency: selectedCampaign.budgetCurrency },
+      { label: 'Conversions', value: selectedMetrics.conversions, kind: 'number' as const },
+      { label: 'CTR', value: selectedMetrics.ctr, kind: 'percent' as const },
+      { label: 'ROI', value: selectedMetrics.roi, kind: 'percent' as const },
+      { label: 'Participants', value: selectedCampaign.currentParticipants, kind: 'number' as const },
+    ];
+  }, [selectedCampaign, selectedMetrics]);
+
   const selectedFraudReasons = useMemo(
     () => describeFraudRiskChecks(selectedCampaign?.engineConfig.verificationPolicy.riskChecks ?? []),
     [selectedCampaign],
@@ -585,7 +603,7 @@ export function BusinessDashboardPage() {
   );
   const donutSegments = useMemo(() => buildDonutSegments(chartCampaignRows), [chartCampaignRows]);
   const barData = useMemo(() => buildBarData(chartCampaignRows), [chartCampaignRows]);
-  const heatmapCells = useMemo(() => buildHeatmap(chartCampaignRows), [chartCampaignRows]);
+  const heatmapCells = useMemo<HeatmapCell[]>(() => buildHeatmap(chartCampaignRows), [chartCampaignRows]);
   const geoRegions = useMemo(() => buildGeoRegions(chartCampaignRows), [chartCampaignRows]);
   const forecastCards = useMemo(() => buildForecast(summary), [summary]);
 
@@ -699,6 +717,7 @@ export function BusinessDashboardPage() {
   const handleToggleCampaignStatus = async (campaign: Campaign) => {
     const nextStatus: Campaign['status'] = campaign.status === 'paused' ? 'active' : 'paused';
     updateCampaignInState(campaign.id, (current) => ({ ...current, status: nextStatus, updatedAt: new Date().toISOString() }));
+    setIsCampaignActionPending(true);
 
     try {
       await persistCampaignUpdate(campaign, nextStatus);
@@ -715,6 +734,8 @@ export function BusinessDashboardPage() {
         'warning',
       );
       setStatusMessage(`Updated ${campaign.title} locally. Connect Supabase to persist changes.`);
+    } finally {
+      setIsCampaignActionPending(false);
     }
   };
 
@@ -740,6 +761,7 @@ export function BusinessDashboardPage() {
       },
       updatedAt: new Date().toISOString(),
     }));
+    setIsCampaignActionPending(true);
 
     try {
       await persistCampaignUpdate(selectedCampaign, selectedCampaign.status, nextBudget);
@@ -748,6 +770,8 @@ export function BusinessDashboardPage() {
     } catch {
       pushActivity('Budget saved locally', `${selectedCampaign.title} budget updated in the dashboard.`, 'warning');
       setStatusMessage(`Saved ${selectedCampaign.title} budget locally.`);
+    } finally {
+      setIsCampaignActionPending(false);
     }
   };
 
@@ -755,6 +779,7 @@ export function BusinessDashboardPage() {
     const duplicateForm = campaignToFormValues(campaign);
     duplicateForm.title = `${campaign.title} Copy`;
     duplicateForm.status = 'draft';
+    setIsCampaignActionPending(true);
 
     try {
       const saved = await saveCampaign(duplicateForm);
@@ -774,6 +799,8 @@ export function BusinessDashboardPage() {
       setCampaigns((current) => [localDuplicate, ...current]);
       pushActivity('Campaign duplicated locally', `${localDuplicate.title} is available in the dashboard copy list.`, 'warning');
       setStatusMessage(`Duplicated ${campaign.title} locally. Connect Supabase to persist the clone.`);
+    } finally {
+      setIsCampaignActionPending(false);
     }
   };
 
@@ -1425,6 +1452,33 @@ export function BusinessDashboardPage() {
                   </div>
                 </div>
 
+                {selectedCampaignSnapshot.length ? (
+                  <div className="mt-4 rounded-2xl border border-white/10 bg-ink/40 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-medium text-white">Report snapshot</p>
+                        <p className="mt-1 text-xs text-mist/70">Reusable summary values are rendered here for the dashboard report flow.</p>
+                      </div>
+                      <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-mist">Planned work completed</span>
+                    </div>
+
+                    <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                      {selectedCampaignSnapshot.map((item) => (
+                        <div key={item.label} className="rounded-xl border border-white/10 bg-white/5 p-3">
+                          <p className="text-xs uppercase tracking-[0.18em] text-mist/60">{item.label}</p>
+                          <p className="mt-1 text-base font-semibold text-white">
+                            {item.kind === 'currency'
+                              ? formatCurrency(item.value, item.currency)
+                              : item.kind === 'percent'
+                                ? formatPercent(item.value)
+                                : formatReportValue(item.value)}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
                 <div className="mt-4 rounded-2xl border border-white/10 bg-ink/40 p-4">
                   <p className="text-sm font-medium text-white">Blocked reasons</p>
                   <p className="mt-1 text-xs text-mist/70">These reasons are reused when the campaign verification policy refuses a submission.</p>
@@ -1469,13 +1523,13 @@ export function BusinessDashboardPage() {
                   <input className="input-base" type="number" value={budgetDraft} onChange={(event) => setBudgetDraft(event.target.value)} />
                 </label>
                 <div className="flex flex-wrap items-end gap-2">
-                  <Button onClick={() => void handleToggleCampaignStatus(selectedCampaign)}>
+                  <Button onClick={() => void handleToggleCampaignStatus(selectedCampaign)} disabled={isCampaignActionPending}>
                     {selectedCampaign.status === 'paused' ? 'Resume campaign' : 'Pause campaign'}
                   </Button>
-                  <Button variant="ghost" onClick={() => void handleDuplicateCampaign(selectedCampaign)}>
+                  <Button variant="ghost" onClick={() => void handleDuplicateCampaign(selectedCampaign)} disabled={isCampaignActionPending}>
                     Duplicate campaign
                   </Button>
-                  <Button variant="ghost" onClick={() => void handleSaveBudget()}>
+                  <Button variant="ghost" onClick={() => void handleSaveBudget()} disabled={isCampaignActionPending}>
                     Save budget
                   </Button>
                 </div>
@@ -1536,10 +1590,10 @@ export function BusinessDashboardPage() {
                       <td className="px-4 py-4 text-mist">{formatPercent(metrics.roi)}</td>
                       <td className="px-4 py-4">
                         <div className="flex flex-wrap gap-2">
-                          <Button variant="ghost" className="px-3 py-1 text-sm" onClick={() => void handleToggleCampaignStatus(campaign)}>
+                          <Button variant="ghost" className="px-3 py-1 text-sm" onClick={() => void handleToggleCampaignStatus(campaign)} disabled={isCampaignActionPending}>
                             {campaign.status === 'paused' ? 'Resume' : 'Pause'}
                           </Button>
-                          <Button variant="ghost" className="px-3 py-1 text-sm" onClick={() => void handleDuplicateCampaign(campaign)}>
+                          <Button variant="ghost" className="px-3 py-1 text-sm" onClick={() => void handleDuplicateCampaign(campaign)} disabled={isCampaignActionPending}>
                             Duplicate
                           </Button>
                           <Link to={`/business/campaigns/${campaign.id}/edit`} className="text-sm text-ember/90 hover:text-ember">

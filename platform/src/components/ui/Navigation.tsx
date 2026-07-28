@@ -23,7 +23,7 @@ export function Navigation({ onSidebarToggle }: { onSidebarToggle?: () => void }
         <span className="text-sm text-foreground">{user?.fullName}</span>
         <button
           type="button"
-          onClick={handleLogout}
+          onClick={() => void handleLogout()}
           disabled={isLoggingOut}
           className="rounded-lg border border-border bg-surface-elevated px-4 py-2 text-sm text-foreground transition hover:border-accent/40 hover:bg-accent-soft"
         >

@@ -140,9 +140,10 @@ export function LoginPage(): JSX.Element {
         <h1 className="mt-2 text-2xl font-semibold tracking-tight text-white">Sign in</h1>
         <p className="mt-2 text-sm text-mist/80">Use email, social login, or phone OTP to access Go4Wealth.</p>
 
-        <div className="mt-6 grid grid-cols-2 gap-2 rounded-xl border border-white/10 bg-white/5 p-1 text-sm">
+        <div className="mt-6 grid grid-cols-2 gap-2 rounded-xl border border-white/10 bg-white/5 p-1 text-sm" aria-label="Login method">
           <button
             type="button"
+            aria-pressed={loginMode === 'password'}
             className={`rounded-lg px-3 py-2 transition ${loginMode === 'password' ? 'bg-mint/20 text-white' : 'text-mist/80 hover:bg-white/10'}`}
             onClick={() => setLoginMode('password')}
           >
@@ -150,6 +151,7 @@ export function LoginPage(): JSX.Element {
           </button>
           <button
             type="button"
+            aria-pressed={loginMode === 'phone'}
             className={`rounded-lg px-3 py-2 transition ${loginMode === 'phone' ? 'bg-mint/20 text-white' : 'text-mist/80 hover:bg-white/10'}`}
             onClick={() => setLoginMode('phone')}
           >
@@ -157,7 +159,7 @@ export function LoginPage(): JSX.Element {
           </button>
         </div>
 
-        {loginMode === 'password' ? <form onSubmit={onSubmit} className="mt-6 space-y-4" noValidate>
+        {loginMode === 'password' ? <form onSubmit={(event) => { void onSubmit(event); }} className="mt-6 space-y-4" noValidate>
           <label className="grid gap-2" htmlFor="login-email">
             <span className="text-sm text-mist/70">Email address</span>
             <input

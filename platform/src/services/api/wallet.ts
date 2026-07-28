@@ -96,7 +96,7 @@ type WithdrawalRequestRow = {
 
 const SUCCESSFUL_WITHDRAWAL_STATUSES: WithdrawalRequest['status'][] = ['approved', 'completed'];
 
-function getWithdrawalHoldThreshold(_levelTier: number): number {
+function getWithdrawalHoldThreshold(): number {
   return 4;
 }
 
@@ -545,17 +545,6 @@ export async function createWithdrawalRequest(userId: string, input: WithdrawalR
     throw new Error('Withdrawal date must be valid.');
   }
 
-  if (scheduledFor) {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const scheduledDay = new Date(scheduledFor);
-    scheduledDay.setHours(0, 0, 0, 0);
-
-    if (scheduledDay.getTime() < today.getTime()) {
-      throw new Error('Withdrawal date must be today or later.');
-    }
-  }
-
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
     .select('wallet_balance,full_name,email,level_tier,level_label')
@@ -568,9 +557,26 @@ export async function createWithdrawalRequest(userId: string, input: WithdrawalR
   const effectiveWithdrawalLimit = Math.min(settings.maxWithdrawal, currentBalance);
   const memberPlanTier = Math.max(1, Math.round(profile.level_tier ?? 1));
   const memberPlanLabel = getMemberPlanLabel(memberPlanTier, profile.level_label);
+  const isFreeMember = memberPlanTier < 2;
+
+  if (isFreeMember) {
+    throw new Error('Free members cannot withdraw funds. Upgrade to a paid member plan to request withdrawals.');
+  }
+
+  if (scheduledFor) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const scheduledDay = new Date(scheduledFor);
+    scheduledDay.setHours(0, 0, 0, 0);
+
+    if (scheduledDay.getTime() < today.getTime()) {
+      throw new Error('Withdrawal date must be today or later.');
+    }
+  }
+
   const successfulWithdrawalCount = await countSuccessfulWithdrawals(userId);
-  const holdThreshold = getWithdrawalHoldThreshold(memberPlanTier);
-  const isAccountOnHold = memberPlanTier < 2 && successfulWithdrawalCount >= holdThreshold;
+  const holdThreshold = getWithdrawalHoldThreshold();
+  const isAccountOnHold = successfulWithdrawalCount >= holdThreshold;
 
   if (input.amount > currentBalance) {
     throw new Error('Withdrawal amount exceeds your withdrawable balance.');

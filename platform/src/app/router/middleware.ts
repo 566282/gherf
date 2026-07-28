@@ -41,7 +41,7 @@ function getReturnTo(request: Request): string {
 }
 
 export function guestOnlyMiddleware() {
-  return async (_args: LoaderFunctionArgs) => {
+  return async () => {
     const {
       data: { session },
     } = await supabase.auth.getSession();
@@ -53,7 +53,7 @@ export function guestOnlyMiddleware() {
         .eq('id', session.user.id)
         .maybeSingle<{ role: AppRole }>();
 
-      throw redirect(getDefaultRouteForRole(profile?.role));
+      return redirect(getDefaultRouteForRole(profile?.role));
     }
 
     return null;
@@ -67,7 +67,7 @@ export function requireAuthMiddleware(requiredRoles?: UserRole[]) {
     } = await supabase.auth.getSession();
 
     if (!session?.user) {
-      throw redirect(`/login?redirect=${getReturnTo(request)}`);
+      return redirect(`/login?redirect=${getReturnTo(request)}`);
     }
 
     const { data: profile, error } = await supabase
@@ -77,11 +77,11 @@ export function requireAuthMiddleware(requiredRoles?: UserRole[]) {
       .maybeSingle<ProfileGuardRow>();
 
     if (error || !profile || !profile.is_active || profile.status !== 'active') {
-      throw redirect('/unauthorized');
+      return redirect('/unauthorized');
     }
 
     if (requiredRoles && requiredRoles.length > 0 && !hasAnyRequiredRole(profile.role, requiredRoles)) {
-      throw redirect('/unauthorized');
+      return redirect('/unauthorized');
     }
 
     return null;

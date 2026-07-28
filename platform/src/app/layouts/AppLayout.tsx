@@ -5,7 +5,6 @@ import clsx from 'clsx';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/app/providers/AuthProvider';
 import { useLogout } from '@/hooks/useLogout';
-import { usePermissions } from '@/hooks/useAuth';
 
 type NavItem = {
   label: string;
@@ -46,7 +45,6 @@ function getInitials(name?: string | null): string {
 
 export function AppLayout({ children }: PropsWithChildren): JSX.Element {
   const { profile } = useAuth();
-  const permissions = usePermissions();
   const { handleLogout, isLoggingOut } = useLogout();
   const location = useLocation();
   const navigate = useNavigate();
@@ -194,6 +192,8 @@ export function AppLayout({ children }: PropsWithChildren): JSX.Element {
                 onClick={() => setMobileDrawerOpen(true)}
                 className="rounded-full border border-border bg-surface-elevated px-3 py-2 text-sm text-foreground transition hover:border-accent/40 hover:text-accent lg:hidden"
                 aria-label="Open navigation drawer"
+                aria-expanded={mobileDrawerOpen}
+                aria-controls="mobile-navigation-drawer"
               >
                 ☰
               </button>
@@ -285,7 +285,7 @@ export function AppLayout({ children }: PropsWithChildren): JSX.Element {
       {mobileDrawerOpen ? (
         <div className="fixed inset-0 z-50 lg:hidden">
           <button type="button" className="absolute inset-0 bg-background/70 backdrop-blur-sm" aria-label="Close navigation drawer" onClick={() => setMobileDrawerOpen(false)} />
-          <aside className="relative flex h-full w-[min(92vw,24rem)] max-w-sm flex-col border-r border-border bg-background/96 p-4 shadow-2xl shadow-black/30">
+          <aside id="mobile-navigation-drawer" className="relative flex h-full w-[min(92vw,24rem)] max-w-sm flex-col border-r border-border bg-background/96 p-4 shadow-2xl shadow-black/30">
             <div className="flex items-center justify-between gap-3 border-b border-border pb-4">
               <div>
                 <p className="text-sm font-semibold text-foreground">Go4Wealth</p>

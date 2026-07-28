@@ -281,8 +281,8 @@ export function CampaignEditorPage() {
   useEffect(() => {
     if (!autoSaveEnabled || !isDirty || saveMutation.isPending) return;
 
-    const autoSaveTimer = setTimeout(async () => {
-      await saveMutation.mutateAsync(form.getValues());
+    const autoSaveTimer = setTimeout(() => {
+      void saveMutation.mutateAsync(form.getValues());
     }, 3000);
 
     return () => clearTimeout(autoSaveTimer);
@@ -856,7 +856,7 @@ export function CampaignEditorPage() {
               <Button variant="ghost" onClick={() => navigate(`${campaignBasePath}/campaigns`)}>
                 Cancel
               </Button>
-              <Button onClick={onSubmit} disabled={saveMutation.isPending}>
+              <Button onClick={() => void onSubmit()} disabled={saveMutation.isPending}>
                 {saveMutation.isPending ? 'Saving...' : 'Save & launch campaign'}
               </Button>
             </>
