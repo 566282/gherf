@@ -14,6 +14,7 @@ import { listSupportTickets } from '@/services/api/support';
 import { listNotificationQueue } from '@/services/api/communications';
 import { listWalletAccounts, listWalletTransactions } from '@/services/api/wallet';
 import type { AdminCustomizationConfig, AdminFeatureConfig, AdminThemeConfig } from '@/types';
+import type { ActivityLogItem } from '@/types/auth';
 import { useLocation } from 'react-router-dom';
 
 type FeatureModule = {
@@ -430,6 +431,15 @@ const defaultLiveOperationalStats: LiveOperationalStats = {
   referralFraudFlags: 0,
 };
 
+function formatAuditTimestamp(value: string): string {
+  return new Date(value).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
 function getMetricStatus(value: number, thresholds: { healthy: number; warning: number }): MetricStatus {
   if (value >= thresholds.healthy) {
     return { label: 'Healthy', tone: 'success' };
@@ -464,9 +474,11 @@ export function AdminPanelPage() {
   const location = useLocation();
   const [savedMessage, setSavedMessage] = useState('All admin modules are editable in this console.');
   const [isSaving, setIsSaving] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [themeState, setThemeState] = useState<ThemeState>(defaultThemeState);
   const [customizationState, setCustomizationState] = useState<CustomizationState>(defaultCustomizationConfig);
   const [moduleCatalog, setModuleCatalog] = useState<Record<string, { records: number; activity: number }>>({});
+  const [recentActivityLogs, setRecentActivityLogs] = useState<ActivityLogItem[]>([]);
   const [livePlatformStats, setLivePlatformStats] = useState<LivePlatformStats>(defaultLivePlatformStats);
   const [liveOperationalStats, setLiveOperationalStats] = useState<LiveOperationalStats>(defaultLiveOperationalStats);
   const [featureStates, setFeatureStates] = useState<Record<string, FeatureState>>(() =>
@@ -474,71 +486,78 @@ export function AdminPanelPage() {
   );
 
   useEffect(() => {
-    void listAdminModuleCatalog()
-      .then((catalog) => {
-        setModuleCatalog(
-          Object.fromEntries(
-            Object.entries(catalog).map(([moduleKey, entry]) => [moduleKey, { records: entry.records.length, activity: entry.activity.length }]),
-          ),
-        );
-      })
-      .catch(() => setModuleCatalog({}));
-
-    void listAdminConsoleConfig()
-      .then((config) => {
-        setFeatureStates((current) =>
-          Object.fromEntries(
-            featureModules.map((feature) => [
-              feature.id,
-              config.features[feature.id] ?? current[feature.id] ?? defaultFeatureState(feature),
-            ]),
-          ),
-        );
-        setThemeState(config.theme ?? defaultThemeState);
-        setCustomizationState(config.customization ?? defaultCustomizationConfig);
-        setSavedMessage('Loaded saved admin configuration.');
-      })
-      .catch(() => setSavedMessage('Using local defaults until admin settings are available.'));
-
-    void Promise.all([
-      listUsers(),
-      listCampaigns(),
-      listSupportTickets(undefined, 50),
-      listActivityLogs(50),
-      listWalletAccounts(undefined),
-      listWalletTransactions(undefined, 50),
-      listNotificationQueue(50),
-    ])
-      .then(([users, campaigns, supportTickets, auditLogs, walletAccounts, walletTransactions, notificationQueue]) => {
-        setLivePlatformStats({
-          users: users.length,
-          campaigns: campaigns.length,
-          supportTickets: supportTickets.length,
-          auditLogs: auditLogs.length,
-          walletAccounts: walletAccounts.length,
-          walletTransactions: walletTransactions.length,
-          notificationQueued: notificationQueue.filter((row) => row.status === 'queued').length,
-          notificationFailed: notificationQueue.filter((row) => row.status === 'failed').length,
-        });
-      })
-      .catch(() => setLivePlatformStats(defaultLivePlatformStats));
-
-    void Promise.all([listGamificationConfig(), listCampaignTasks(), getReferralEngineSummary()])
-      .then(([gamificationConfig, campaignTasks, referralSummary]) => {
-        const engagementActiveModules = Object.values(gamificationConfig.modules).filter((module) => module.enabled).length;
-
-        setLiveOperationalStats({
-          engagementActiveModules,
-          engagementTotalModules: gamificationModules.length,
-          engagementSeason: gamificationConfig.seasonName,
-          taskCount: campaignTasks.length,
-          referralPrograms: referralSummary.programs.length,
-          referralAttributions: referralSummary.attributions.length,
-          referralFraudFlags: referralSummary.fraudFlags.length,
-        });
-      })
-      .catch(() => setLiveOperationalStats(defaultLiveOperationalStats));
+    void refreshOverview();
   }, []);
+
+  const refreshOverview = async () => {
+    setIsRefreshing(true);
+
+    try {
+      const [catalog, config, users, campaigns, supportTickets, auditLogs, walletAccounts, walletTransactions, notificationQueue, gamificationConfig, campaignTasks, referralSummary] =
+        await Promise.all([
+          listAdminModuleCatalog(),
+          listAdminConsoleConfig(),
+          listUsers(),
+          listCampaigns(),
+          listSupportTickets(undefined, 50),
+          listActivityLogs(50),
+          listWalletAccounts(undefined),
+          listWalletTransactions(undefined, 50),
+          listNotificationQueue(50),
+          listGamificationConfig(),
+          listCampaignTasks(),
+          getReferralEngineSummary(),
+        ]);
+
+      setModuleCatalog(
+        Object.fromEntries(Object.entries(catalog).map(([moduleKey, entry]) => [moduleKey, { records: entry.records.length, activity: entry.activity.length }])),
+      );
+
+      setFeatureStates((current) =>
+        Object.fromEntries(
+          featureModules.map((feature) => [
+            feature.id,
+            config.features[feature.id] ?? current[feature.id] ?? defaultFeatureState(feature),
+          ]),
+        ),
+      );
+      setThemeState(config.theme ?? defaultThemeState);
+      setCustomizationState(config.customization ?? defaultCustomizationConfig);
+      setSavedMessage('Loaded saved admin configuration.');
+
+      setRecentActivityLogs(auditLogs.slice(0, 6));
+      setLivePlatformStats({
+        users: users.length,
+        campaigns: campaigns.length,
+        supportTickets: supportTickets.length,
+        auditLogs: auditLogs.length,
+        walletAccounts: walletAccounts.length,
+        walletTransactions: walletTransactions.length,
+        notificationQueued: notificationQueue.filter((row) => row.status === 'queued').length,
+        notificationFailed: notificationQueue.filter((row) => row.status === 'failed').length,
+      });
+
+      const engagementActiveModules = Object.values(gamificationConfig.modules).filter((module) => module.enabled).length;
+
+      setLiveOperationalStats({
+        engagementActiveModules,
+        engagementTotalModules: gamificationModules.length,
+        engagementSeason: gamificationConfig.seasonName,
+        taskCount: campaignTasks.length,
+        referralPrograms: referralSummary.programs.length,
+        referralAttributions: referralSummary.attributions.length,
+        referralFraudFlags: referralSummary.fraudFlags.length,
+      });
+    } catch {
+      setModuleCatalog({});
+      setRecentActivityLogs([]);
+      setLivePlatformStats(defaultLivePlatformStats);
+      setLiveOperationalStats(defaultLiveOperationalStats);
+      setSavedMessage('Using local defaults until admin settings are available.');
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   const summary = useMemo(() => {
     const enabledCount = Object.values(featureStates).filter((state) => state.enabled).length;
@@ -658,7 +677,12 @@ export function AdminPanelPage() {
               These counts are pulled from Supabase-backed admin datasets so the index reflects current platform activity.
             </p>
           </div>
-          <p className="text-sm text-muted">Updated on page load</p>
+          <div className="flex flex-wrap items-center gap-3 text-sm text-muted">
+            <p>Updated on page load</p>
+            <Button variant="ghost" onClick={() => void refreshOverview()} disabled={isRefreshing || isSaving}>
+              {isRefreshing ? 'Refreshing...' : 'Refresh now'}
+            </Button>
+          </div>
         </div>
 
         <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-6">
@@ -733,6 +757,47 @@ export function AdminPanelPage() {
               Open notification center
             </Link>
           </div>
+        </div>
+      </Card>
+
+      <Card className="border border-border bg-surface-elevated">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-sm uppercase tracking-[0.24em] text-accent/70">Change history</p>
+            <h2 className="mt-2 text-3xl font-semibold text-foreground">Recent admin activity</h2>
+            <p className="mt-2 max-w-3xl text-muted">
+              Review the latest administrative changes, state transitions, and operational updates from the control plane.
+            </p>
+          </div>
+          <Link to="/admin/audit-logs" className="rounded-full border border-border bg-background px-4 py-2 text-sm text-foreground transition hover:border-accent/50 hover:text-accent">
+            Open full audit logs
+          </Link>
+        </div>
+
+        <div className="mt-6 grid gap-4 lg:grid-cols-2">
+          {recentActivityLogs.length ? (
+            recentActivityLogs.map((entry) => (
+              <div key={entry.id} className="rounded-2xl border border-border bg-background p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.2em] text-muted">{entry.resourceType}</p>
+                    <h3 className="mt-2 text-xl font-semibold text-foreground">{entry.action}</h3>
+                  </div>
+                  <span className="rounded-full border border-border bg-surface px-3 py-1 text-[10px] uppercase tracking-[0.18em] text-muted">
+                    {formatAuditTimestamp(entry.createdAt)}
+                  </span>
+                </div>
+                <p className="mt-3 text-sm text-muted">
+                  {entry.resourceType} {entry.resourceId}
+                  {entry.reason ? ` · ${entry.reason}` : ''}
+                </p>
+              </div>
+            ))
+          ) : (
+            <div className="rounded-2xl border border-border bg-background p-4 text-sm text-muted lg:col-span-2">
+              No recent admin activity is available yet.
+            </div>
+          )}
         </div>
       </Card>
 

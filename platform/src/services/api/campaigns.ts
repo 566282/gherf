@@ -914,6 +914,47 @@ export async function saveCampaign(form: CampaignEditorFormValues, campaignId?: 
   return mapCampaignRow(data as CampaignRow);
 }
 
+const campaignStatusTransitions: Record<Campaign['status'], Campaign['status'][]> = {
+  draft: ['draft', 'scheduled', 'archived'],
+  scheduled: ['scheduled', 'active', 'paused', 'archived'],
+  active: ['active', 'paused', 'completed', 'archived'],
+  paused: ['paused', 'active', 'archived'],
+  completed: ['completed', 'archived'],
+  archived: ['archived'],
+};
+
+export function canTransitionCampaignStatus(from: Campaign['status'], to: Campaign['status']): boolean {
+  return campaignStatusTransitions[from].includes(to);
+}
+
+export function validateCampaignForLaunch(campaign: Campaign): string[] {
+  const errors: string[] = [];
+  if (!campaign.title.trim()) errors.push('Campaign title is required.');
+  if (!campaign.businessId.trim()) errors.push('A business owner is required.');
+  if (!campaign.instructions.trim()) errors.push('Campaign instructions are required.');
+  if (campaign.budget <= 0) errors.push('Campaign budget must be greater than zero.');
+  if (campaign.engineConfig.rewardAmount <= 0) errors.push('Reward amount must be greater than zero.');
+  if (campaign.engineConfig.rewardAmount > campaign.budget) errors.push('Reward amount cannot exceed the campaign budget.');
+  if (campaign.engineConfig.dailyLimit <= 0) errors.push('Daily completion limit must be greater than zero.');
+  if (new Date(campaign.endDate).getTime() <= new Date(campaign.startDate).getTime()) errors.push('Campaign end date must be after the start date.');
+  return errors;
+}
+
+export async function transitionCampaignStatus(campaign: Campaign, nextStatus: Campaign['status']): Promise<Campaign> {
+  if (!canTransitionCampaignStatus(campaign.status, nextStatus)) {
+    throw new Error(`Campaigns cannot transition from ${campaign.status} to ${nextStatus}.`);
+  }
+
+  if (nextStatus === 'scheduled' || nextStatus === 'active') {
+    const launchErrors = validateCampaignForLaunch(campaign);
+    if (launchErrors.length) throw new Error(launchErrors.join(' '));
+  }
+
+  const form = campaignToFormValues(campaign);
+  form.status = nextStatus;
+  return saveCampaign(form, campaign.id);
+}
+
 export async function deleteCampaign(id: string): Promise<void> {
   const { error } = await supabase.from('campaigns').delete().eq('id', id);
   if (error) throw error;

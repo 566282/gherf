@@ -81,8 +81,8 @@ export function CampaignBrowsePage() {
               <p className="mt-4 text-sm leading-7 text-muted">{campaign.description ?? campaign.instructions}</p>
               <p className="mt-4 text-sm font-medium text-foreground">{formatMoney(campaign.engineConfig.rewardAmount, campaign.budgetCurrency || 'USD')} per completion</p>
               <p className="mt-2 text-xs text-muted">Categories: {(campaign.campaignCategories ?? []).join(', ') || 'Uncategorized'}</p>
-              <Link to="/app/tasks" className="mt-5 inline-flex text-sm font-medium text-accent transition hover:text-accent-strong">
-                Open tasks
+              <Link to={`/app/campaigns/${campaign.id}`} className="mt-5 inline-flex text-sm font-medium text-accent transition hover:text-accent-strong">
+                View campaign
               </Link>
             </Card>
           ))}

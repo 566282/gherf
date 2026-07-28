@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { formatCurrency } from '@/lib/auth';
 import { defaultFraudThresholds, describeFraudRiskChecks, fraudRiskChecks } from '@/services/api/fraud';
-import { campaignToFormValues, listCampaigns, saveCampaign } from '@/services/api/campaigns';
+import { campaignToFormValues, listCampaigns, saveCampaign, transitionCampaignStatus } from '@/services/api/campaigns';
 import { sendAdminPaymentNotification } from '@/services/api/communications';
 import type { Campaign } from '@/types';
 
@@ -703,13 +703,14 @@ export function BusinessDashboardPage() {
   };
 
   const persistCampaignUpdate = async (campaign: Campaign, nextStatus: Campaign['status'], nextBudget?: number) => {
-    const formValues = campaignToFormValues(campaign);
-    formValues.status = nextStatus;
     if (typeof nextBudget === 'number') {
+      const formValues = campaignToFormValues(campaign);
       formValues.budget = nextBudget;
+      const saved = await saveCampaign(formValues, campaign.id);
+      if (nextStatus !== campaign.status) return transitionCampaignStatus(saved, nextStatus);
+      return saved;
     }
-
-    const saved = await saveCampaign(formValues, campaign.id);
+    const saved = await transitionCampaignStatus(campaign, nextStatus);
     updateCampaignInState(campaign.id, () => saved);
     return saved;
   };

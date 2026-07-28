@@ -759,6 +759,31 @@ export interface CmsConfig {
   pages: Record<CmsPageKey, CmsPageContent>;
 }
 
+export type CmsPublicationStatus = 'draft' | 'published' | 'scheduled' | 'archived';
+
+export interface CmsDocumentState {
+  pageKey: CmsPageKey;
+  status: CmsPublicationStatus;
+  version: number;
+  scheduledPublishAt: string | null;
+  publishedAt: string | null;
+  updatedAt: string;
+}
+
+export interface CmsRevision {
+  id: string;
+  pageKey: CmsPageKey;
+  version: number;
+  status: CmsPublicationStatus;
+  changeSummary: string;
+  createdAt: string;
+}
+
+export interface CmsOperationalSnapshot {
+  config: CmsConfig;
+  documents: Record<CmsPageKey, CmsDocumentState>;
+}
+
 /**
  * Admin action audit: comprehensive audit trail for all admin operations.
  */

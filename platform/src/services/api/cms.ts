@@ -1,5 +1,14 @@
 import { supabase } from '@/services/supabase/client';
-import type { CmsConfig, CmsContentItem, CmsPageContent, CmsPageKey } from '@/types';
+import type {
+  CmsConfig,
+  CmsContentItem,
+  CmsDocumentState,
+  CmsOperationalSnapshot,
+  CmsPageContent,
+  CmsPageKey,
+  CmsPublicationStatus,
+  CmsRevision,
+} from '@/types';
 
 type SettingRow = {
   key: string;
@@ -394,6 +403,28 @@ export function getCmsPageLabel(pageKey: CmsPageKey): string {
 }
 
 export async function listCmsConfig(): Promise<CmsConfig> {
+  const { data: documents, error: documentsError } = await supabase
+    .from('cms_documents')
+    .select('page_key,site_name,published_content,status')
+    .eq('status', 'published');
+
+  if (!documentsError && documents && documents.length > 0) {
+    const firstDocument = documents[0] as { site_name?: unknown };
+    const pages = documents.reduce<Record<CmsPageKey, CmsPageContent>>((accumulator, row) => {
+      const pageKey = (row as { page_key?: string }).page_key as CmsPageKey;
+      if (pageLabels[pageKey]) {
+        accumulator[pageKey] = toPageContent((row as { published_content?: unknown }).published_content, DEFAULT_CONFIG.pages[pageKey]);
+      }
+      return accumulator;
+    }, { ...DEFAULT_CONFIG.pages });
+
+    return mergeCmsConfig({
+      siteName: typeof firstDocument.site_name === 'string' ? firstDocument.site_name : DEFAULT_CONFIG.siteName,
+      pages,
+    });
+  }
+
+  // Compatibility fallback for environments that have not applied the operational CMS migration yet.
   const { data, error } = await supabase.from('platform_settings').select('key,value').eq('key', CMS_SETTING_KEY).single();
 
   if (error || !data) {
@@ -404,14 +435,189 @@ export async function listCmsConfig(): Promise<CmsConfig> {
 }
 
 export async function updateCmsConfig(config: CmsConfig): Promise<void> {
-  const { error } = await supabase.from('platform_settings').upsert(
-    {
-      key: CMS_SETTING_KEY,
-      value: config,
-      description: 'Go4Wealth CMS content for public pages, legal copy, SEO, and routing metadata',
-    },
+  const { data: userData } = await supabase.auth.getUser();
+  const updatedBy = userData.user?.id ?? null;
+  const { data: existing } = await supabase.from('cms_documents').select('page_key,status,version').in('page_key', [...cmsPageKeys]);
+  const existingByKey = new Map((existing ?? []).map((row) => [row.page_key as CmsPageKey, row as { status: CmsPublicationStatus; version: number }]));
+
+  const rows = cmsPageKeys.map((pageKey) => {
+    const current = existingByKey.get(pageKey);
+    return {
+      page_key: pageKey,
+      site_name: config.siteName,
+      draft_content: config.pages[pageKey],
+      published_content: current ? undefined : config.pages[pageKey],
+      status: current?.status ?? 'draft',
+      version: current?.version ?? 1,
+      updated_by: updatedBy,
+    };
+  });
+
+  const { error } = await supabase.from('cms_documents').upsert(rows, { onConflict: 'page_key' });
+  if (!error) return;
+
+  // Compatibility fallback keeps the existing settings path usable during migration rollout.
+  const { error: settingsError } = await supabase.from('platform_settings').upsert(
+    { key: CMS_SETTING_KEY, value: config, description: 'Go4Wealth CMS content for public pages, legal copy, SEO, and routing metadata', updated_by: updatedBy },
     { onConflict: 'key' },
   );
+  if (settingsError) throw settingsError;
+}
 
+type CmsDocumentRow = {
+  id: string;
+  page_key: CmsPageKey;
+  site_name: string;
+  draft_content: unknown;
+  published_content: unknown;
+  status: CmsPublicationStatus;
+  version: number;
+  scheduled_publish_at: string | null;
+  published_at: string | null;
+  updated_at: string;
+};
+
+function toDocumentState(row: CmsDocumentRow): CmsDocumentState {
+  return {
+    pageKey: row.page_key,
+    status: row.status,
+    version: row.version,
+    scheduledPublishAt: row.scheduled_publish_at,
+    publishedAt: row.published_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export async function listCmsOperationalSnapshot(): Promise<CmsOperationalSnapshot> {
+  const { data, error } = await supabase.from('cms_documents').select('*').in('page_key', [...cmsPageKeys]);
+  if (error || !data || data.length === 0) {
+    return { config: await listCmsConfig(), documents: {} as Record<CmsPageKey, CmsDocumentState> };
+  }
+
+  const rows = data as CmsDocumentRow[];
+  const first = rows[0];
+  const pages = rows.reduce<Record<CmsPageKey, CmsPageContent>>((accumulator, row) => {
+    accumulator[row.page_key] = toPageContent(row.draft_content, DEFAULT_CONFIG.pages[row.page_key]);
+    return accumulator;
+  }, { ...DEFAULT_CONFIG.pages });
+
+  return {
+    config: mergeCmsConfig({ siteName: first.site_name, pages }),
+    documents: rows.reduce<Record<CmsPageKey, CmsDocumentState>>((accumulator, row) => {
+      accumulator[row.page_key] = toDocumentState(row);
+      return accumulator;
+    }, {} as Record<CmsPageKey, CmsDocumentState>),
+  };
+}
+
+export async function publishCmsConfig(config: CmsConfig, changeSummary = 'Published CMS content'): Promise<void> {
+  const { data: userData } = await supabase.auth.getUser();
+  const actorUserId = userData.user?.id ?? null;
+  const { data: documents, error: documentsError } = await supabase.from('cms_documents').select('id,page_key,version,status').in('page_key', [...cmsPageKeys]);
+  if (documentsError) throw documentsError;
+
+  for (const pageKey of cmsPageKeys) {
+    const current = (documents ?? []).find((row) => row.page_key === pageKey) as { id: string; version: number; status: CmsPublicationStatus } | undefined;
+    const nextVersion = (current?.version ?? 0) + 1;
+    const { data: document, error } = await supabase.from('cms_documents').upsert({
+      id: current?.id,
+      page_key: pageKey,
+      site_name: config.siteName,
+      draft_content: config.pages[pageKey],
+      published_content: config.pages[pageKey],
+      status: 'published',
+      version: nextVersion,
+      published_at: new Date().toISOString(),
+      scheduled_publish_at: null,
+      updated_by: actorUserId,
+      published_by: actorUserId,
+    }, { onConflict: 'page_key' }).select('id').single();
+    if (error || !document) throw error ?? new Error(`Unable to publish ${pageKey}`);
+
+    await supabase.from('cms_document_revisions').insert({
+      document_id: document.id,
+      version: nextVersion,
+      content: config.pages[pageKey],
+      status: 'published',
+      change_summary: changeSummary,
+      created_by: actorUserId,
+    });
+    await supabase.from('cms_publication_events').insert({
+      document_id: document.id,
+      event_type: 'published',
+      from_status: current?.status ?? null,
+      to_status: 'published',
+      version: nextVersion,
+      actor_user_id: actorUserId,
+      metadata: { changeSummary },
+    });
+  }
+}
+
+export async function scheduleCmsPublish(config: CmsConfig, scheduledPublishAt: string, changeSummary = 'Scheduled CMS publication'): Promise<void> {
+  const { data: userData } = await supabase.auth.getUser();
+  const actorUserId = userData.user?.id ?? null;
+  const { data: documents, error } = await supabase.from('cms_documents').select('id,page_key,version,status,published_content').in('page_key', [...cmsPageKeys]);
   if (error) throw error;
+
+  for (const pageKey of cmsPageKeys) {
+    const current = (documents ?? []).find((row) => row.page_key === pageKey) as { id: string; version: number; status: CmsPublicationStatus; published_content?: unknown } | undefined;
+    const nextVersion = (current?.version ?? 0) + 1;
+    const { data: document, error: updateError } = await supabase.from('cms_documents').upsert({
+      id: current?.id,
+      page_key: pageKey,
+      site_name: config.siteName,
+      draft_content: config.pages[pageKey],
+      published_content: current?.published_content ?? config.pages[pageKey],
+      status: 'scheduled',
+      version: nextVersion,
+      scheduled_publish_at: scheduledPublishAt,
+      updated_by: actorUserId,
+    }, { onConflict: 'page_key' }).select('id').single();
+    if (updateError || !document) throw updateError ?? new Error(`Unable to schedule ${pageKey}`);
+    await supabase.from('cms_document_revisions').insert({ document_id: document.id, version: nextVersion, content: config.pages[pageKey], status: 'scheduled', change_summary: changeSummary, created_by: actorUserId });
+    await supabase.from('cms_publication_events').insert({ document_id: document.id, event_type: 'scheduled', from_status: current?.status ?? null, to_status: 'scheduled', version: nextVersion, actor_user_id: actorUserId, scheduled_for: scheduledPublishAt, metadata: { changeSummary } });
+  }
+}
+
+export async function listCmsRevisions(pageKey: CmsPageKey): Promise<CmsRevision[]> {
+  const { data, error } = await supabase.from('cms_document_revisions').select('id,version,status,change_summary,created_at,cms_documents!inner(page_key)').eq('cms_documents.page_key', pageKey).order('created_at', { ascending: false }).limit(20);
+  if (error || !data) return [];
+  return data.map((row) => ({ id: row.id, pageKey, version: row.version, status: row.status, changeSummary: row.change_summary, createdAt: row.created_at }));
+}
+
+export async function rollbackCmsRevision(pageKey: CmsPageKey, revisionId: string): Promise<CmsPageContent> {
+  const { data: revision, error: revisionError } = await supabase
+    .from('cms_document_revisions')
+    .select('content')
+    .eq('id', revisionId)
+    .single();
+  if (revisionError || !revision) throw revisionError ?? new Error('Revision not found');
+
+  const { data: document, error: documentError } = await supabase.from('cms_documents').select('id,version').eq('page_key', pageKey).single();
+  if (documentError || !document) throw documentError ?? new Error('CMS document not found');
+
+  const content = toPageContent(revision.content, DEFAULT_CONFIG.pages[pageKey]);
+  const nextVersion = Number(document.version) + 1;
+  const { data: userData } = await supabase.auth.getUser();
+  const actorUserId = userData.user?.id ?? null;
+  const { error: updateError } = await supabase.from('cms_documents').update({
+    draft_content: content,
+    status: 'draft',
+    version: nextVersion,
+    scheduled_publish_at: null,
+    updated_by: actorUserId,
+  }).eq('id', document.id);
+  if (updateError) throw updateError;
+
+  await supabase.from('cms_document_revisions').insert({ document_id: document.id, version: nextVersion, content, status: 'draft', change_summary: `Rolled back to revision ${revisionId}`, created_by: actorUserId });
+  await supabase.from('cms_publication_events').insert({ document_id: document.id, event_type: 'rolled_back', from_status: 'published', to_status: 'draft', version: nextVersion, actor_user_id: actorUserId, metadata: { sourceRevisionId: revisionId } });
+  return content;
+}
+
+/** Invoked by a trusted scheduled worker, never by the public CMS UI. */
+export async function publishScheduledCmsDocuments(): Promise<number> {
+  const { data, error } = await supabase.rpc('publish_scheduled_cms_documents');
+  if (error) throw error;
+  return typeof data === 'number' ? data : 0;
 }

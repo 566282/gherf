@@ -6,12 +6,18 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import {
   buildDefaultCmsConfig,
   getCmsPageLabel,
-  listCmsConfig,
+  listCmsRevisions,
+  listCmsOperationalSnapshot,
+  publishCmsConfig,
+  rollbackCmsRevision,
+  scheduleCmsPublish,
   updateCmsConfig,
   type CmsConfig,
   type CmsContentItem,
   type CmsPageContent,
   type CmsPageKey,
+  type CmsPublicationStatus,
+  type CmsRevision,
   cmsPageKeys,
 } from '@/services/api/cms';
 
@@ -160,18 +166,24 @@ function CmsSectionEditor({
 
 export function CmsManagementPage(): JSX.Element {
   const [config, setConfig] = useState<CmsConfig>(buildDefaultCmsConfig());
+  const [documentStates, setDocumentStates] = useState<Record<CmsPageKey, { status: CmsPublicationStatus; version: number; scheduledPublishAt: string | null }>>({});
   const [statusMessage, setStatusMessage] = useState('Loading CMS content...');
   const [isSaving, setIsSaving] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [scheduledPublishAt, setScheduledPublishAt] = useState('');
+  const [revisionPage, setRevisionPage] = useState<CmsPageKey>('home');
+  const [revisions, setRevisions] = useState<CmsRevision[]>([]);
   const lastSavedConfig = useRef('');
 
   useEffect(() => {
-    void listCmsConfig()
-      .then((nextConfig) => {
-        setConfig(nextConfig);
-        lastSavedConfig.current = JSON.stringify(nextConfig);
+    void listCmsOperationalSnapshot()
+      .then((snapshot) => {
+        setConfig(snapshot.config);
+        setDocumentStates(snapshot.documents);
+        lastSavedConfig.current = JSON.stringify(snapshot.config);
         setIsLoading(false);
-        setStatusMessage('CMS content loaded from platform settings.');
+        setStatusMessage('CMS content loaded from operational documents.');
       })
       .catch(() => {
         setIsLoading(false);
@@ -202,6 +214,11 @@ export function CmsManagementPage(): JSX.Element {
     return () => window.clearTimeout(timeout);
   }, [config, isLoading]);
 
+  useEffect(() => {
+    if (isLoading) return;
+    void listCmsRevisions(revisionPage).then(setRevisions).catch(() => setRevisions([]));
+  }, [isLoading, revisionPage]);
+
   const summary = useMemo(() => {
     const totalItems = Object.values(config.pages).reduce((count, page) => count + page.items.length, 0);
     const totalHighlights = Object.values(config.pages).reduce((count, page) => count + page.highlights.length, 0);
@@ -231,9 +248,58 @@ export function CmsManagementPage(): JSX.Element {
     try {
       await updateCmsConfig(config);
       lastSavedConfig.current = JSON.stringify(config);
-      setStatusMessage('CMS content saved to platform settings.');
+      setStatusMessage('CMS draft saved to operational documents.');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handlePublish = async () => {
+    if (summary.missingSiteName) {
+      setStatusMessage('Site name is required before publishing CMS content.');
+      return;
+    }
+
+    setIsPublishing(true);
+    try {
+      await publishCmsConfig(config);
+      setDocumentStates((current) => Object.fromEntries(pageOrder.map((pageKey) => [pageKey, { ...current[pageKey], status: 'published', version: (current[pageKey]?.version ?? 0) + 1, scheduledPublishAt: null }])) as typeof current);
+      lastSavedConfig.current = JSON.stringify(config);
+      setStatusMessage('CMS content published and publicly available.');
+    } catch {
+      setStatusMessage('Unable to publish CMS content right now.');
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+
+  const handleSchedule = async () => {
+    if (!scheduledPublishAt) {
+      setStatusMessage('Choose a future publication time first.');
+      return;
+    }
+
+    setIsPublishing(true);
+    try {
+      const isoTime = new Date(scheduledPublishAt).toISOString();
+      await scheduleCmsPublish(config, isoTime);
+      setDocumentStates((current) => Object.fromEntries(pageOrder.map((pageKey) => [pageKey, { ...current[pageKey], status: 'scheduled', version: (current[pageKey]?.version ?? 0) + 1, scheduledPublishAt: isoTime }])) as typeof current);
+      setStatusMessage(`CMS content scheduled for ${new Date(isoTime).toLocaleString()}.`);
+    } catch {
+      setStatusMessage('Unable to schedule CMS content right now.');
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+
+  const handleRollback = async (revisionId: string) => {
+    try {
+      const content = await rollbackCmsRevision(revisionPage, revisionId);
+      setConfig((current) => updatePage(current, revisionPage, content));
+      setStatusMessage(`Revision restored as a new draft for ${getCmsPageLabel(revisionPage)}.`);
+      setRevisions(await listCmsRevisions(revisionPage));
+    } catch {
+      setStatusMessage('Unable to restore that CMS revision right now.');
     }
   };
 
@@ -317,10 +383,51 @@ export function CmsManagementPage(): JSX.Element {
             <Button onClick={() => void handleSave()} disabled={isSaving}>
               {isSaving ? 'Saving...' : 'Save CMS content'}
             </Button>
+            <Button onClick={() => void handlePublish()} disabled={isPublishing}>
+              {isPublishing ? 'Publishing...' : 'Publish now'}
+            </Button>
           </div>
         </div>
 
         <p className="mt-4 text-sm text-mist/70">{statusMessage}</p>
+        <div className="mt-4 flex flex-wrap items-end gap-3 rounded-xl border border-white/10 bg-white/5 p-4">
+          <label className="grid gap-2">
+            <span className="text-xs uppercase tracking-[0.2em] text-mist/60">Schedule publication</span>
+            <input className="input-base" type="datetime-local" value={scheduledPublishAt} onChange={(event) => setScheduledPublishAt(event.target.value)} />
+          </label>
+          <Button variant="ghost" onClick={() => void handleSchedule()} disabled={isPublishing || !scheduledPublishAt}>
+            Schedule release
+          </Button>
+          <p className="max-w-xl text-xs text-mist/60">Scheduling records the intended release and revision. The trusted <code>publish_scheduled_cms_documents</code> worker hook promotes it when the time arrives.</p>
+        </div>
+      </Card>
+
+      <Card>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-sm uppercase tracking-[0.24em] text-ember/70">Revision history</p>
+            <h2 className="mt-2 text-2xl font-semibold text-white">Traceable content changes</h2>
+            <p className="mt-2 text-sm text-mist/70">Restore a recorded publication or scheduled revision as a new draft before releasing it again.</p>
+          </div>
+          <label className="grid gap-2">
+            <span className="text-xs uppercase tracking-[0.2em] text-mist/60">Page</span>
+            <select className="input-base" value={revisionPage} onChange={(event) => setRevisionPage(event.target.value as CmsPageKey)}>
+              {pageOrder.map((pageKey) => <option key={pageKey} value={pageKey}>{getCmsPageLabel(pageKey)}</option>)}
+            </select>
+          </label>
+        </div>
+        <div className="mt-5 space-y-2">
+          {revisions.length === 0 ? <p className="text-sm text-mist/60">No revisions recorded for this page yet.</p> : null}
+          {revisions.map((revision) => (
+            <div key={revision.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 p-3">
+              <div>
+                <p className="text-sm font-medium text-white">Version {revision.version} · {revision.status}</p>
+                <p className="text-xs text-mist/60">{revision.changeSummary || 'Content change'} · {new Date(revision.createdAt).toLocaleString()}</p>
+              </div>
+              <Button variant="ghost" onClick={() => void handleRollback(revision.id)}>Restore as draft</Button>
+            </div>
+          ))}
+        </div>
       </Card>
 
       <div className="space-y-4">
@@ -334,13 +441,20 @@ export function CmsManagementPage(): JSX.Element {
 
       <div className="space-y-6">
         {pageOrder.map((pageKey) => (
-          <CmsSectionEditor
-            key={pageKey}
-            pageKey={pageKey}
-            page={config.pages[pageKey]}
-            onPageChange={(patch) => setConfig((current) => updatePage(current, pageKey, patch))}
-            onItemChange={(index, patch) => setConfig((current) => updatePageItem(current, pageKey, index, patch))}
-          />
+          <div key={pageKey} className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2 px-1 text-xs uppercase tracking-[0.18em] text-mist/60">
+              <span>{getCmsPageLabel(pageKey)}</span>
+              <span className="rounded-full border border-white/10 px-2 py-1">{documentStates[pageKey]?.status ?? 'draft'}</span>
+              <span>v{documentStates[pageKey]?.version ?? 0}</span>
+              {documentStates[pageKey]?.scheduledPublishAt ? <span>scheduled {new Date(documentStates[pageKey].scheduledPublishAt as string).toLocaleString()}</span> : null}
+            </div>
+            <CmsSectionEditor
+              pageKey={pageKey}
+              page={config.pages[pageKey]}
+              onPageChange={(patch) => setConfig((current) => updatePage(current, pageKey, patch))}
+              onItemChange={(index, patch) => setConfig((current) => updatePageItem(current, pageKey, index, patch))}
+            />
+          </div>
         ))}
       </div>
     </div>
