@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Card } from '@/components/ui/Card';
 import { formatCurrency } from '@/lib/auth';
 import type { AppRole, UserProfile } from '@/types/auth';
 import {
   adjustWalletBalance,
   banUser,
+  createAdminUser,
   listUsers,
   resetUserPassword,
   suspendUser,
@@ -35,6 +36,13 @@ export function UsersManagementPage(): JSX.Element {
   const [query, setQuery] = useState('');
   const [role, setRole] = useState<AppRole | 'all'>('all');
   const [status, setStatus] = useState<UserProfile['status'] | 'all'>('all');
+  const [newUserFullName, setNewUserFullName] = useState('');
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserPassword, setNewUserPassword] = useState('');
+  const [newUserRole, setNewUserRole] = useState<AppRole>('registered_user');
+  const [newUserLevelTier, setNewUserLevelTier] = useState('1');
+  const [creationFeedback, setCreationFeedback] = useState<string | null>(null);
+  const [isCreatingUser, setIsCreatingUser] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [reason, setReason] = useState('');
@@ -79,6 +87,35 @@ export function UsersManagementPage(): JSX.Element {
     }
   };
 
+  const handleCreateUser = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setCreationFeedback(null);
+    setIsCreatingUser(true);
+
+    try {
+      const createdUser = await createAdminUser({
+        email: newUserEmail.trim(),
+        password: newUserPassword,
+        fullName: newUserFullName.trim(),
+        role: newUserRole,
+        levelTier: Number(newUserLevelTier),
+      });
+
+      await loadUsers();
+      setSelectedUserId(createdUser.id);
+      setCreationFeedback(`Created ${createdUser.fullName ?? createdUser.email ?? 'new user'} with ${createdUser.levelLabel} membership.`);
+      setNewUserFullName('');
+      setNewUserEmail('');
+      setNewUserPassword('');
+      setNewUserRole('registered_user');
+      setNewUserLevelTier('1');
+    } catch (error) {
+      setCreationFeedback(error instanceof Error ? error.message : 'Unable to create user.');
+    } finally {
+      setIsCreatingUser(false);
+    }
+  };
+
   return (
     <div className="space-y-6 p-6">
       <Card>
@@ -93,6 +130,89 @@ export function UsersManagementPage(): JSX.Element {
             {statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
         </div>
+      </Card>
+
+      <Card>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-2xl font-semibold text-white">Create managed user</h2>
+            <p className="mt-2 text-sm text-mist/70">Provision a new Supabase Auth account and assign the profile role and membership tier in one step.</p>
+          </div>
+        </div>
+        <form className="mt-4 grid gap-4 md:grid-cols-2" onSubmit={(event) => void handleCreateUser(event)} noValidate autoComplete="off">
+          <label className="grid gap-2">
+            <span className="text-sm text-mist/70">Full name</span>
+            <input
+              id="admin-create-user-full-name"
+              name="admin-create-user-full-name"
+              className="input-base"
+              autoComplete="off"
+              value={newUserFullName}
+              onChange={(event) => setNewUserFullName(event.target.value)}
+              placeholder="New user name"
+              required
+            />
+          </label>
+          <label className="grid gap-2">
+            <span className="text-sm text-mist/70">Email address</span>
+            <input
+              id="admin-create-user-email"
+              name="admin-create-user-email"
+              className="input-base"
+              type="email"
+              autoComplete="off"
+              autoCapitalize="none"
+              spellCheck={false}
+              value={newUserEmail}
+              onChange={(event) => setNewUserEmail(event.target.value)}
+              placeholder="new.user@example.com"
+              required
+            />
+          </label>
+          <label className="grid gap-2">
+            <span className="text-sm text-mist/70">Password</span>
+            <input
+              id="admin-create-user-password"
+              name="admin-create-user-password"
+              className="input-base"
+              type="password"
+              autoComplete="new-password"
+              value={newUserPassword}
+              onChange={(event) => setNewUserPassword(event.target.value)}
+              placeholder="Temporary or permanent password"
+              required
+            />
+          </label>
+          <label className="grid gap-2">
+            <span className="text-sm text-mist/70">Role</span>
+            <select className="input-base" value={newUserRole} onChange={(event) => setNewUserRole(event.target.value as AppRole)}>
+              {roleOptions.filter((option) => option.value !== 'all').map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="grid gap-2">
+            <span className="text-sm text-mist/70">Membership tier</span>
+            <select className="input-base" value={newUserLevelTier} onChange={(event) => setNewUserLevelTier(event.target.value)}>
+              <option value="1">Free member - Starter</option>
+              <option value="2">Paid member - Balanced</option>
+              <option value="3">Paid member - Premium</option>
+            </select>
+            <p className="text-xs text-mist/60">The tier is stored at bootstrap, so the new account starts with the right withdrawal access.</p>
+          </label>
+          <div className="md:col-span-2 flex flex-wrap items-center gap-3">
+            <button
+              type="submit"
+              className="rounded-xl bg-ember px-4 py-2 font-medium text-ink shadow-[0_10px_30px_rgba(201,130,78,0.2)] disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={isCreatingUser}
+            >
+              {isCreatingUser ? 'Creating user...' : 'Create user'}
+            </button>
+            {creationFeedback ? <p className="text-sm text-mist/70">{creationFeedback}</p> : null}
+          </div>
+        </form>
       </Card>
 
       <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">

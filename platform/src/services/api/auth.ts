@@ -31,6 +31,14 @@ export interface ReferralSignupRequest {
   };
 }
 
+export interface AdminCreateUserRequest {
+  email: string;
+  password: string;
+  fullName: string;
+  role: AppRole;
+  levelTier: number;
+}
+
 type LockStatusRow = {
   is_locked: boolean;
   locked_until: string | null;
@@ -209,6 +217,25 @@ export function buildReferralSignupRequest(
   };
 }
 
+function getAdminCreateUserEndpoint(): string {
+  return '/.netlify/functions/create-admin-user';
+}
+
+async function getCurrentAccessToken(): Promise<string> {
+  const { data, error } = await supabase.auth.getSession();
+
+  if (error) {
+    throw error;
+  }
+
+  const accessToken = data.session?.access_token;
+  if (!accessToken) {
+    throw new Error('You must be signed in to create an admin-managed user.');
+  }
+
+  return accessToken;
+}
+
 export async function getCurrentProfile(): Promise<UserProfile | null> {
   const { data: authData, error: authError } = await supabase.auth.getUser();
   if (authError || !authData.user) return null;
@@ -323,6 +350,42 @@ export async function signUp(
   const { error } = await supabase.auth.signUp(buildReferralSignupRequest(email, password, fullName, referralCode, role));
 
   if (error) throw error;
+}
+
+export async function createAdminUser(input: AdminCreateUserRequest): Promise<UserProfile> {
+  const accessToken = await getCurrentAccessToken();
+  let response: Response;
+
+  try {
+    response = await fetch(getAdminCreateUserEndpoint(), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        email: input.email,
+        password: input.password,
+        fullName: input.fullName,
+        role: input.role,
+        levelTier: input.levelTier,
+      }),
+    });
+  } catch {
+    throw new Error('Admin create-user endpoint is unreachable. Make sure the Netlify function or dev middleware is running.');
+  }
+
+  const body = (await response.json().catch(() => null)) as { profile?: UserProfile; error?: string; message?: string } | null;
+
+  if (!response.ok) {
+    throw new Error(body?.error ?? body?.message ?? 'Admin create-user endpoint returned an unexpected response.');
+  }
+
+  if (!body?.profile) {
+    throw new Error('Admin create-user endpoint succeeded without a profile payload.');
+  }
+
+  return body.profile;
 }
 
 export async function signOut(): Promise<void> {
