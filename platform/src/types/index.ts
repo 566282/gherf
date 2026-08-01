@@ -743,6 +743,36 @@ export interface CmsContentItem {
   href?: string;
 }
 
+export interface CmsPricingTier {
+  name: string;
+  price: string;
+  description: string;
+  features: string[];
+  ctaLabel: string;
+  ctaHref: string;
+}
+
+export interface CmsPricingTableBlock {
+  badge: string;
+  title: string;
+  description: string;
+  tiers: CmsPricingTier[];
+}
+
+export interface CmsHomeContent {
+  header: Record<string, string>;
+  hero: Record<string, string>;
+  trustedAdvertisers: string[];
+  trustMetrics: Array<{ label: string; value: string }>;
+  steps: Array<{ title: string; description: string }>;
+  testimonials: Array<{ quote: string; name: string; role: string }>;
+  security: { badge: string; title: string; description: string; points: string[] };
+  faq: { badge: string; title: string; linkLabel: string; linkHref: string; items: Array<{ question: string; answer: string }> };
+  pricing: CmsPricingTableBlock;
+  sections: Record<string, string>;
+  footer: Record<string, string>;
+}
+
 export interface CmsPageContent {
   eyebrow: string;
   title: string;
@@ -752,11 +782,50 @@ export interface CmsPageContent {
   ctaHref: string;
   highlights: string[];
   items: CmsContentItem[];
+  homeContent?: CmsHomeContent;
+}
+
+export const cmsReusableBlockKeys = ['pricingTable'] as const;
+
+export type CmsReusableBlockKey = (typeof cmsReusableBlockKeys)[number];
+
+export interface CmsReusableBlockRecord {
+  blockKey: CmsReusableBlockKey;
+  label: string;
+  status: CmsPublicationStatus;
+  version: number;
+  content: CmsPricingTableBlock;
+  publishedAt: string | null;
+  updatedAt: string;
+}
+
+export interface CmsCustomPageContent {
+  eyebrow: string;
+  title: string;
+  summary: string;
+  body: string;
+  ctaLabel: string;
+  ctaHref: string;
+  highlights: string[];
+  blocks: CmsCustomPageBlock[];
+  items: CmsContentItem[];
+}
+
+export interface CmsCustomPageBlock {
+  id: string;
+  type: 'pricingTable';
+  content: CmsPricingTableBlock;
+}
+
+export interface CmsCustomPage extends CmsCustomPageContent {
+  slug: string;
 }
 
 export interface CmsConfig {
   siteName: string;
   pages: Record<CmsPageKey, CmsPageContent>;
+  reusableBlocks: Record<CmsReusableBlockKey, CmsPricingTableBlock>;
+  customPages: CmsCustomPage[];
 }
 
 export type CmsPublicationStatus = 'draft' | 'published' | 'scheduled' | 'archived';

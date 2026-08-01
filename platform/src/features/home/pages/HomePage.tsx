@@ -8,79 +8,6 @@ import { defaultCustomizationConfig } from '@/lib/customization';
 import { listAdminConsoleConfig } from '@/services/api/admin';
 import { listCampaigns } from '@/services/api/campaigns';
 
-const trustedAdvertisers = ['Northstar Capital', 'Harbor Health', 'BrightEdge Retail', 'Atlas Energy', 'Summit Finance', 'Pulse Media'];
-
-const trustMetrics = [
-  { label: 'Campaigns launched', value: '1,240+' },
-  { label: 'Average approval time', value: '< 24 hrs' },
-  { label: 'User satisfaction', value: '4.9/5' },
-  { label: 'Policy coverage', value: '99.8%' },
-];
-
-const steps = [
-  { title: 'Set up in minutes', description: 'Create a business profile, confirm compliance requirements, and publish a campaign brief.' },
-  { title: 'Launch with confidence', description: 'Review approvals, budgets, and creative assets in one predictable workflow.' },
-  { title: 'Track outcomes clearly', description: 'Monitor engagement, rewards, and support signals without chasing spreadsheets.' },
-];
-
-const testimonials = [
-  {
-    quote: 'The homepage made the platform feel credible from the first screen. We knew exactly where to start.',
-    name: 'Maya Chen',
-    role: 'Growth Director, BrightEdge Retail',
-  },
-  {
-    quote: 'Fast navigation, clear proof points, and a simple onboarding path reduced friction for our team.',
-    name: 'Dylan Brooks',
-    role: 'Partnership Lead, Atlas Energy',
-  },
-];
-
-const securityPoints = [
-  'Role-based access controls for each workspace',
-  'Audit trails for campaign and content updates',
-  'Transparent policy pages and public help content',
-  'Mobile-friendly flows with clear error recovery',
-];
-
-const faqs = [
-  {
-    question: 'How quickly can a campaign go live?',
-    answer: 'Most teams can move from setup to review within a single working session, then launch as soon as approvals are complete.',
-  },
-  {
-    question: 'Can administrators update the homepage copy?',
-    answer: 'Yes. The homepage content remains CMS-driven, so teams can adjust the headline, summary, and featured items without code changes.',
-  },
-  {
-    question: 'Does the experience work well on mobile?',
-    answer: 'The layout is responsive, touch-friendly, and built to keep the primary actions visible without extra tapping.',
-  },
-  {
-    question: 'What content can the CMS manage?',
-    answer: 'The CMS now covers the homepage, about, FAQ, contact, news, announcements, help center, legal pages, blog, SEO metadata, sitemap rules, robots rules, custom URLs, landing pages, advertiser pages, and user guides.',
-  },
-];
-
-const pricingTiers = [
-  {
-    name: 'Starter',
-    price: '$0',
-    description: 'For teams evaluating a launch or preparing a first campaign.',
-    features: ['Landing page access', 'Basic campaign setup', 'Support documentation'],
-    ctaLabel: 'Create account',
-    ctaHref: '/signup',
-  },
-  {
-    name: 'Growth',
-    price: 'Custom',
-    description: 'For advertisers who need repeatable launches and faster approvals.',
-    features: ['Campaign workflows', 'Reporting visibility', 'Priority support'],
-    ctaLabel: 'Talk to sales',
-    ctaHref: '/business',
-  },
-];
-
 export function HomePage(): JSX.Element {
   const [query, setQuery] = useState('');
   const [siteName, setSiteName] = useState(buildDefaultCmsConfig().siteName);
@@ -91,10 +18,11 @@ export function HomePage(): JSX.Element {
   const [ctaLabel, setCtaLabel] = useState(buildDefaultCmsConfig().pages.home.ctaLabel);
   const [ctaHref, setCtaHref] = useState(buildDefaultCmsConfig().pages.home.ctaHref);
   const [highlights, setHighlights] = useState(buildDefaultCmsConfig().pages.home.highlights);
+  const [homeContent, setHomeContent] = useState(buildDefaultCmsConfig().pages.home.homeContent!);
   const [brandingLabel, setBrandingLabel] = useState(defaultCustomizationConfig.branding.logoText);
   const [brandingMark, setBrandingMark] = useState(defaultCustomizationConfig.branding.logoMark);
-  const [trustBadges, setTrustBadges] = useState<string[]>(['SSL verified', 'Audit logs', 'Verified advertisers']);
-  const [statusIndicators, setStatusIndicators] = useState<string[]>(['System status live', 'Transparent payout history', 'Professional certification ready']);
+  const [trustBadgeKeys, setTrustBadgeKeys] = useState<string[]>(['sslLabel', 'auditLogsLabel', 'verifiedAdvertisersLabel']);
+  const [statusIndicatorKeys, setStatusIndicatorKeys] = useState<string[]>(['systemStatusLabel', 'transparentPayoutLabel', 'certificationsLabel']);
 
   const { data: liveCampaigns = [], isLoading: campaignsLoading } = useQuery({
     queryKey: ['home-campaigns'],
@@ -113,6 +41,7 @@ export function HomePage(): JSX.Element {
         setCtaLabel(home.ctaLabel);
         setCtaHref(home.ctaHref);
         setHighlights(home.highlights);
+        setHomeContent(home.homeContent ?? buildDefaultCmsConfig().pages.home.homeContent!);
       })
       .catch(() => {
         const fallback = buildDefaultCmsConfig();
@@ -124,6 +53,7 @@ export function HomePage(): JSX.Element {
         setCtaLabel(fallback.pages.home.ctaLabel);
         setCtaHref(fallback.pages.home.ctaHref);
         setHighlights(fallback.pages.home.highlights);
+        setHomeContent(fallback.pages.home.homeContent!);
       });
 
     void listAdminConsoleConfig()
@@ -133,21 +63,21 @@ export function HomePage(): JSX.Element {
         setBrandingMark(customization.branding.logoMark);
 
         const badges = [
-          customization.trust.sslSecurityIndicators ? 'SSL verified' : null,
-          customization.trust.verifiedAdvertiserBadges ? 'Verified advertisers' : null,
-          customization.trust.verifiedUserBadges ? 'Verified users' : null,
-          customization.trust.auditLogs ? 'Audit logs' : null,
+          customization.trust.sslSecurityIndicators ? 'sslLabel' : null,
+          customization.trust.verifiedAdvertiserBadges ? 'verifiedAdvertisersLabel' : null,
+          customization.trust.verifiedUserBadges ? 'verifiedUsersLabel' : null,
+          customization.trust.auditLogs ? 'auditLogsLabel' : null,
         ].filter((entry): entry is string => Boolean(entry));
 
         const indicators = [
-          customization.trust.realTimeStatistics ? 'Real-time statistics' : null,
-          customization.trust.transparentPayoutHistory ? 'Transparent payout history' : null,
-          customization.trust.systemStatusIndicators ? 'System status indicators' : null,
-          customization.trust.professionalCertifications ? 'Professional certifications' : null,
+          customization.trust.realTimeStatistics ? 'realTimeStatisticsLabel' : null,
+          customization.trust.transparentPayoutHistory ? 'transparentPayoutLabel' : null,
+          customization.trust.systemStatusIndicators ? 'systemStatusLabel' : null,
+          customization.trust.professionalCertifications ? 'certificationsLabel' : null,
         ].filter((entry): entry is string => Boolean(entry));
 
-        setTrustBadges(badges.length ? badges : ['Trust controls enabled']);
-        setStatusIndicators(indicators.length ? indicators : ['Operations monitored']);
+        setTrustBadgeKeys(badges.length ? badges : ['trustFallbackLabel']);
+        setStatusIndicatorKeys(indicators.length ? indicators : ['operationsFallbackLabel']);
       })
       .catch(() => {
         setBrandingLabel(defaultCustomizationConfig.branding.logoText);
@@ -156,6 +86,9 @@ export function HomePage(): JSX.Element {
   }, []);
 
   const normalizedQuery = query.trim().toLowerCase();
+  const { header, hero, trustedAdvertisers, trustMetrics, steps, testimonials, security, faq, pricing, sections, footer } = homeContent;
+  const trustBadges = trustBadgeKeys.map((key) => hero[key]);
+  const statusIndicators = statusIndicatorKeys.map((key) => hero[key]);
 
   const featuredCampaigns = useMemo(
     () =>
@@ -180,35 +113,35 @@ export function HomePage(): JSX.Element {
             <span className="grid h-10 w-10 place-items-center rounded-2xl bg-accent text-sm font-bold text-accent-foreground">{brandingMark}</span>
             <div className="min-w-0">
               <p className="text-sm font-semibold text-foreground">{brandingLabel || siteName}</p>
-              <p className="text-xs text-muted">Trust-first growth platform</p>
+              <p className="text-xs text-muted">{header.tagline}</p>
             </div>
           </Link>
 
           <div className="hidden flex-1 items-center justify-center lg:flex">
             <label className="w-full max-w-lg">
-              <span className="sr-only">Quick search</span>
+              <span className="sr-only">{header.quickSearchAccessibleLabel}</span>
               <input
                 type="search"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Quick search campaigns, features, or help"
+                placeholder={header.searchPlaceholder}
                 className="input-base w-full bg-surface-elevated/80"
               />
             </label>
           </div>
 
-          <nav className="hidden items-center gap-2 xl:flex" aria-label="Primary">
+          <nav className="hidden items-center gap-2 xl:flex" aria-label={header.primaryNavLabel}>
             <Link to="#benefits" className="rounded-full px-3 py-2 text-sm text-muted transition hover:bg-surface-elevated hover:text-foreground">
-              Benefits
+              {header.benefitsLabel}
             </Link>
             <Link to="#how-it-works" className="rounded-full px-3 py-2 text-sm text-muted transition hover:bg-surface-elevated hover:text-foreground">
-              How it works
+              {header.howItWorksLabel}
             </Link>
             <Link to="#security" className="rounded-full px-3 py-2 text-sm text-muted transition hover:bg-surface-elevated hover:text-foreground">
-              Security
+              {header.securityLabel}
             </Link>
             <Link to="#faq" className="rounded-full px-3 py-2 text-sm text-muted transition hover:bg-surface-elevated hover:text-foreground">
-              FAQ
+              {header.faqLabel}
             </Link>
           </nav>
 
@@ -217,21 +150,21 @@ export function HomePage(): JSX.Element {
               to="/help-center"
               className="rounded-full border border-border bg-surface-elevated px-4 py-2 text-sm text-foreground transition hover:border-accent/40 hover:text-accent"
             >
-              Notifications
+              {header.notificationsLabel}
             </Link>
             <details className="relative">
               <summary className="list-none cursor-pointer rounded-full border border-border bg-surface-elevated px-4 py-2 text-sm text-foreground transition hover:border-accent/40 hover:text-accent">
-                Profile
+                {header.profileLabel}
               </summary>
               <div className="absolute right-0 mt-2 w-56 rounded-2xl border border-border bg-surface p-2 shadow-2xl shadow-black/25">
                 <Link to="/login" className="block rounded-xl px-3 py-2 text-sm text-foreground transition hover:bg-surface-elevated">
-                  Log in
+                  {header.loginLabel}
                 </Link>
                 <Link to="/signup" className="block rounded-xl px-3 py-2 text-sm text-foreground transition hover:bg-surface-elevated">
-                  Create account
+                  {header.signupLabel}
                 </Link>
                 <Link to="/business" className="block rounded-xl px-3 py-2 text-sm text-foreground transition hover:bg-surface-elevated">
-                  Business dashboard
+                  {header.businessLabel}
                 </Link>
               </div>
             </details>
@@ -239,34 +172,34 @@ export function HomePage(): JSX.Element {
 
           <details className="relative ml-auto sm:hidden">
             <summary className="list-none cursor-pointer rounded-full border border-border bg-surface-elevated px-4 py-2 text-sm text-foreground transition hover:border-accent/40 hover:text-accent">
-              Menu
+              {header.menuLabel}
             </summary>
             <div className="absolute right-0 mt-2 w-72 rounded-2xl border border-border bg-surface p-3 shadow-2xl shadow-black/25">
               <label className="block">
-                <span className="sr-only">Quick search</span>
+                <span className="sr-only">{header.quickSearchAccessibleLabel}</span>
                 <input
                   type="search"
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Search campaigns or help"
+                  placeholder={header.mobileSearchPlaceholder}
                   className="input-base w-full"
                 />
               </label>
               <div className="mt-3 grid gap-1">
                 <Link to="#benefits" className="rounded-xl px-3 py-2 text-sm text-foreground transition hover:bg-surface-elevated">
-                  Benefits
+                  {header.benefitsLabel}
                 </Link>
                 <Link to="#how-it-works" className="rounded-xl px-3 py-2 text-sm text-foreground transition hover:bg-surface-elevated">
-                  How it works
+                  {header.howItWorksLabel}
                 </Link>
                 <Link to="#campaigns" className="rounded-xl px-3 py-2 text-sm text-foreground transition hover:bg-surface-elevated">
-                  Featured campaigns
+                  {header.campaignsLabel}
                 </Link>
                 <Link to="#security" className="rounded-xl px-3 py-2 text-sm text-foreground transition hover:bg-surface-elevated">
-                  Security
+                  {header.securityLabel}
                 </Link>
                 <Link to="/login" className="rounded-xl px-3 py-2 text-sm text-foreground transition hover:bg-surface-elevated">
-                  Profile menu
+                  {header.profileMenuLabel}
                 </Link>
               </div>
             </div>
@@ -277,10 +210,10 @@ export function HomePage(): JSX.Element {
       <main id="main-content" className="mx-auto max-w-7xl px-4 pb-24 pt-8 sm:px-6 lg:px-8 lg:pb-16">
         <section className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr] lg:items-center">
           <div className="space-y-6">
-            <Badge tone="accent">Trusted platform</Badge>
+            <Badge tone="accent">{hero.badge}</Badge>
             <div className="flex flex-wrap gap-2">
               <span className="semantic-chip">{brandingLabel}</span>
-              <span className="semantic-chip">{brandingMark} logo system</span>
+              <span className="semantic-chip">{brandingMark} {hero.logoSystemSuffix}</span>
               {statusIndicators.slice(0, 2).map((indicator) => (
                 <span key={indicator} className="semantic-chip">
                   {indicator}
@@ -298,10 +231,10 @@ export function HomePage(): JSX.Element {
                 {ctaLabel}
               </Link>
               <Link to="#campaigns" className="rounded-full border border-border bg-surface-elevated px-5 py-3 text-sm text-foreground transition hover:border-accent/40 hover:text-accent">
-                Browse campaigns
+                {hero.browseCampaignsLabel}
               </Link>
               <Link to="/help-center" className="rounded-full border border-border bg-transparent px-5 py-3 text-sm text-foreground transition hover:border-accent/40 hover:bg-surface-elevated">
-                How it works
+                {hero.howItWorksLabel}
               </Link>
             </div>
 
@@ -315,7 +248,7 @@ export function HomePage(): JSX.Element {
             </div>
 
             <div className="rounded-3xl border border-border bg-surface/75 p-4 backdrop-blur-sm">
-              <p className="text-xs uppercase tracking-[0.3em] text-muted">Trusted advertisers</p>
+              <p className="text-xs uppercase tracking-[0.3em] text-muted">{hero.trustedAdvertisersLabel}</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {trustedAdvertisers.map((advertiser) => (
                   <span key={advertiser} className="rounded-full border border-border bg-surface-elevated px-3 py-1.5 text-sm text-foreground">
@@ -338,19 +271,19 @@ export function HomePage(): JSX.Element {
             <div className="relative grid gap-4 p-6 sm:p-7">
               <div className="flex items-center justify-between gap-4">
                 <div>
-                  <p className="text-xs uppercase tracking-[0.3em] text-muted">Quick search</p>
-                  <p className="mt-1 text-sm text-foreground/80">Filter featured campaigns instantly.</p>
+                  <p className="text-xs uppercase tracking-[0.3em] text-muted">{hero.quickSearchLabel}</p>
+                  <p className="mt-1 text-sm text-foreground/80">{hero.quickSearchDescription}</p>
                 </div>
-                <Badge tone={normalizedQuery ? 'success' : 'neutral'}>{normalizedQuery ? `${featuredCampaigns.length} matches` : campaignsLoading ? 'Loading live campaigns' : 'Live preview'}</Badge>
+                <Badge tone={normalizedQuery ? 'success' : 'neutral'}>{normalizedQuery ? `${featuredCampaigns.length} ${hero.matchesSuffix}` : campaignsLoading ? hero.loadingCampaignsLabel : hero.livePreviewLabel}</Badge>
               </div>
 
               <label className="block">
-                <span className="sr-only">Search featured campaigns</span>
+                <span className="sr-only">{hero.searchAccessibleLabel}</span>
                 <input
                   type="search"
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Search featured campaigns"
+                  placeholder={hero.searchPlaceholder}
                   className="input-base bg-surface-elevated/80"
                 />
               </label>
@@ -364,24 +297,24 @@ export function HomePage(): JSX.Element {
               </div>
 
               <div className="rounded-3xl border border-border bg-surface/80 p-5">
-                <p className="text-xs uppercase tracking-[0.3em] text-muted">Featured campaigns</p>
+                <p className="text-xs uppercase tracking-[0.3em] text-muted">{hero.featuredCampaignsLabel}</p>
                 <div id="campaigns" className="mt-4 grid gap-3">
                   {featuredCampaigns.length ? (
                     featuredCampaigns.slice(0, 3).map((item) => (
                       <div key={`${item.title}-${item.meta ?? 'campaign'}`} className="rounded-2xl border border-border bg-surface-elevated p-4 transition duration-200 hover:-translate-y-0.5 hover:border-accent/40">
                         <div className="flex items-start justify-between gap-4">
                           <div>
-                            <p className="text-xs uppercase tracking-[0.22em] text-muted">{item.meta ?? 'Campaign'}</p>
+                            <p className="text-xs uppercase tracking-[0.22em] text-muted">{item.meta ?? hero.campaignFallbackLabel}</p>
                             <h2 className="mt-2 text-lg font-semibold text-foreground">{item.title}</h2>
                           </div>
-                          <Badge tone="info">Featured</Badge>
+                          <Badge tone="info">{hero.featuredLabel}</Badge>
                         </div>
                         <p className="mt-3 text-sm leading-6 text-muted">{item.body}</p>
                       </div>
                     ))
                   ) : (
                     <div className="rounded-2xl border border-dashed border-border bg-surface/70 p-6 text-center text-sm text-muted">
-                      {campaignsLoading ? 'Loading live campaigns from Supabase...' : 'No campaigns match that search. Try a broader term or clear the query.'}
+                      {campaignsLoading ? hero.loadingEmptyMessage : hero.emptyMessage}
                     </div>
                   )}
                 </div>
@@ -393,11 +326,11 @@ export function HomePage(): JSX.Element {
         <section id="benefits" className="mt-16 scroll-mt-24 space-y-6">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
-              <Badge tone="accent">Benefits</Badge>
-              <h2 className="mt-3 text-3xl font-semibold text-foreground">Simple flows, fewer clicks, clearer outcomes.</h2>
+              <Badge tone="accent">{sections.benefitsBadge}</Badge>
+              <h2 className="mt-3 text-3xl font-semibold text-foreground">{sections.benefitsTitle}</h2>
             </div>
             <p className="max-w-2xl text-sm leading-6 text-muted">
-              The product surface is organized to reduce cognitive load, show status early, and keep the next action obvious.
+              {sections.benefitsDescription}
             </p>
           </div>
 
@@ -414,10 +347,10 @@ export function HomePage(): JSX.Element {
 
         <section id="how-it-works" className="mt-16 scroll-mt-24 grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
           <Card className="border border-border/80 bg-surface/85 p-6">
-            <Badge tone="success">How it works</Badge>
-            <h2 className="mt-4 text-3xl font-semibold text-foreground">A guided onboarding path from first visit to first result.</h2>
+            <Badge tone="success">{sections.howBadge}</Badge>
+            <h2 className="mt-4 text-3xl font-semibold text-foreground">{sections.howTitle}</h2>
             <p className="mt-4 text-sm leading-7 text-muted">
-              The homepage immediately frames the platform as secure, efficient, and easy to navigate, then gives visitors one obvious route into the product.
+              {sections.howDescription}
             </p>
           </Card>
 
@@ -425,8 +358,8 @@ export function HomePage(): JSX.Element {
             {steps.map((step, index) => (
               <Card key={`${step.title}-compact`} className="border border-border/80 bg-surface/80 p-5">
                 <div className="flex items-center justify-between gap-3">
-                  <Badge tone="neutral">Step {index + 1}</Badge>
-                  <span className="text-xs uppercase tracking-[0.22em] text-muted">{index === 2 ? 'Results' : 'Action'}</span>
+                  <Badge tone="neutral">{sections.stepPrefix} {index + 1}</Badge>
+                  <span className="text-xs uppercase tracking-[0.22em] text-muted">{index === 2 ? sections.resultsLabel : sections.actionLabel}</span>
                 </div>
                 <h3 className="mt-4 text-lg font-semibold text-foreground">{step.title}</h3>
                 <p className="mt-2 text-sm leading-6 text-muted">{step.description}</p>
@@ -437,7 +370,7 @@ export function HomePage(): JSX.Element {
 
         <section className="mt-16 grid gap-6 lg:grid-cols-2">
           <Card className="border border-border/80 bg-surface/85 p-6">
-            <Badge tone="info">Testimonials</Badge>
+            <Badge tone="info">{sections.testimonialsBadge}</Badge>
             <div className="mt-4 grid gap-4">
               {testimonials.map((testimonial) => (
                 <blockquote key={testimonial.name} className="rounded-2xl border border-border bg-surface-elevated p-5">
@@ -452,13 +385,13 @@ export function HomePage(): JSX.Element {
           </Card>
 
           <Card id="security" className="border border-border/80 bg-surface/85 p-6 scroll-mt-24">
-            <Badge tone="success">Security</Badge>
-            <h2 className="mt-4 text-3xl font-semibold text-foreground">Trust is built into the first page.</h2>
+            <Badge tone="success">{security.badge}</Badge>
+            <h2 className="mt-4 text-3xl font-semibold text-foreground">{security.title}</h2>
             <p className="mt-4 text-sm leading-7 text-muted">
-              Public content is explicit about access, governance, and support, so users do not have to guess how the platform behaves.
+              {security.description}
             </p>
             <ul className="mt-5 grid gap-3">
-              {securityPoints.map((point) => (
+              {security.points.map((point) => (
                 <li key={point} className="rounded-2xl border border-border bg-surface-elevated px-4 py-3 text-sm text-foreground/85">
                   {point}
                 </li>
@@ -470,19 +403,19 @@ export function HomePage(): JSX.Element {
         <section id="faq" className="mt-16 scroll-mt-24">
           <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
             <div>
-              <Badge tone="neutral">Frequently asked questions</Badge>
-              <h2 className="mt-3 text-3xl font-semibold text-foreground">Short answers for faster decisions.</h2>
+              <Badge tone="neutral">{faq.badge}</Badge>
+              <h2 className="mt-3 text-3xl font-semibold text-foreground">{faq.title}</h2>
             </div>
-            <Link to="/help-center" className="rounded-full border border-border bg-surface-elevated px-4 py-2 text-sm text-foreground transition hover:border-accent/40 hover:text-accent">
-              View help center
+            <Link to={faq.linkHref} className="rounded-full border border-border bg-surface-elevated px-4 py-2 text-sm text-foreground transition hover:border-accent/40 hover:text-accent">
+              {faq.linkLabel}
             </Link>
           </div>
 
           <div className="grid gap-4 lg:grid-cols-3">
-            {faqs.map((faq) => (
-              <Card key={faq.question} className="border border-border/80 bg-surface/85 p-6">
-                <h3 className="text-lg font-semibold text-foreground">{faq.question}</h3>
-                <p className="mt-3 text-sm leading-7 text-muted">{faq.answer}</p>
+            {faq.items.map((item) => (
+              <Card key={item.question} className="border border-border/80 bg-surface/85 p-6">
+                <h3 className="text-lg font-semibold text-foreground">{item.question}</h3>
+                <p className="mt-3 text-sm leading-7 text-muted">{item.answer}</p>
               </Card>
             ))}
           </div>
@@ -491,14 +424,14 @@ export function HomePage(): JSX.Element {
         <section className="mt-16">
           <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
             <div>
-              <Badge tone="accent">Pricing</Badge>
-              <h2 className="mt-3 text-3xl font-semibold text-foreground">Flexible options that keep the next step obvious.</h2>
+              <Badge tone="accent">{pricing.badge}</Badge>
+              <h2 className="mt-3 text-3xl font-semibold text-foreground">{pricing.title}</h2>
             </div>
-            <p className="max-w-2xl text-sm leading-6 text-muted">If pricing is not relevant for a visitor, the copy still points them toward the right action without burying the page.</p>
+            <p className="max-w-2xl text-sm leading-6 text-muted">{pricing.description}</p>
           </div>
 
           <div className="grid gap-4 lg:grid-cols-2">
-            {pricingTiers.map((tier) => (
+            {pricing.tiers.map((tier) => (
               <Card key={tier.name} className="border border-border/80 bg-surface/85 p-6 transition duration-300 hover:-translate-y-1 hover:border-accent/40">
                 <div className="flex items-start justify-between gap-4">
                   <div>
@@ -526,10 +459,10 @@ export function HomePage(): JSX.Element {
           <Card className="border border-border/80 bg-[linear-gradient(135deg,hsl(var(--color-surface-elevated))_0%,hsl(var(--color-surface))_100%)] p-6 sm:p-8">
             <div className="grid gap-6 lg:grid-cols-[1fr_auto] lg:items-center">
               <div>
-                <Badge tone="accent">Call to action</Badge>
-                <h2 className="mt-4 max-w-2xl text-3xl font-semibold text-foreground">Start with a simple next step and move faster from there.</h2>
+                <Badge tone="accent">{sections.finalBadge}</Badge>
+                <h2 className="mt-4 max-w-2xl text-3xl font-semibold text-foreground">{sections.finalTitle}</h2>
                 <p className="mt-4 max-w-2xl text-sm leading-7 text-muted">
-                  The homepage keeps the decision path short: review the trust signals, search what you need, and choose the right entry point in a single click.
+                  {sections.finalDescription}
                 </p>
               </div>
               <div className="flex flex-wrap gap-3">
@@ -537,7 +470,7 @@ export function HomePage(): JSX.Element {
                   {ctaLabel}
                 </Link>
                 <Link to="/login" className="rounded-full border border-border bg-surface-elevated px-5 py-3 text-sm text-foreground transition hover:border-accent/40 hover:text-accent">
-                  Log in
+                  {sections.finalLoginLabel}
                 </Link>
               </div>
             </div>
@@ -550,64 +483,64 @@ export function HomePage(): JSX.Element {
           <div>
             <p className="text-sm font-semibold text-foreground">{siteName}</p>
             <p className="mt-2 max-w-2xl text-sm leading-7 text-muted">
-              A secure, easy-to-navigate platform for advertisers and users, with public pages designed to lower friction and build trust quickly.
+              {footer.description}
             </p>
           </div>
           <div className="grid gap-5 sm:grid-cols-2 lg:justify-end">
             <div>
-              <p className="text-xs uppercase tracking-[0.24em] text-muted">Company</p>
+              <p className="text-xs uppercase tracking-[0.24em] text-muted">{footer.companyLabel}</p>
               <div className="mt-3 flex flex-wrap gap-3">
                 <Link to="/about" className="rounded-full border border-border bg-surface-elevated px-4 py-2 text-sm text-foreground transition hover:border-accent/40 hover:text-accent">
-                  About
+                  {footer.aboutLabel}
                 </Link>
                 <Link to="/contact" className="rounded-full border border-border bg-surface-elevated px-4 py-2 text-sm text-foreground transition hover:border-accent/40 hover:text-accent">
-                  Contact
+                  {footer.contactLabel}
                 </Link>
                 <Link to="/news" className="rounded-full border border-border bg-surface-elevated px-4 py-2 text-sm text-foreground transition hover:border-accent/40 hover:text-accent">
-                  News
+                  {footer.newsLabel}
                 </Link>
                 <Link to="/announcements" className="rounded-full border border-border bg-surface-elevated px-4 py-2 text-sm text-foreground transition hover:border-accent/40 hover:text-accent">
-                  Announcements
+                  {footer.announcementsLabel}
                 </Link>
               </div>
             </div>
 
             <div>
-              <p className="text-xs uppercase tracking-[0.24em] text-muted">SEO and routing</p>
+              <p className="text-xs uppercase tracking-[0.24em] text-muted">{footer.seoRoutingLabel}</p>
               <div className="mt-3 flex flex-wrap gap-3">
                 <Link to="/seo" className="rounded-full border border-border bg-surface-elevated px-4 py-2 text-sm text-foreground transition hover:border-accent/40 hover:text-accent">
-                  SEO
+                  {footer.seoLabel}
                 </Link>
                 <Link to="/meta-tags" className="rounded-full border border-border bg-surface-elevated px-4 py-2 text-sm text-foreground transition hover:border-accent/40 hover:text-accent">
-                  Meta Tags
+                  {footer.metaTagsLabel}
                 </Link>
                 <Link to="/open-graph" className="rounded-full border border-border bg-surface-elevated px-4 py-2 text-sm text-foreground transition hover:border-accent/40 hover:text-accent">
-                  Open Graph
+                  {footer.openGraphLabel}
                 </Link>
                 <Link to="/sitemap" className="rounded-full border border-border bg-surface-elevated px-4 py-2 text-sm text-foreground transition hover:border-accent/40 hover:text-accent">
-                  Sitemap
+                  {footer.sitemapLabel}
                 </Link>
                 <Link to="/robots" className="rounded-full border border-border bg-surface-elevated px-4 py-2 text-sm text-foreground transition hover:border-accent/40 hover:text-accent">
-                  Robots
+                  {footer.robotsLabel}
                 </Link>
                 <Link to="/custom-urls" className="rounded-full border border-border bg-surface-elevated px-4 py-2 text-sm text-foreground transition hover:border-accent/40 hover:text-accent">
-                  Custom URLs
+                  {footer.customUrlsLabel}
                 </Link>
               </div>
             </div>
 
             <div className="sm:col-span-2 flex flex-wrap gap-3 lg:justify-end">
               <Link to="/privacy-policy" className="rounded-full border border-border bg-surface-elevated px-4 py-2 text-sm text-foreground transition hover:border-accent/40 hover:text-accent">
-                Privacy
+                {footer.privacyLabel}
               </Link>
               <Link to="/terms" className="rounded-full border border-border bg-surface-elevated px-4 py-2 text-sm text-foreground transition hover:border-accent/40 hover:text-accent">
-                Terms
+                {footer.termsLabel}
               </Link>
               <Link to="/help-center" className="rounded-full border border-border bg-surface-elevated px-4 py-2 text-sm text-foreground transition hover:border-accent/40 hover:text-accent">
-                Help center
+                {footer.helpCenterLabel}
               </Link>
               <Link to="/blog" className="rounded-full border border-border bg-surface-elevated px-4 py-2 text-sm text-foreground transition hover:border-accent/40 hover:text-accent">
-                Blog
+                {footer.blogLabel}
               </Link>
             </div>
           </div>
@@ -617,13 +550,13 @@ export function HomePage(): JSX.Element {
       <div className="fixed inset-x-0 bottom-0 z-50 border-t border-border/70 bg-background/90 px-4 py-3 backdrop-blur-xl sm:hidden">
         <div className="mx-auto flex max-w-7xl items-center gap-3">
           <Link to="/" className="flex-1 rounded-full border border-border bg-surface-elevated px-4 py-3 text-center text-sm font-medium text-foreground">
-            Home
+            {footer.mobileHomeLabel}
           </Link>
           <Link to="#campaigns" className="flex-1 rounded-full border border-border bg-surface-elevated px-4 py-3 text-center text-sm font-medium text-foreground">
-            Campaigns
+            {footer.mobileCampaignsLabel}
           </Link>
           <Link to="/signup" className="flex-1 rounded-full bg-accent px-4 py-3 text-center text-sm font-semibold text-accent-foreground">
-            Start
+            {footer.mobileStartLabel}
           </Link>
         </div>
       </div>
@@ -631,7 +564,7 @@ export function HomePage(): JSX.Element {
       <Link
         to="/signup"
         className="fixed bottom-20 right-4 z-50 grid h-14 w-14 place-items-center rounded-full bg-accent text-sm font-semibold text-accent-foreground shadow-2xl shadow-black/35 transition hover:bg-accent-strong sm:hidden"
-        aria-label="Start now"
+        aria-label={footer.startAriaLabel}
       >
         +
       </Link>

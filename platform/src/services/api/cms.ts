@@ -1,13 +1,18 @@
 import { supabase } from '@/services/supabase/client';
 import type {
+  CmsCustomPage,
+  CmsCustomPageBlock,
   CmsConfig,
   CmsContentItem,
   CmsDocumentState,
+  CmsHomeContent,
   CmsOperationalSnapshot,
   CmsPageContent,
   CmsPageKey,
   CmsPublicationStatus,
   CmsRevision,
+  CmsPricingTableBlock,
+  CmsReusableBlockKey,
 } from '@/types';
 
 type SettingRow = {
@@ -139,6 +144,26 @@ const defaultItems: Record<CmsPageKey, CmsContentItem[]> = {
   ],
 };
 
+const defaultHomeContent: CmsHomeContent = {
+  header: { tagline: 'Trust-first growth platform', primaryNavLabel: 'Primary', quickSearchAccessibleLabel: 'Quick search', searchPlaceholder: 'Quick search campaigns, features, or help', benefitsLabel: 'Benefits', howItWorksLabel: 'How it works', securityLabel: 'Security', faqLabel: 'FAQ', notificationsLabel: 'Notifications', profileLabel: 'Profile', loginLabel: 'Log in', signupLabel: 'Create account', businessLabel: 'Business dashboard', menuLabel: 'Menu', mobileSearchPlaceholder: 'Search campaigns or help', campaignsLabel: 'Featured campaigns', profileMenuLabel: 'Profile menu' },
+  hero: { badge: 'Trusted platform', logoSystemSuffix: 'logo system', browseCampaignsLabel: 'Browse campaigns', howItWorksLabel: 'How it works', trustedAdvertisersLabel: 'Trusted advertisers', sslLabel: 'SSL verified', verifiedAdvertisersLabel: 'Verified advertisers', verifiedUsersLabel: 'Verified users', auditLogsLabel: 'Audit logs', trustFallbackLabel: 'Trust controls enabled', realTimeStatisticsLabel: 'Real-time statistics', transparentPayoutLabel: 'Transparent payout history', systemStatusLabel: 'System status indicators', certificationsLabel: 'Professional certifications', operationsFallbackLabel: 'Operations monitored', quickSearchLabel: 'Quick search', quickSearchDescription: 'Filter featured campaigns instantly.', livePreviewLabel: 'Live preview', loadingCampaignsLabel: 'Loading live campaigns', matchesSuffix: 'matches', searchAccessibleLabel: 'Search featured campaigns', searchPlaceholder: 'Search featured campaigns', featuredCampaignsLabel: 'Featured campaigns', campaignFallbackLabel: 'Campaign', featuredLabel: 'Featured', loadingEmptyMessage: 'Loading live campaigns from Supabase...', emptyMessage: 'No campaigns match that search. Try a broader term or clear the query.' },
+  trustedAdvertisers: ['Northstar Capital', 'Harbor Health', 'BrightEdge Retail', 'Atlas Energy', 'Summit Finance', 'Pulse Media'],
+  trustMetrics: [{ label: 'Campaigns launched', value: '1,240+' }, { label: 'Average approval time', value: '< 24 hrs' }, { label: 'User satisfaction', value: '4.9/5' }, { label: 'Policy coverage', value: '99.8%' }],
+  steps: [{ title: 'Set up in minutes', description: 'Create a business profile, confirm compliance requirements, and publish a campaign brief.' }, { title: 'Launch with confidence', description: 'Review approvals, budgets, and creative assets in one predictable workflow.' }, { title: 'Track outcomes clearly', description: 'Monitor engagement, rewards, and support signals without chasing spreadsheets.' }],
+  testimonials: [{ quote: 'The homepage made the platform feel credible from the first screen. We knew exactly where to start.', name: 'Maya Chen', role: 'Growth Director, BrightEdge Retail' }, { quote: 'Fast navigation, clear proof points, and a simple onboarding path reduced friction for our team.', name: 'Dylan Brooks', role: 'Partnership Lead, Atlas Energy' }],
+  security: { badge: 'Security', title: 'Trust is built into the first page.', description: 'Public content is explicit about access, governance, and support, so users do not have to guess how the platform behaves.', points: ['Role-based access controls for each workspace', 'Audit trails for campaign and content updates', 'Transparent policy pages and public help content', 'Mobile-friendly flows with clear error recovery'] },
+  faq: { badge: 'Frequently asked questions', title: 'Short answers for faster decisions.', linkLabel: 'View help center', linkHref: '/help-center', items: [{ question: 'How quickly can a campaign go live?', answer: 'Most teams can move from setup to review within a single working session, then launch as soon as approvals are complete.' }, { question: 'Can administrators update the homepage copy?', answer: 'Yes. The homepage content remains CMS-driven, so teams can adjust the headline, summary, and featured items without code changes.' }, { question: 'Does the experience work well on mobile?', answer: 'The layout is responsive, touch-friendly, and built to keep the primary actions visible without extra tapping.' }, { question: 'What content can the CMS manage?', answer: 'The CMS now covers the homepage, about, FAQ, contact, news, announcements, help center, legal pages, blog, SEO metadata, sitemap rules, robots rules, custom URLs, landing pages, advertiser pages, and user guides.' }] },
+  pricing: { badge: 'Pricing', title: 'Flexible options that keep the next step obvious.', description: 'If pricing is not relevant for a visitor, the copy still points them toward the right action without burying the page.', tiers: [{ name: 'Starter', price: '$0', description: 'For teams evaluating a launch or preparing a first campaign.', features: ['Landing page access', 'Basic campaign setup', 'Support documentation'], ctaLabel: 'Create account', ctaHref: '/signup' }, { name: 'Growth', price: 'Custom', description: 'For advertisers who need repeatable launches and faster approvals.', features: ['Campaign workflows', 'Reporting visibility', 'Priority support'], ctaLabel: 'Talk to sales', ctaHref: '/business' }] },
+  sections: { benefitsBadge: 'Benefits', benefitsTitle: 'Simple flows, fewer clicks, clearer outcomes.', benefitsDescription: 'The product surface is organized to reduce cognitive load, show status early, and keep the next action obvious.', howBadge: 'How it works', howTitle: 'A guided onboarding path from first visit to first result.', howDescription: 'The homepage immediately frames the platform as secure, efficient, and easy to navigate, then gives visitors one obvious route into the product.', stepPrefix: 'Step', actionLabel: 'Action', resultsLabel: 'Results', testimonialsBadge: 'Testimonials', finalBadge: 'Call to action', finalTitle: 'Start with a simple next step and move faster from there.', finalDescription: 'The homepage keeps the decision path short: review the trust signals, search what you need, and choose the right entry point in a single click.', finalLoginLabel: 'Log in' },
+  footer: { description: 'A secure, easy-to-navigate platform for advertisers and users, with public pages designed to lower friction and build trust quickly.', companyLabel: 'Company', aboutLabel: 'About', contactLabel: 'Contact', newsLabel: 'News', announcementsLabel: 'Announcements', seoRoutingLabel: 'SEO and routing', seoLabel: 'SEO', metaTagsLabel: 'Meta Tags', openGraphLabel: 'Open Graph', sitemapLabel: 'Sitemap', robotsLabel: 'Robots', customUrlsLabel: 'Custom URLs', privacyLabel: 'Privacy', termsLabel: 'Terms', helpCenterLabel: 'Help center', blogLabel: 'Blog', mobileHomeLabel: 'Home', mobileCampaignsLabel: 'Campaigns', mobileStartLabel: 'Start', startAriaLabel: 'Start now' },
+};
+
+const defaultReusableBlocks: Record<CmsReusableBlockKey, CmsPricingTableBlock> = {
+  pricingTable: defaultHomeContent.pricing,
+};
+
+const defaultCustomPages: CmsCustomPage[] = [];
+
 const defaultPages: Record<CmsPageKey, CmsPageContent> = {
   home: {
     eyebrow: 'Go4Wealth / Premium Growth Platform',
@@ -149,6 +174,7 @@ const defaultPages: Record<CmsPageKey, CmsPageContent> = {
     ctaHref: '/business',
     highlights: ['Premium fintech-style UI', 'Fast mobile-first flows', 'Editable by administrators'],
     items: defaultItems.home,
+    homeContent: defaultHomeContent,
   },
   faqs: {
     eyebrow: 'Knowledge base',
@@ -335,6 +361,8 @@ const defaultPages: Record<CmsPageKey, CmsPageContent> = {
 const DEFAULT_CONFIG: CmsConfig = {
   siteName: 'Go4Wealth',
   pages: defaultPages,
+  reusableBlocks: defaultReusableBlocks,
+  customPages: defaultCustomPages,
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -352,6 +380,174 @@ function toContentItem(value: unknown): CmsContentItem | null {
     meta: typeof value.meta === 'string' ? value.meta : undefined,
     href: typeof value.href === 'string' ? value.href : undefined,
   };
+}
+
+function createPricingTableBlock(id: string, content?: unknown): CmsCustomPageBlock {
+  return {
+    id,
+    type: 'pricingTable',
+    content: toPricingTableBlock(content, structuredClone(defaultHomeContent.pricing)),
+  };
+}
+
+function toStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0);
+}
+
+function toCustomPageBlock(value: unknown, index: number): CmsCustomPageBlock | null {
+  if (!isRecord(value) || value.type !== 'pricingTable') {
+    return null;
+  }
+
+  const id = typeof value.id === 'string' && value.id.trim().length > 0 ? value.id : `pricing-table-${index + 1}`;
+  return createPricingTableBlock(id, value.content);
+}
+
+function toCustomPageFromRow(value: unknown, fallback?: CmsCustomPage): CmsCustomPage | null {
+  if (!isRecord(value)) {
+    return fallback ?? null;
+  }
+
+  const highlights = toStringArray(value.highlights);
+  const blocks = Array.isArray(value.blocks)
+    ? value.blocks.map(toCustomPageBlock).filter((entry): entry is CmsCustomPageBlock => Boolean(entry))
+    : fallback?.blocks ?? [];
+  const items = Array.isArray(value.items)
+    ? value.items.map(toContentItem).filter((entry): entry is CmsContentItem => Boolean(entry))
+    : fallback?.items ?? [];
+
+  return {
+    slug: typeof value.slug === 'string' && value.slug.trim().length > 0 ? value.slug : fallback?.slug ?? '',
+    eyebrow: typeof value.eyebrow === 'string' ? value.eyebrow : fallback?.eyebrow ?? '',
+    title: typeof value.title === 'string' ? value.title : fallback?.title ?? '',
+    summary: typeof value.summary === 'string' ? value.summary : fallback?.summary ?? '',
+    body: typeof value.body === 'string' ? value.body : fallback?.body ?? '',
+    ctaLabel: typeof value.ctaLabel === 'string' ? value.ctaLabel : fallback?.ctaLabel ?? '',
+    ctaHref: typeof value.ctaHref === 'string' ? value.ctaHref : fallback?.ctaHref ?? '/',
+    highlights: highlights.length > 0 ? highlights : fallback?.highlights ?? [],
+    blocks,
+    items,
+  };
+}
+
+type CmsCustomPageRow = {
+  id: string;
+  slug: string;
+  sort_order: number;
+  eyebrow: string;
+  title: string;
+  summary: string;
+  body: string;
+  cta_label: string;
+  cta_href: string;
+  highlights: unknown;
+  items: unknown;
+  blocks: unknown;
+  created_at: string;
+  updated_at: string;
+};
+
+function toCustomPageFromRowRecord(row: CmsCustomPageRow): CmsCustomPage {
+  return {
+    slug: row.slug,
+    eyebrow: row.eyebrow,
+    title: row.title,
+    summary: row.summary,
+    body: row.body,
+    ctaLabel: row.cta_label,
+    ctaHref: row.cta_href,
+    highlights: toStringArray(row.highlights),
+    items: Array.isArray(row.items) ? row.items.map(toContentItem).filter((entry): entry is CmsContentItem => Boolean(entry)) : [],
+    blocks: Array.isArray(row.blocks) ? row.blocks.map(toCustomPageBlock).filter((entry): entry is CmsCustomPageBlock => Boolean(entry)) : [],
+  };
+}
+
+function toPricingTableBlock(value: unknown, fallback: CmsPricingTableBlock): CmsPricingTableBlock {
+  if (!isRecord(value)) {
+    return fallback;
+  }
+
+  const tiers = Array.isArray(value.tiers)
+    ? value.tiers
+        .map((entry) => {
+          if (!isRecord(entry) || typeof entry.name !== 'string' || typeof entry.price !== 'string' || typeof entry.description !== 'string' || !Array.isArray(entry.features)) {
+            return null;
+          }
+
+          return {
+            name: entry.name,
+            price: entry.price,
+            description: entry.description,
+            features: entry.features.filter((feature): feature is string => typeof feature === 'string' && feature.trim().length > 0),
+            ctaLabel: typeof entry.ctaLabel === 'string' ? entry.ctaLabel : '',
+            ctaHref: typeof entry.ctaHref === 'string' ? entry.ctaHref : '',
+          };
+        })
+        .filter((entry): entry is CmsPricingTableBlock['tiers'][number] => Boolean(entry))
+    : fallback.tiers;
+
+  return {
+    badge: typeof value.badge === 'string' ? value.badge : fallback.badge,
+    title: typeof value.title === 'string' ? value.title : fallback.title,
+    description: typeof value.description === 'string' ? value.description : fallback.description,
+    tiers,
+  };
+}
+
+function toCustomPage(value: unknown, fallback?: CmsCustomPage): CmsCustomPage | null {
+  if (!isRecord(value)) {
+    return fallback ?? null;
+  }
+
+  const items = Array.isArray(value.items)
+    ? value.items.map(toContentItem).filter((entry): entry is CmsContentItem => Boolean(entry))
+    : fallback?.items ?? [];
+  const blocks = Array.isArray(value.blocks)
+    ? value.blocks
+        .map((entry, index) => {
+          if (!isRecord(entry) || entry.type !== 'pricingTable') {
+            return null;
+          }
+
+          const blockId = typeof entry.id === 'string' && entry.id.trim().length > 0 ? entry.id : `pricing-table-${index + 1}`;
+          return createPricingTableBlock(blockId, entry.content);
+        })
+        .filter((entry): entry is CmsCustomPageBlock => Boolean(entry))
+    : fallback?.blocks ?? [];
+
+  return {
+    slug: typeof value.slug === 'string' ? value.slug : fallback?.slug ?? '',
+    eyebrow: typeof value.eyebrow === 'string' ? value.eyebrow : fallback?.eyebrow ?? '',
+    title: typeof value.title === 'string' ? value.title : fallback?.title ?? '',
+    summary: typeof value.summary === 'string' ? value.summary : fallback?.summary ?? '',
+    body: typeof value.body === 'string' ? value.body : fallback?.body ?? '',
+    ctaLabel: typeof value.ctaLabel === 'string' ? value.ctaLabel : fallback?.ctaLabel ?? '',
+    ctaHref: typeof value.ctaHref === 'string' ? value.ctaHref : fallback?.ctaHref ?? '/',
+    highlights: Array.isArray(value.highlights)
+      ? value.highlights.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+      : fallback?.highlights ?? [],
+    blocks,
+    items,
+  };
+}
+
+function mergeHomeContent(value: unknown, fallback: CmsHomeContent): CmsHomeContent {
+  const merge = (current: unknown, base: unknown): unknown => {
+    if (Array.isArray(base)) {
+      if (!Array.isArray(current)) return base;
+      return current.map((entry, index) => isRecord(base[0]) ? merge(entry, base[index] ?? base[0]) : typeof entry === 'string' ? entry : base[index]).filter((entry) => entry !== undefined);
+    }
+    if (isRecord(base)) {
+      const source = isRecord(current) ? current : {};
+      return Object.fromEntries(Object.entries(base).map(([key, baseValue]) => [key, merge(source[key], baseValue)]));
+    }
+    return typeof current === typeof base ? current : base;
+  };
+  return merge(value, fallback) as CmsHomeContent;
 }
 
 function toPageContent(value: unknown, fallback: CmsPageContent): CmsPageContent {
@@ -374,6 +570,7 @@ function toPageContent(value: unknown, fallback: CmsPageContent): CmsPageContent
     body: typeof value.body === 'string' ? value.body : fallback.body,
     ctaLabel: typeof value.ctaLabel === 'string' ? value.ctaLabel : fallback.ctaLabel,
     ctaHref: typeof value.ctaHref === 'string' ? value.ctaHref : fallback.ctaHref,
+    homeContent: fallback.homeContent ? mergeHomeContent(value.homeContent, fallback.homeContent) : undefined,
     highlights,
     items,
   };
@@ -391,7 +588,37 @@ function mergeCmsConfig(value: unknown): CmsConfig {
     return accumulator;
   }, {} as Record<CmsPageKey, CmsPageContent>);
 
-  return { siteName, pages };
+  const reusableBlocks = Object.entries(DEFAULT_CONFIG.reusableBlocks).reduce<Record<CmsReusableBlockKey, CmsPricingTableBlock>>((accumulator, [key, fallback]) => {
+    accumulator[key as CmsReusableBlockKey] = toPricingTableBlock(value.reusableBlocks?.[key], fallback);
+    return accumulator;
+  }, {} as Record<CmsReusableBlockKey, CmsPricingTableBlock>);
+
+  const customPages = Array.isArray(value.customPages)
+    ? value.customPages.map((entry) => toCustomPage(entry)).filter((entry): entry is CmsCustomPage => Boolean(entry && entry.slug.trim()))
+    : DEFAULT_CONFIG.customPages;
+
+  const pricingTable = pages.home.homeContent?.pricing ?? reusableBlocks.pricingTable ?? defaultReusableBlocks.pricingTable;
+
+  return {
+    siteName,
+    pages: {
+      ...pages,
+      home: {
+        ...pages.home,
+        homeContent: pages.home.homeContent
+          ? {
+              ...pages.home.homeContent,
+              pricing: pricingTable,
+            }
+          : pages.home.homeContent,
+      },
+    },
+    reusableBlocks: {
+      ...reusableBlocks,
+      pricingTable,
+    },
+    customPages,
+  };
 }
 
 export function buildDefaultCmsConfig(): CmsConfig {
@@ -403,38 +630,55 @@ export function getCmsPageLabel(pageKey: CmsPageKey): string {
 }
 
 export async function listCmsConfig(): Promise<CmsConfig> {
-  const { data: documents, error: documentsError } = await supabase
-    .from('cms_documents')
-    .select('page_key,site_name,published_content,status')
-    .eq('status', 'published');
+  const [{ data: documents, error: documentsError }, { data: customPages }, { data: settings }] = await Promise.all([
+    supabase
+      .from('cms_documents')
+      .select('page_key,site_name,published_content,status')
+      .eq('status', 'published'),
+    supabase
+      .from('cms_custom_pages')
+      .select('id,slug,sort_order,eyebrow,title,summary,body,cta_label,cta_href,highlights,items,blocks,created_at,updated_at')
+      .order('sort_order', { ascending: true })
+      .order('slug', { ascending: true }),
+    supabase.from('platform_settings').select('value').eq('key', CMS_SETTING_KEY).maybeSingle(),
+  ]);
 
-  if (!documentsError && documents && documents.length > 0) {
-    const firstDocument = documents[0] as { site_name?: unknown };
-    const pages = documents.reduce<Record<CmsPageKey, CmsPageContent>>((accumulator, row) => {
-      const pageKey = (row as { page_key?: string }).page_key as CmsPageKey;
-      if (pageLabels[pageKey]) {
-        accumulator[pageKey] = toPageContent((row as { published_content?: unknown }).published_content, DEFAULT_CONFIG.pages[pageKey]);
-      }
-      return accumulator;
-    }, { ...DEFAULT_CONFIG.pages });
+  const publishedPages = !documentsError && documents && documents.length > 0 ? documents.reduce<Record<CmsPageKey, CmsPageContent>>((accumulator, row) => {
+    const pageKey = (row as { page_key?: string }).page_key as CmsPageKey;
+    if (pageLabels[pageKey]) {
+      accumulator[pageKey] = toPageContent((row as { published_content?: unknown }).published_content, DEFAULT_CONFIG.pages[pageKey]);
+    }
+    return accumulator;
+  }, { ...DEFAULT_CONFIG.pages }) : DEFAULT_CONFIG.pages;
 
-    return mergeCmsConfig({
-      siteName: typeof firstDocument.site_name === 'string' ? firstDocument.site_name : DEFAULT_CONFIG.siteName,
-      pages,
-    });
+  const legacyCustomPages = settings?.value && isRecord(settings.value) && Array.isArray((settings.value as Record<string, unknown>).customPages)
+    ? (settings.value as Record<string, unknown>).customPages
+        .map((entry) => toCustomPageFromRow(entry))
+        .filter((entry): entry is CmsCustomPage => Boolean(entry && entry.slug.trim()))
+    : DEFAULT_CONFIG.customPages;
+
+  const resolvedCustomPages = Array.isArray(customPages) && customPages.length > 0
+    ? customPages.map((row) => toCustomPageFromRowRecord(row as CmsCustomPageRow))
+    : legacyCustomPages;
+
+  const documentConfig = {
+    siteName: !documentsError && documents && documents.length > 0 && typeof documents[0]?.site_name === 'string'
+      ? (documents[0]?.site_name as string)
+      : DEFAULT_CONFIG.siteName,
+    pages: publishedPages,
+    reusableBlocks: DEFAULT_CONFIG.reusableBlocks,
+    customPages: resolvedCustomPages,
+  };
+
+  if (settings?.value) {
+    return mergeCmsConfig({ ...documentConfig, ...(settings.value as Record<string, unknown>), customPages: resolvedCustomPages });
   }
 
-  // Compatibility fallback for environments that have not applied the operational CMS migration yet.
-  const { data, error } = await supabase.from('platform_settings').select('key,value').eq('key', CMS_SETTING_KEY).single();
-
-  if (error || !data) {
-    return DEFAULT_CONFIG;
-  }
-
-  return mergeCmsConfig((data as SettingRow).value);
+  return mergeCmsConfig(documentConfig);
 }
 
 export async function updateCmsConfig(config: CmsConfig): Promise<void> {
+  const normalizedConfig = mergeCmsConfig(config);
   const { data: userData } = await supabase.auth.getUser();
   const updatedBy = userData.user?.id ?? null;
   const { data: existing } = await supabase.from('cms_documents').select('page_key,status,version').in('page_key', [...cmsPageKeys]);
@@ -444,9 +688,9 @@ export async function updateCmsConfig(config: CmsConfig): Promise<void> {
     const current = existingByKey.get(pageKey);
     return {
       page_key: pageKey,
-      site_name: config.siteName,
-      draft_content: config.pages[pageKey],
-      published_content: current ? undefined : config.pages[pageKey],
+      site_name: normalizedConfig.siteName,
+      draft_content: normalizedConfig.pages[pageKey],
+      published_content: current ? undefined : normalizedConfig.pages[pageKey],
       status: current?.status ?? 'draft',
       version: current?.version ?? 1,
       updated_by: updatedBy,
@@ -454,11 +698,52 @@ export async function updateCmsConfig(config: CmsConfig): Promise<void> {
   });
 
   const { error } = await supabase.from('cms_documents').upsert(rows, { onConflict: 'page_key' });
-  if (!error) return;
+  if (error) {
+    // Compatibility fallback keeps the existing settings path usable during migration rollout.
+    const { error: settingsError } = await supabase.from('platform_settings').upsert(
+      { key: CMS_SETTING_KEY, value: normalizedConfig, description: 'Go4Wealth CMS content for public pages, legal copy, SEO, reusable blocks, and custom pages', updated_by: updatedBy },
+      { onConflict: 'key' },
+    );
+    if (settingsError) throw settingsError;
+    return;
+  }
 
-  // Compatibility fallback keeps the existing settings path usable during migration rollout.
+  const customPageRows = normalizedConfig.customPages.map((page, index) => ({
+    slug: page.slug,
+    sort_order: index,
+    eyebrow: page.eyebrow,
+    title: page.title,
+    summary: page.summary,
+    body: page.body,
+    cta_label: page.ctaLabel,
+    cta_href: page.ctaHref,
+    highlights: page.highlights,
+    items: page.items,
+    blocks: page.blocks,
+  }));
+
+  const { data: existingCustomPages, error: customPagesError } = await supabase.from('cms_custom_pages').select('id,slug');
+  if (customPagesError && customPagesError.code !== '42P01') {
+    throw customPagesError;
+  }
+
+  if (!customPagesError) {
+    if (customPageRows.length > 0) {
+      const { error: customPagesUpsertError } = await supabase.from('cms_custom_pages').upsert(customPageRows, { onConflict: 'slug' });
+      if (customPagesUpsertError) throw customPagesUpsertError;
+    }
+
+    const existingSlugs = new Set((existingCustomPages ?? []).map((row) => (row as { slug?: string }).slug).filter((slug): slug is string => typeof slug === 'string' && slug.length > 0));
+    const nextSlugs = new Set(customPageRows.map((row) => row.slug));
+    const slugsToDelete = [...existingSlugs].filter((slug) => !nextSlugs.has(slug));
+    if (slugsToDelete.length > 0) {
+      const { error: deleteError } = await supabase.from('cms_custom_pages').delete().in('slug', slugsToDelete);
+      if (deleteError) throw deleteError;
+    }
+  }
+
   const { error: settingsError } = await supabase.from('platform_settings').upsert(
-    { key: CMS_SETTING_KEY, value: config, description: 'Go4Wealth CMS content for public pages, legal copy, SEO, and routing metadata', updated_by: updatedBy },
+    { key: CMS_SETTING_KEY, value: normalizedConfig, description: 'Go4Wealth CMS content for public pages, legal copy, SEO, reusable blocks, and custom pages', updated_by: updatedBy },
     { onConflict: 'key' },
   );
   if (settingsError) throw settingsError;
@@ -559,7 +844,15 @@ async function scheduleCmsPublishLocally(config: CmsConfig, scheduledPublishAt: 
 }
 
 export async function listCmsOperationalSnapshot(): Promise<CmsOperationalSnapshot> {
-  const { data, error } = await supabase.from('cms_documents').select('*').in('page_key', [...cmsPageKeys]);
+  const [{ data, error }, { data: customPages, error: customPagesError }] = await Promise.all([
+    supabase.from('cms_documents').select('*').in('page_key', [...cmsPageKeys]),
+    supabase
+      .from('cms_custom_pages')
+      .select('id,slug,sort_order,eyebrow,title,summary,body,cta_label,cta_href,highlights,items,blocks,created_at,updated_at')
+      .order('sort_order', { ascending: true })
+      .order('slug', { ascending: true }),
+  ]);
+
   if (error || !data || data.length === 0) {
     return { config: await listCmsConfig(), documents: {} as Record<CmsPageKey, CmsDocumentState> };
   }
@@ -571,8 +864,12 @@ export async function listCmsOperationalSnapshot(): Promise<CmsOperationalSnapsh
     return accumulator;
   }, { ...DEFAULT_CONFIG.pages });
 
+  const resolvedCustomPages = !customPagesError && Array.isArray(customPages) && customPages.length > 0
+    ? customPages.map((row) => toCustomPageFromRowRecord(row as CmsCustomPageRow))
+    : DEFAULT_CONFIG.customPages;
+
   return {
-    config: mergeCmsConfig({ siteName: first.site_name, pages }),
+    config: mergeCmsConfig({ siteName: first.site_name, pages, customPages: resolvedCustomPages }),
     documents: rows.reduce<Record<CmsPageKey, CmsDocumentState>>((accumulator, row) => {
       accumulator[row.page_key] = toDocumentState(row);
       return accumulator;

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { useAuth } from '@/app/providers/AuthProvider';
+import { enterpriseModuleConfigs } from '@/features/admin/data/enterpriseModules';
 import { listSupportTickets, updateSupportTicketStatus } from '@/services/api/support';
 import { supportTicketStatuses, type SupportTicket, type SupportTicketStatus } from '@/types';
 

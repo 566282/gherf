@@ -17,6 +17,7 @@ import { ResetPasswordPage } from '@/features/auth/pages/ResetPasswordPage';
 // Public pages
 import { HomePage } from '@/features/home/pages/HomePage';
 import { CmsPublicPage } from '@/features/content/pages/CmsPublicPage';
+import { CmsCustomPage } from '@/features/content/pages/CmsCustomPage';
 import { UnauthorizedPage } from '@/features/errors/pages/UnauthorizedPage';
 import { NotFoundPage } from '@/features/errors/pages/NotFoundPage';
 
@@ -86,6 +87,7 @@ const routes: RouteObject[] = [
       { path: 'landing-pages', element: <CmsPublicPage pageKey="landing-pages" /> },
       { path: 'advertiser-pages', element: <CmsPublicPage pageKey="advertiser-pages" /> },
       { path: 'user-guides', element: <CmsPublicPage pageKey="user-guides" /> },
+      { path: 'pages/:slug', element: <CmsCustomPage /> },
       { path: 'login', loader: guestOnlyMiddleware(), element: <LoginPage /> },
       { path: 'signup', loader: guestOnlyMiddleware(), element: <SignupPage /> },
       { path: 'forgot-password', loader: guestOnlyMiddleware(), element: <ForgotPasswordPage /> },
