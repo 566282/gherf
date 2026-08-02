@@ -507,7 +507,7 @@ export function FraudDetectionPage(): JSX.Element {
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
-            {signalDefinitions.map((signal) => (
+            {fraudSignalDefinitions.map((signal) => (
               <div key={signal.key} className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
