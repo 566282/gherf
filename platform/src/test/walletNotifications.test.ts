@@ -1,6 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createWithdrawalRequest } from '@/services/api/wallet';
 
+function getFutureDate(offsetDays = 2): string {
+  const date = new Date();
+  date.setUTCHours(0, 0, 0, 0);
+  date.setUTCDate(date.getUTCDate() + offsetDays);
+  return date.toISOString().slice(0, 10);
+}
+
+function toExpectedLabel(dateIso: string): string {
+  const date = new Date(`${dateIso}T00:00:00.000Z`);
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
 const supabaseState = vi.hoisted(() => ({
   from: vi.fn(),
   rpc: vi.fn(),
@@ -110,6 +126,8 @@ describe('withdrawal notifications', () => {
   });
 
   it('rejects free members before creating a withdrawal request', async () => {
+    const scheduledFor = getFutureDate(2);
+
     supabaseState.single.mockResolvedValueOnce({
       data: { wallet_balance: 500, full_name: 'Ada Example', email: 'ada@example.com', level_tier: 1, level_label: 'Starter' },
       error: null,
@@ -122,7 +140,7 @@ describe('withdrawal notifications', () => {
         destinationLabel: 'Primary payout account',
         destinationValue: '9876543210',
         destinationCurrency: 'USD',
-        scheduledFor: '2026-07-30',
+        scheduledFor,
         note: 'Monthly payout',
       }),
     ).rejects.toThrow('Free members cannot withdraw funds');
@@ -132,6 +150,9 @@ describe('withdrawal notifications', () => {
   });
 
   it('notifies admins and users with the withdrawal limit and date for paid members', async () => {
+    const scheduledFor = getFutureDate(2);
+    const expectedDateLabel = toExpectedLabel(scheduledFor);
+
     supabaseState.single
       .mockResolvedValueOnce({ data: { wallet_balance: 500, full_name: 'Ada Example', email: 'ada@example.com', level_tier: 2, level_label: 'Balanced' }, error: null })
       .mockResolvedValueOnce({ data: { id: 'tx-1' }, error: null })
@@ -151,7 +172,7 @@ describe('withdrawal notifications', () => {
           net_amount: 123.12,
           approval_workflow: 'manual',
           status: 'pending',
-          scheduled_for: '2026-07-30T00:00:00.000Z',
+          scheduled_for: `${scheduledFor}T00:00:00.000Z`,
           admin_notes: null,
           reviewed_by: null,
           reviewed_at: null,
@@ -167,7 +188,7 @@ describe('withdrawal notifications', () => {
       destinationLabel: 'Primary payout account',
       destinationValue: '9876543210',
       destinationCurrency: 'USD',
-      scheduledFor: '2026-07-30',
+      scheduledFor,
       note: 'Monthly payout',
     });
 
@@ -175,12 +196,12 @@ describe('withdrawal notifications', () => {
     expect(notificationState.notifySuperAdmins).toHaveBeenCalledWith(
       expect.objectContaining({
         title: 'Withdrawal request submitted',
-        message: expect.stringContaining('Ada Example submitted a withdrawal request for USD 125.00 on Jul 30, 2026.'),
+        message: expect.stringContaining(`Ada Example submitted a withdrawal request for USD 125.00 on ${expectedDateLabel}.`),
         metadata: expect.objectContaining({
           userId: 'user-1',
           amount: 125,
           effectiveWithdrawalLimit: 500,
-          scheduledFor: '2026-07-30T00:00:00.000Z',
+          scheduledFor: `${scheduledFor}T00:00:00.000Z`,
         }),
       }),
     );
@@ -189,7 +210,7 @@ describe('withdrawal notifications', () => {
       'user-1',
       expect.objectContaining({
         title: 'Withdrawal pending',
-        message: expect.stringContaining('Withdrawals are not allowed until Jul 30, 2026.'),
+        message: expect.stringContaining(`Withdrawals are not allowed until ${expectedDateLabel}.`),
       }),
     );
   });
@@ -257,6 +278,9 @@ describe('withdrawal notifications', () => {
   });
 
   it('keeps admin alerts immediate while the withdrawal stays restricted until the fixed date', async () => {
+    const scheduledFor = getFutureDate(3);
+    const expectedDateLabel = toExpectedLabel(scheduledFor);
+
     supabaseState.single
       .mockResolvedValueOnce({ data: { wallet_balance: 500, full_name: 'Ada Example', email: 'ada@example.com', level_tier: 2, level_label: 'Balanced' }, error: null })
       .mockResolvedValueOnce({ data: { id: 'tx-2' }, error: null })
@@ -276,7 +300,7 @@ describe('withdrawal notifications', () => {
           net_amount: 49.25,
           approval_workflow: 'manual',
           status: 'pending',
-          scheduled_for: '2026-07-31T00:00:00.000Z',
+          scheduled_for: `${scheduledFor}T00:00:00.000Z`,
           admin_notes: null,
           reviewed_by: null,
           reviewed_at: null,
@@ -292,7 +316,7 @@ describe('withdrawal notifications', () => {
       destinationLabel: 'Primary payout account',
       destinationValue: '9876543210',
       destinationCurrency: 'USD',
-      scheduledFor: '2026-07-31',
+      scheduledFor,
       note: 'Future payout',
     });
 
@@ -302,7 +326,7 @@ describe('withdrawal notifications', () => {
       'user-1',
       expect.objectContaining({
         title: 'Withdrawal pending',
-        message: expect.stringContaining('Withdrawals are not allowed until Jul 31, 2026.'),
+        message: expect.stringContaining(`Withdrawals are not allowed until ${expectedDateLabel}.`),
       }),
     );
   });

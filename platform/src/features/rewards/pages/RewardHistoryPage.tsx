@@ -13,6 +13,8 @@ import {
   listWithdrawalRequests,
   transferWalletBalance,
 } from '@/services/api/wallet';
+import { evaluateWithdrawalPolicy, resolveMembershipPlan } from '@/services/api/membership';
+import { evaluateMultiplierPricing } from '@/services/api/membershipLifecycle';
 import { getAllowedTransferTargets, walletOperationalRules, walletTransferSources } from '@/services/api/walletPolicies';
 import type { WalletAccount, WalletTransaction, WalletTransfer, WalletWithdrawalMethod, WithdrawalRequest, WithdrawalRequestInput, WalletSettings, WalletAccountType } from '@/types';
 import { walletAccountTypes } from '@/types';
@@ -141,6 +143,16 @@ export function RewardHistoryPage() {
       ...totals,
     };
   }, [profile?.rewardBalance, profile?.walletBalance, settings?.currency, transactions, walletAccounts]);
+
+  const membershipPlan = resolveMembershipPlan(profile?.levelTier ?? 1);
+  const membershipWithdrawalPolicy = evaluateWithdrawalPolicy({
+    level: profile?.levelTier ?? 1,
+    balance: profile?.walletBalance ?? 0,
+    withdrawalCount: withdrawals.filter((item) => item.status === 'approved' || item.status === 'completed').length,
+    requestAmount: Math.min(Math.max(Number(amount) || 0, 0), settings?.maxWithdrawal ?? 0),
+    feePaid: true,
+  });
+  const membershipMultiplierPricing = evaluateMultiplierPricing(profile?.levelTier ?? 1);
 
   const amountNumber = Number(amount);
   const feePreview = useMemo(() => {
@@ -328,6 +340,24 @@ export function RewardHistoryPage() {
       </Card>
 
       <Card id="wallet-summary">
+        <div className="mb-6 grid gap-4 lg:grid-cols-3">
+          <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-mist/80">
+            <p className="text-xs uppercase tracking-[0.2em] text-mint/70">Membership plan</p>
+            <p className="mt-2 text-lg font-semibold text-white">Tier {membershipPlan.level} · {membershipPlan.label}</p>
+            <p className="mt-2">Catalog price: {formatCurrency(membershipPlan.price, membershipPlan.currency)}</p>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-mist/80">
+            <p className="text-xs uppercase tracking-[0.2em] text-mint/70">Withdrawal policy</p>
+            <p className="mt-2 text-white">{membershipWithdrawalPolicy.allowed ? 'Eligible by policy' : membershipWithdrawalPolicy.reason}</p>
+            <p className="mt-2">Range: {formatCurrency(membershipWithdrawalPolicy.minThreshold)} to {formatCurrency(membershipWithdrawalPolicy.maxWithdrawal)}</p>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-mist/80">
+            <p className="text-xs uppercase tracking-[0.2em] text-mint/70">Multiplier premium</p>
+            <p className="mt-2 text-white">Activation: {formatCurrency(membershipMultiplierPricing.amount, membershipMultiplierPricing.currency)}</p>
+            <p className="mt-2">Gateway payment: {membershipMultiplierPricing.requiresGatewayPayment ? 'Required' : 'Optional'}</p>
+          </div>
+        </div>
+
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-sm uppercase tracking-[0.2em] text-mint/70">Wallet accounts</p>

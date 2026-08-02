@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { Card } from '@/components/ui/Card';
 import { formatCurrency } from '@/lib/auth';
 import { useAuth } from '@/app/providers/AuthProvider';
+import { evaluateWithdrawalPolicy, resolveMembershipPlan } from '@/services/api/membership';
+import { evaluateMultiplierPricing } from '@/services/api/membershipLifecycle';
 import {
   enrollTotpFactor,
   listActiveSessions,
@@ -60,6 +62,18 @@ export function ProfilePage(): JSX.Element {
     );
   }
 
+  const nextTierCandidates = [profile.levelTier + 1, profile.levelTier + 2]
+    .filter((tier) => tier <= 100)
+    .map((tier) => resolveMembershipPlan(tier));
+  const withdrawalPolicy = evaluateWithdrawalPolicy({
+    level: profile.levelTier,
+    balance: profile.walletBalance,
+    withdrawalCount: 0,
+    requestAmount: Math.min(profile.walletBalance, 10000),
+    feePaid: true,
+  });
+  const multiplierPricing = evaluateMultiplierPricing(profile.levelTier);
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -79,7 +93,8 @@ export function ProfilePage(): JSX.Element {
     try {
       await updateMemberPlan(profile.id, targetTier);
       await refreshProfile();
-      setPlanMessage(targetTier >= 3 ? 'Premium plan activated. Withdrawal holds are cleared.' : 'Member plan upgraded. Withdrawal holds are cleared.');
+      const resolvedPlan = resolveMembershipPlan(targetTier);
+      setPlanMessage(`${resolvedPlan.label} plan activated. Withdrawal holds are cleared.`);
     } catch (error) {
       setPlanMessage(error instanceof Error ? error.message : 'Unable to upgrade plan right now.');
     }
@@ -188,18 +203,41 @@ export function ProfilePage(): JSX.Element {
           <button className="rounded-xl bg-ember px-4 py-2 font-medium text-ink shadow-[0_10px_30px_rgba(201,130,78,0.2)] disabled:opacity-60" onClick={() => void handleSave()} disabled={saving}>
             {saving ? 'Saving...' : 'Save profile'}
           </button>
-          <button className="rounded-xl border border-white/10 px-4 py-2 text-mist hover:bg-white/5" onClick={() => void handleUpgradePlan(2)}>
-            Upgrade to Balanced
-          </button>
-          <button className="rounded-xl border border-white/10 px-4 py-2 text-mist hover:bg-white/5" onClick={() => void handleUpgradePlan(3)}>
-            Upgrade to Premium
-          </button>
+          {nextTierCandidates.map((plan) => (
+            <button key={plan.level} className="rounded-xl border border-white/10 px-4 py-2 text-mist hover:bg-white/5" onClick={() => void handleUpgradePlan(plan.level)}>
+              Upgrade to Tier {plan.level} ({plan.label})
+            </button>
+          ))}
           <button className="rounded-xl border border-white/10 px-4 py-2 text-mist hover:bg-white/5" onClick={() => void refreshProfile()}>
             Refresh
           </button>
         </div>
         {planMessage ? <p className="mt-3 text-sm text-mint">{planMessage}</p> : null}
       </Card>
+
+      <div className="grid gap-6 lg:grid-cols-3">
+        <Card>
+          <h2 className="text-xl font-semibold">Membership timeline</h2>
+          <ul className="mt-4 space-y-2 text-sm text-mist/80">
+            <li>Current plan: Tier {profile.levelTier} ({profile.levelLabel})</li>
+            <li>Wallet balance: {formatCurrency(profile.walletBalance)}</li>
+            <li>Reward balance: {formatCurrency(profile.rewardBalance)}</li>
+          </ul>
+        </Card>
+        <Card>
+          <h2 className="text-xl font-semibold">Withdrawal eligibility</h2>
+          <p className="mt-3 text-sm text-mist/80">Status: {withdrawalPolicy.allowed ? 'Eligible' : withdrawalPolicy.reason}</p>
+          <p className="mt-2 text-sm text-mist/80">Minimum: {formatCurrency(withdrawalPolicy.minThreshold)}</p>
+          <p className="mt-2 text-sm text-mist/80">Maximum: {formatCurrency(withdrawalPolicy.maxWithdrawal)}</p>
+          <p className="mt-2 text-sm text-mist/80">Hold window: {withdrawalPolicy.holdDays} day(s)</p>
+        </Card>
+        <Card>
+          <h2 className="text-xl font-semibold">Multiplier premium</h2>
+          <p className="mt-3 text-sm text-mist/80">Activation price: {formatCurrency(multiplierPricing.amount, multiplierPricing.currency)}</p>
+          <p className="mt-2 text-sm text-mist/80">Gateway required: {multiplierPricing.requiresGatewayPayment ? 'Yes' : 'No'}</p>
+          <p className="mt-2 text-sm text-mist/80">Formula: {multiplierPricing.priceFormula}</p>
+        </Card>
+      </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
         <Card>

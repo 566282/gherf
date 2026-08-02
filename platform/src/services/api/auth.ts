@@ -2,6 +2,7 @@ import { generateReferralCode, getUserLevel } from '@/lib/auth';
 import { env } from '@/lib/env';
 import { getDeviceFingerprintInput, getOrCreateSessionId, sanitizeEmail } from '@/lib/security';
 import { releaseWithdrawalHolds } from '@/services/api/wallet';
+import { resolveMembershipLabel, resolveMembershipPlan } from '@/services/api/membership';
 import type {
   ActivityLogItem,
   AdminUserFilters,
@@ -86,6 +87,7 @@ type ProfileRow = {
 
 function mapProfile(row: ProfileRow, email: string | null): UserProfile {
   const level = getUserLevel(row.reputation_score ?? 0);
+  const resolvedMembershipPlan = resolveMembershipPlan(row.level_tier ?? 1);
 
   return {
     id: row.id,
@@ -104,8 +106,8 @@ function mapProfile(row: ProfileRow, email: string | null): UserProfile {
     rewardHistoryCount: row.reward_history_count ?? 0,
     unreadNotificationsCount: row.unread_notifications_count ?? 0,
     reputationScore: row.reputation_score ?? 0,
-    levelLabel: row.level_label ?? level.label,
-    levelTier: row.level_tier ?? level.tier,
+    levelLabel: row.level_label ?? resolvedMembershipPlan.label ?? level.label,
+    levelTier: row.level_tier ?? resolvedMembershipPlan.level ?? level.tier,
     badges: row.badges ?? [],
     lastLoginAt: row.last_login_at,
   };
@@ -385,7 +387,13 @@ export async function createAdminUser(input: AdminCreateUserRequest): Promise<Us
     throw new Error('Admin create-user endpoint succeeded without a profile payload.');
   }
 
-  return body.profile;
+  const resolvedProfile = {
+    ...body.profile,
+    levelLabel: body.profile.levelLabel ?? resolveMembershipLabel(body.profile.levelTier ?? 1),
+    levelTier: body.profile.levelTier ?? resolveMembershipPlan(body.profile.levelTier ?? 1).level,
+  };
+
+  return resolvedProfile;
 }
 
 export async function signOut(): Promise<void> {
@@ -579,42 +587,39 @@ export async function updateProfile(
 }
 
 function getPlanLabelForTier(levelTier: number): string {
-  if (levelTier >= 3) {
-    return 'Premium';
-  }
-
-  if (levelTier >= 2) {
-    return 'Balanced';
-  }
-
-  return 'Starter';
+  return resolveMembershipLabel(levelTier);
 }
 
 export async function updateMemberPlan(userId: string, levelTier: number, paymentAmount = 0, paymentCurrency = 'USD'): Promise<UserProfile> {
-  const resolvedTier = Math.max(1, Math.round(levelTier));
-  const { error: rpcError } = await supabase.rpc('record_member_plan_change', {
-    p_user_id: userId,
-    p_level_tier: resolvedTier,
-    p_amount: paymentAmount,
-    p_currency: paymentCurrency,
-    p_source: 'membership_plan_update',
-    p_note: 'Membership plan updated',
-  });
+  const resolvedPlan = resolveMembershipPlan(levelTier);
+  const resolvedTier = resolvedPlan.level;
+  const rpc = typeof supabase.rpc === 'function' ? supabase.rpc : null;
 
-  if (!rpcError) {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('id,email,full_name,avatar_url,role,status,is_active,is_email_verified,two_factor_enabled,referral_code,referred_by_code,wallet_balance,reward_balance,reward_history_count,unread_notifications_count,reputation_score,level_label,level_tier,badges,last_login_at')
-      .eq('id', userId)
-      .single<ProfileRow>();
+  if (rpc) {
+    const { error: rpcError } = await rpc('record_member_plan_change', {
+      p_user_id: userId,
+      p_level_tier: resolvedTier,
+      p_amount: paymentAmount,
+      p_currency: paymentCurrency,
+      p_source: 'membership_plan_update',
+      p_note: `Membership plan updated to ${resolvedPlan.label}`,
+    });
 
-    if (error) throw error;
+    if (!rpcError) {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id,email,full_name,avatar_url,role,status,is_active,is_email_verified,two_factor_enabled,referral_code,referred_by_code,wallet_balance,reward_balance,reward_history_count,unread_notifications_count,reputation_score,level_label,level_tier,badges,last_login_at')
+        .eq('id', userId)
+        .single<ProfileRow>();
 
-    if (resolvedTier >= 2) {
-      await releaseWithdrawalHolds(userId, resolvedTier);
+      if (error) throw error;
+
+      if (resolvedTier >= 2) {
+        await releaseWithdrawalHolds(userId, resolvedTier);
+      }
+
+      return mapProfile(data, data.email);
     }
-
-    return mapProfile(data, data.email);
   }
 
   const { data, error } = await supabase

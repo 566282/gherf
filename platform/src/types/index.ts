@@ -478,6 +478,10 @@ export interface WalletSettings {
   approvalWorkflow: WalletApprovalWorkflow;
   exchangeRates: WalletExchangeRate[];
   supportedMethods: WalletWithdrawalMethod[];
+  paidMembershipMinTier?: number;
+  withdrawalHoldThreshold?: number;
+  membershipFeeEnforcementStartWithdrawalCount?: number;
+  blockWithoutFeeSettlement?: boolean;
 }
 
 export interface WalletSummary {

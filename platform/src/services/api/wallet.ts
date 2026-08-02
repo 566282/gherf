@@ -1,5 +1,6 @@
 import { supabase } from '@/services/supabase/client';
 import { notifySuperAdmins, sendUserNotification } from '@/services/api/communications';
+import { evaluateWithdrawalPolicy, resolveMembershipLabel } from '@/services/api/membership';
 import { canTransferFromWallet, isWalletTransferAllowed } from '@/services/api/walletPolicies';
 import type {
   WalletAccount,
@@ -96,24 +97,8 @@ type WithdrawalRequestRow = {
 
 const SUCCESSFUL_WITHDRAWAL_STATUSES: WithdrawalRequest['status'][] = ['approved', 'completed'];
 
-function getWithdrawalHoldThreshold(): number {
-  return 4;
-}
-
 function getMemberPlanLabel(levelTier: number, levelLabel?: string | null): string {
-  if (levelLabel?.trim()) {
-    return levelLabel.trim();
-  }
-
-  if (levelTier >= 3) {
-    return 'Premium';
-  }
-
-  if (levelTier >= 2) {
-    return 'Balanced';
-  }
-
-  return 'Starter';
+  return levelLabel?.trim() || resolveMembershipLabel(levelTier);
 }
 
 async function countSuccessfulWithdrawals(userId: string): Promise<number> {
@@ -173,6 +158,10 @@ const DEFAULT_WALLET_SETTINGS: WalletSettings = {
     { currency: 'USDT', rate: 1, label: 'Tether' },
   ],
   supportedMethods: ['bank_transfer', 'crypto', 'paypal', 'gift_cards', 'manual_payout'],
+  paidMembershipMinTier: 2,
+  withdrawalHoldThreshold: 4,
+  membershipFeeEnforcementStartWithdrawalCount: 2,
+  blockWithoutFeeSettlement: true,
 };
 
 function toNumber(value: unknown, fallback: number): number {
@@ -183,6 +172,20 @@ function toNumber(value: unknown, fallback: number): number {
 function toStringArray(value: unknown, fallback: string[]): string[] {
   if (Array.isArray(value)) {
     return value.filter((item): item is string => typeof item === 'string' && item.length > 0);
+  }
+
+  return fallback;
+}
+
+function toBoolean(value: unknown, fallback: boolean): boolean {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true') return true;
+    if (normalized === 'false') return false;
   }
 
   return fallback;
@@ -231,7 +234,43 @@ function mergeWalletSettings(rows: SettingRow[]): WalletSettings {
         : DEFAULT_WALLET_SETTINGS.approvalWorkflow,
     exchangeRates: toExchangeRates(lookup.get('wallet_exchange_rates')),
     supportedMethods: toStringArray(lookup.get('wallet_supported_methods'), DEFAULT_WALLET_SETTINGS.supportedMethods) as WalletWithdrawalMethod[],
+    paidMembershipMinTier: Math.max(
+      1,
+      Math.round(toNumber(lookup.get('wallet_paid_membership_min_tier'), DEFAULT_WALLET_SETTINGS.paidMembershipMinTier)),
+    ),
+    withdrawalHoldThreshold: Math.max(
+      1,
+      Math.round(toNumber(lookup.get('wallet_withdrawal_hold_threshold'), DEFAULT_WALLET_SETTINGS.withdrawalHoldThreshold)),
+    ),
+    membershipFeeEnforcementStartWithdrawalCount: Math.max(
+      1,
+      Math.round(
+        toNumber(
+          lookup.get('membership_fee_enforce_from_withdrawal_count'),
+          DEFAULT_WALLET_SETTINGS.membershipFeeEnforcementStartWithdrawalCount,
+        ),
+      ),
+    ),
+    blockWithoutFeeSettlement: toBoolean(
+      lookup.get('membership_fee_block_without_settlement'),
+      DEFAULT_WALLET_SETTINGS.blockWithoutFeeSettlement,
+    ),
   };
+}
+
+async function hasOutstandingMembershipFee(userId: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('membership_fee_invoices')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('status', 'unpaid')
+    .limit(1);
+
+  if (error) {
+    return false;
+  }
+
+  return Array.isArray(data) && data.length > 0;
 }
 
 function mapWithdrawalRequest(row: WithdrawalRequestRow): WithdrawalRequest {
@@ -326,6 +365,10 @@ export async function listWalletSettings(): Promise<WalletSettings> {
       'wallet_approval_workflow',
       'wallet_exchange_rates',
       'wallet_supported_methods',
+      'wallet_paid_membership_min_tier',
+      'wallet_withdrawal_hold_threshold',
+      'membership_fee_enforce_from_withdrawal_count',
+      'membership_fee_block_without_settlement',
     ]);
 
   if (error || !data) {
@@ -398,6 +441,26 @@ export async function updateWalletSettings(settings: Partial<WalletSettings>): P
     { key: 'wallet_approval_workflow', value: settings.approvalWorkflow, description: 'Withdrawal approval workflow' },
     { key: 'wallet_exchange_rates', value: settings.exchangeRates, description: 'Configured conversion rates' },
     { key: 'wallet_supported_methods', value: settings.supportedMethods, description: 'Supported payout methods' },
+    {
+      key: 'wallet_paid_membership_min_tier',
+      value: settings.paidMembershipMinTier,
+      description: 'Minimum membership tier required for withdrawals',
+    },
+    {
+      key: 'wallet_withdrawal_hold_threshold',
+      value: settings.withdrawalHoldThreshold,
+      description: 'Successful withdrawals before account hold is applied',
+    },
+    {
+      key: 'membership_fee_enforce_from_withdrawal_count',
+      value: settings.membershipFeeEnforcementStartWithdrawalCount,
+      description: 'Withdrawal count from which fee settlement enforcement begins',
+    },
+    {
+      key: 'membership_fee_block_without_settlement',
+      value: settings.blockWithoutFeeSettlement,
+      description: 'Whether to block withdrawals when membership fee is outstanding',
+    },
   ].filter((row) => row.value !== undefined);
 
   const { error } = await supabase.from('platform_settings').upsert(rows, { onConflict: 'key' });
@@ -557,9 +620,10 @@ export async function createWithdrawalRequest(userId: string, input: WithdrawalR
   const effectiveWithdrawalLimit = Math.min(settings.maxWithdrawal, currentBalance);
   const memberPlanTier = Math.max(1, Math.round(profile.level_tier ?? 1));
   const memberPlanLabel = getMemberPlanLabel(memberPlanTier, profile.level_label);
-  const isFreeMember = memberPlanTier < 2;
 
-  if (isFreeMember) {
+  const paidMembershipMinTier = settings.paidMembershipMinTier ?? DEFAULT_WALLET_SETTINGS.paidMembershipMinTier;
+
+  if (memberPlanTier < paidMembershipMinTier) {
     throw new Error('Free members cannot withdraw funds. Upgrade to a paid member plan to request withdrawals.');
   }
 
@@ -575,7 +639,33 @@ export async function createWithdrawalRequest(userId: string, input: WithdrawalR
   }
 
   const successfulWithdrawalCount = await countSuccessfulWithdrawals(userId);
-  const holdThreshold = getWithdrawalHoldThreshold();
+
+  const feeEnforcementStart = settings.membershipFeeEnforcementStartWithdrawalCount ?? DEFAULT_WALLET_SETTINGS.membershipFeeEnforcementStartWithdrawalCount;
+  const blockWithoutFeeSettlement = settings.blockWithoutFeeSettlement ?? DEFAULT_WALLET_SETTINGS.blockWithoutFeeSettlement;
+
+  if (blockWithoutFeeSettlement && successfulWithdrawalCount >= feeEnforcementStart && (await hasOutstandingMembershipFee(userId))) {
+    throw new Error('Outstanding membership fee blocks this withdrawal. Settle the fee and retry.');
+  }
+
+  const withdrawalPolicy = evaluateWithdrawalPolicy({
+    level: memberPlanTier,
+    balance: currentBalance,
+    withdrawalCount: successfulWithdrawalCount,
+    requestAmount: input.amount,
+    feePaid: true,
+  });
+
+  if (!withdrawalPolicy.allowed) {
+    if (withdrawalPolicy.reason === 'plan_upgrade_required') {
+      throw new Error('Free members cannot withdraw funds. Upgrade to a paid member plan to request withdrawals.');
+    }
+
+    if (withdrawalPolicy.reason === 'fee_not_paid') {
+      throw new Error('Outstanding membership fee blocks this withdrawal. Settle the fee and retry.');
+    }
+  }
+
+  const holdThreshold = settings.withdrawalHoldThreshold ?? DEFAULT_WALLET_SETTINGS.withdrawalHoldThreshold;
   const isAccountOnHold = successfulWithdrawalCount >= holdThreshold;
 
   if (input.amount > currentBalance) {

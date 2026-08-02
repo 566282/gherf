@@ -1,18 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
+import { resolveMembershipLabel, resolveMembershipPlan } from '../services/api/membership';
 
 const allowedRoles = new Set(['super_admin', 'campaign_manager', 'moderator', 'advertiser', 'registered_user', 'guest']);
 const profileSelect = 'id,email,full_name,avatar_url,role,status,is_active,is_email_verified,two_factor_enabled,referral_code,referred_by_code,wallet_balance,reward_balance,reward_history_count,unread_notifications_count,reputation_score,level_label,level_tier,badges,last_login_at';
 
 function getPlanLabelForTier(levelTier: number): string {
-  if (levelTier >= 3) {
-    return 'Premium';
-  }
-
-  if (levelTier >= 2) {
-    return 'Balanced';
-  }
-
-  return 'Starter';
+  return resolveMembershipLabel(levelTier);
 }
 
 function json(statusCode: number, body: Record<string, unknown>) {
@@ -32,7 +25,7 @@ function normalizeTier(input: unknown): number {
     return 1;
   }
 
-  return Math.max(1, Math.min(3, Math.round(parsed)));
+  return resolveMembershipPlan(parsed).level;
 }
 
 function normalizeRole(input: unknown): string {
@@ -44,6 +37,8 @@ function normalizeText(input: unknown): string {
 }
 
 function mapProfile(row: Record<string, unknown>) {
+  const levelTier = Number(row.level_tier ?? 1);
+
   return {
     id: String(row.id),
     email: (row.email as string | null) ?? null,
@@ -61,8 +56,8 @@ function mapProfile(row: Record<string, unknown>) {
     rewardHistoryCount: Number(row.reward_history_count ?? 0),
     unreadNotificationsCount: Number(row.unread_notifications_count ?? 0),
     reputationScore: Number(row.reputation_score ?? 0),
-    levelLabel: String(row.level_label ?? 'Starter'),
-    levelTier: Number(row.level_tier ?? 1),
+    levelLabel: String(row.level_label ?? getPlanLabelForTier(levelTier)),
+    levelTier,
     badges: Array.isArray(row.badges) ? row.badges : [],
     lastLoginAt: (row.last_login_at as string | null) ?? null,
   };

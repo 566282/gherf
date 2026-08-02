@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Card } from '@/components/ui/Card';
 import { formatCurrency } from '@/lib/auth';
+import { getMembershipPlanOptions } from '@/services/api/membership';
 import type { AppRole, UserProfile } from '@/types/auth';
 import {
   adjustWalletBalance,
@@ -49,6 +50,7 @@ export function UsersManagementPage(): JSX.Element {
   const [adjustment, setAdjustment] = useState('25');
   const [memberPlanTier, setMemberPlanTier] = useState('1');
 
+  const membershipPlanOptions = useMemo(() => getMembershipPlanOptions(), []);
   const selectedUser = useMemo(() => users.find((user) => user.id === selectedUserId) ?? null, [selectedUserId, users]);
   const selectedMembershipAccess = selectedUser?.levelTier && selectedUser.levelTier >= 2 ? 'Paid member' : 'Free member';
   const selectedWithdrawalAccess = selectedUser?.levelTier && selectedUser.levelTier >= 2 ? 'Enabled' : 'Disabled';
@@ -196,9 +198,11 @@ export function UsersManagementPage(): JSX.Element {
           <label className="grid gap-2">
             <span className="text-sm text-mist/70">Membership tier</span>
             <select className="input-base" value={newUserLevelTier} onChange={(event) => setNewUserLevelTier(event.target.value)}>
-              <option value="1">Free member - Starter</option>
-              <option value="2">Paid member - Balanced</option>
-              <option value="3">Paid member - Premium</option>
+              {membershipPlanOptions.map((option) => (
+                <option key={option.value} value={String(option.value)}>
+                  Tier {option.value} · {option.label.split('· ')[1]}
+                </option>
+              ))}
             </select>
             <p className="text-xs text-mist/60">The tier is stored at bootstrap, so the new account starts with the right withdrawal access.</p>
           </label>
@@ -279,9 +283,11 @@ export function UsersManagementPage(): JSX.Element {
               <label className="grid gap-2">
                 <span>Membership plan</span>
                 <select className="input-base" value={memberPlanTier} onChange={(event) => setMemberPlanTier(event.target.value)}>
-                  <option value="1">Free member - Starter</option>
-                  <option value="2">Paid member - Balanced</option>
-                  <option value="3">Paid member - Premium</option>
+                  {membershipPlanOptions.map((option) => (
+                    <option key={option.value} value={String(option.value)}>
+                      {option.label}
+                    </option>
+                  ))}
                 </select>
                 <p className="text-xs text-mist/60">Tier 1 is the free membership level. Paid members can withdraw funds.</p>
               </label>

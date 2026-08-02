@@ -1,9 +1,9 @@
-import { useState } from 'react';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Skeleton } from '@/components/ui/Skeleton';
+import { listMembershipLifecycleSettings, updateMembershipLifecycleSettings } from '@/services/api/membershipLifecycle';
 import {
   applyWalletAdjustment,
   listPendingWithdrawalRequests,
@@ -12,6 +12,7 @@ import {
   listWalletSettings,
   listWalletTransactions,
   reconcileWalletBalances,
+  updateWalletSettings,
 } from '@/services/api/wallet';
 import type { WalletAccountType } from '@/types';
 import { walletAccountTypes } from '@/types';
@@ -48,26 +49,33 @@ export function WalletManagementPage(): JSX.Element {
   const [currencyFilter, setCurrencyFilter] = useState<'all' | string>('all');
   const [isAdjusting, setIsAdjusting] = useState(false);
   const [isReconciling, setIsReconciling] = useState(false);
+  const [isSavingFeeRules, setIsSavingFeeRules] = useState(false);
+  const [isSavingMembershipMode, setIsSavingMembershipMode] = useState(false);
+  const [membershipFeeBlockEnabled, setMembershipFeeBlockEnabled] = useState(true);
+  const [membershipFeeThreshold, setMembershipFeeThreshold] = useState(2);
+  const [membershipEngineMode, setMembershipEngineMode] = useState<'shadow' | 'progressive' | 'enforced'>('progressive');
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['admin-wallet-management'],
     queryFn: async () => {
-      const [settings, withdrawals, transactions, accounts, auditLogs] = await Promise.all([
+      const [settings, withdrawals, transactions, accounts, auditLogs, membershipPolicySettings] = await Promise.all([
         listWalletSettings(),
         listPendingWithdrawalRequests(20),
         listWalletTransactions(undefined, 20),
         listWalletAccounts(undefined),
         listWalletAuditLogs(undefined, 20),
+        listMembershipLifecycleSettings(),
       ]);
 
-      return { settings, withdrawals, transactions, accounts, auditLogs };
+      return { settings, withdrawals, transactions, accounts, auditLogs, membershipPolicySettings };
     },
     staleTime: 60_000,
     retry: false,
   });
 
   const walletSettings = data?.settings;
+  const membershipPolicySettings = data?.membershipPolicySettings;
   const walletAccounts = data?.accounts ?? [];
   const walletTransactions = data?.transactions ?? [];
   const walletWithdrawals = data?.withdrawals ?? [];
@@ -95,6 +103,23 @@ export function WalletManagementPage(): JSX.Element {
 
     return ['all', ...Array.from(currencies).filter(Boolean)];
   }, [walletAccounts, walletCurrency, walletTransactions, walletWithdrawals]);
+
+  useEffect(() => {
+    if (!walletSettings) {
+      return;
+    }
+
+    setMembershipFeeBlockEnabled(walletSettings.blockWithoutFeeSettlement);
+    setMembershipFeeThreshold(walletSettings.membershipFeeEnforcementStartWithdrawalCount);
+  }, [walletSettings]);
+
+  useEffect(() => {
+    if (!membershipPolicySettings) {
+      return;
+    }
+
+    setMembershipEngineMode(membershipPolicySettings.rollout.mode);
+  }, [membershipPolicySettings]);
 
   const filteredAccounts = useMemo(() => {
     return walletAccounts.filter((account) => {
@@ -129,6 +154,43 @@ export function WalletManagementPage(): JSX.Element {
       return walletTypeMatches && currencyMatches && statusMatches;
     });
   }, [currencyFilter, statusFilter, walletAuditLogs, walletTypeFilter]);
+
+  const handleSaveFeePolicy = async () => {
+    setIsSavingFeeRules(true);
+    setStatusMessage(null);
+
+    try {
+      await updateWalletSettings({
+        blockWithoutFeeSettlement: membershipFeeBlockEnabled,
+        membershipFeeEnforcementStartWithdrawalCount: membershipFeeThreshold,
+      });
+      setStatusMessage('Fee-blocking policy saved.');
+      await refetch();
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : 'Unable to save fee policy.');
+    } finally {
+      setIsSavingFeeRules(false);
+    }
+  };
+
+  const handleSetMembershipMode = async (mode: 'shadow' | 'progressive' | 'enforced') => {
+    setIsSavingMembershipMode(true);
+    setStatusMessage(null);
+
+    try {
+      await updateMembershipLifecycleSettings({
+        rolloutMode: mode,
+        rolloutPercent: mode === 'enforced' ? 100 : mode === 'progressive' ? 20 : 0,
+      });
+      setMembershipEngineMode(mode);
+      setStatusMessage(`Membership rules engine v2 set to ${mode}.`);
+      await refetch();
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : 'Unable to update membership rollout mode.');
+    } finally {
+      setIsSavingMembershipMode(false);
+    }
+  };
 
   const handleAdjustment = async () => {
     if (!adjustmentUserId.trim()) {
@@ -231,6 +293,75 @@ export function WalletManagementPage(): JSX.Element {
             <p className="mt-2 text-2xl font-bold text-foreground">{summary.accountCount}</p>
           </div>
         </div>
+      </Card>
+
+      <Card className="border border-border bg-surface-elevated p-6">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-sm uppercase tracking-[0.24em] text-accent/70">Policy controls</p>
+            <h2 className="mt-2 text-2xl font-semibold text-foreground">Membership fee blocking and rollout mode</h2>
+          </div>
+          <p className="text-sm text-muted">Persisted in Supabase and applied to the withdrawal flow immediately.</p>
+        </div>
+        <div className="mt-4 grid gap-4 lg:grid-cols-[1.3fr_1fr]">
+          <div className="rounded-xl border border-border bg-surface p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-foreground">Strict fee blocking</p>
+                <p className="mt-1 text-sm text-muted">Block withdrawals once the configured threshold is reached and an outstanding fee remains unpaid.</p>
+              </div>
+              <label className="inline-flex items-center gap-2 text-sm text-foreground">
+                <input
+                  type="checkbox"
+                  checked={membershipFeeBlockEnabled}
+                  onChange={(event) => setMembershipFeeBlockEnabled(event.target.checked)}
+                  className="h-4 w-4 rounded border-border bg-surface text-accent focus:ring-accent"
+                />
+                <span>{membershipFeeBlockEnabled ? 'Enabled' : 'Disabled'}</span>
+              </label>
+            </div>
+            <label className="mt-4 grid gap-2">
+              <span className="text-sm text-muted">Enforcement threshold</span>
+              <input
+                type="number"
+                min="1"
+                className="input-base"
+                value={membershipFeeThreshold}
+                onChange={(event) => setMembershipFeeThreshold(Math.max(1, Number(event.target.value) || 1))}
+              />
+            </label>
+            <div className="mt-4 flex flex-wrap gap-3">
+              <Button onClick={() => void handleSaveFeePolicy()} disabled={isSavingFeeRules}>
+                {isSavingFeeRules ? 'Saving...' : 'Save fee policy'}
+              </Button>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-border bg-surface p-4">
+            <p className="text-sm font-medium text-foreground">Membership rules engine v2</p>
+            <p className="mt-1 text-sm text-muted">Switch the rollout state between shadow, progressive, and enforced. The value is stored in Supabase and used by the lifecycle service.</p>
+            <div className="mt-4 grid gap-2 sm:grid-cols-3">
+              {(['shadow', 'progressive', 'enforced'] as const).map((mode) => {
+                const isActive = membershipEngineMode === mode;
+                const label = mode === 'shadow' ? 'Shadow' : mode === 'progressive' ? 'Progressive' : 'Enforced';
+
+                return (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => void handleSetMembershipMode(mode)}
+                    disabled={isSavingMembershipMode}
+                    className={`rounded-xl border px-3 py-2 text-sm font-medium transition ${isActive ? 'border-accent bg-accent/15 text-accent' : 'border-border bg-surface text-foreground hover:border-accent/40'}`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-4 text-sm text-muted">Current mode: <span className="font-semibold capitalize text-foreground">{membershipEngineMode}</span></p>
+          </div>
+        </div>
+        {statusMessage ? <p className="mt-4 text-sm text-muted">{statusMessage}</p> : null}
       </Card>
 
       <Card className="border border-border bg-surface-elevated p-6">

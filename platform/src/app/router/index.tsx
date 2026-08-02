@@ -41,6 +41,13 @@ import { ReferralOpsPage } from '@/features/admin/pages/ReferralOpsPage';
 import { FraudDetectionPage } from '@/features/admin/pages/FraudDetectionPage';
 import { ReportsPage } from '@/features/admin/pages/ReportsPage';
 import { WalletManagementPage } from '@/features/admin/pages/WalletManagementPage';
+import { MembershipPlansPage } from '@/features/admin/pages/MembershipPlansPage';
+import { MembershipBenefitsPage } from '@/features/admin/pages/MembershipBenefitsPage';
+import { MembershipRulesPage } from '@/features/admin/pages/MembershipRulesPage';
+import { MembershipWorkflowPage } from '@/features/admin/pages/MembershipWorkflowPage';
+import { RewardMultiplierPage } from '@/features/admin/pages/RewardMultiplierPage';
+import { MembershipFeePage } from '@/features/admin/pages/MembershipFeePage';
+import { MembershipAnalyticsPage } from '@/features/admin/pages/MembershipAnalyticsPage';
 import { SystemSettingsPage } from '@/features/admin/pages/SystemSettingsPage';
 import { EmailTemplatesPage } from '@/features/admin/pages/EmailTemplatesPage';
 import { NotificationCenterPage } from '@/features/admin/pages/NotificationCenterPage';
@@ -165,6 +172,13 @@ const routes: RouteObject[] = [
       { path: 'withdrawal-approval', element: <PlatformSettingsPage /> },
       { path: 'settings', element: <Navigate to="/admin/withdrawal-approval" replace /> },
       { path: 'wallet', element: <WalletManagementPage /> },
+      { path: 'membership-plans', element: <MembershipPlansPage /> },
+      { path: 'membership-benefits', element: <MembershipBenefitsPage /> },
+      { path: 'membership-rules', element: <MembershipRulesPage /> },
+      { path: 'membership-workflow', element: <MembershipWorkflowPage /> },
+      { path: 'membership-multiplier', element: <RewardMultiplierPage /> },
+      { path: 'membership-fees', element: <MembershipFeePage /> },
+      { path: 'membership-analytics', element: <MembershipAnalyticsPage /> },
       { path: 'task-engine', element: <TaskEnginePage /> },
       { path: 'system-settings', element: <SystemSettingsPage /> },
       { path: 'email-templates', element: <EmailTemplatesPage /> },
