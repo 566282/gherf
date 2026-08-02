@@ -379,6 +379,10 @@ export const walletAccountTypes = [
   'referral',
   'cashback',
   'reward',
+  'merchant_available',
+  'merchant_reserved',
+  'merchant_pending',
+  'merchant_locked',
 ] as const;
 
 export type WalletAccountType = (typeof walletAccountTypes)[number];

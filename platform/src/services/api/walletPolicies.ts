@@ -44,6 +44,34 @@ export const walletOperationalRules: Record<WalletAccountType, WalletOperational
     allowedTransferTargets: ['main'],
     description: 'Task and achievement rewards that can be claimed into the main wallet.',
   },
+  merchant_available: {
+    walletType: 'merchant_available',
+    label: 'Merchant Available',
+    withdrawable: false,
+    allowedTransferTargets: [],
+    description: 'Merchant liquidity available for P2P assignment and reserve.',
+  },
+  merchant_reserved: {
+    walletType: 'merchant_reserved',
+    label: 'Merchant Reserved',
+    withdrawable: false,
+    allowedTransferTargets: [],
+    description: 'Merchant liquidity reserved for active P2P escrow orders.',
+  },
+  merchant_pending: {
+    walletType: 'merchant_pending',
+    label: 'Merchant Pending',
+    withdrawable: false,
+    allowedTransferTargets: [],
+    description: 'Merchant funds pending final settlement and release.',
+  },
+  merchant_locked: {
+    walletType: 'merchant_locked',
+    label: 'Merchant Locked',
+    withdrawable: false,
+    allowedTransferTargets: [],
+    description: 'Merchant funds locked for disputes, penalties, or compliance holds.',
+  },
 };
 
 export const walletTransferSources: WalletAccountType[] = ['bonus', 'referral', 'cashback', 'reward'];

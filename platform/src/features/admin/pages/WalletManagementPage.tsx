@@ -37,6 +37,10 @@ const walletAccountLabels: Record<WalletAccountType, string> = {
   referral: 'Referral Wallet',
   cashback: 'Cashback Wallet',
   reward: 'Reward Wallet',
+  merchant_available: 'Merchant Available',
+  merchant_reserved: 'Merchant Reserved',
+  merchant_pending: 'Merchant Pending',
+  merchant_locked: 'Merchant Locked',
 };
 
 export function WalletManagementPage(): JSX.Element {

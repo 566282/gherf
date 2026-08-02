@@ -5,6 +5,7 @@ import { formatCurrency } from '@/lib/auth';
 import { useAuth } from '@/app/providers/AuthProvider';
 import { evaluateWithdrawalPolicy, resolveMembershipPlan } from '@/services/api/membership';
 import { evaluateMultiplierPricing } from '@/services/api/membershipLifecycle';
+import { previewFiatProvider, quoteFiatFee } from '@/services/api/p2pMerchant';
 import {
   enrollTotpFactor,
   listActiveSessions,
@@ -32,6 +33,7 @@ export function ProfilePage(): JSX.Element {
   const [totpCode, setTotpCode] = useState('');
   const [securityMessage, setSecurityMessage] = useState<string | null>(null);
   const [planMessage, setPlanMessage] = useState<string | null>(null);
+  const [upgradeQuotes, setUpgradeQuotes] = useState<Record<number, { provider: string; fee: number; total: number }>>({});
   const [displayName, setDisplayName] = useState(profile?.fullName ?? '');
   const [saving, setSaving] = useState(false);
 
@@ -91,14 +93,50 @@ export function ProfilePage(): JSX.Element {
     setPlanMessage(null);
 
     try {
-      await updateMemberPlan(profile.id, targetTier);
-      await refreshProfile();
       const resolvedPlan = resolveMembershipPlan(targetTier);
+      await updateMemberPlan(profile.id, targetTier, resolvedPlan.price, resolvedPlan.currency);
+      await refreshProfile();
       setPlanMessage(`${resolvedPlan.label} plan activated. Withdrawal holds are cleared.`);
     } catch (error) {
       setPlanMessage(error instanceof Error ? error.message : 'Unable to upgrade plan right now.');
     }
   };
+
+  useEffect(() => {
+    let active = true;
+    if (!profile) return;
+
+    const loadQuotes = async () => {
+      const quoteEntries = await Promise.all(
+        nextTierCandidates.map(async (plan) => {
+          const [provider, quote] = await Promise.all([
+            previewFiatProvider('membership', plan.currency),
+            quoteFiatFee({
+              userId: profile.id,
+              moduleKey: 'membership',
+              intentType: 'membership_plan_upgrade',
+              amount: plan.price,
+              currency: plan.currency,
+            }),
+          ]);
+
+          return [plan.level, { provider: provider.providerKey, fee: quote.feeAmount, total: quote.totalAmount }] as const;
+        }),
+      );
+
+      if (!active) return;
+      setUpgradeQuotes(Object.fromEntries(quoteEntries));
+    };
+
+    void loadQuotes().catch(() => {
+      if (!active) return;
+      setUpgradeQuotes({});
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [profile?.id, profile?.levelTier]);
 
   const handleStartTotpEnrollment = async () => {
     setSecurityMessage(null);
@@ -204,9 +242,16 @@ export function ProfilePage(): JSX.Element {
             {saving ? 'Saving...' : 'Save profile'}
           </button>
           {nextTierCandidates.map((plan) => (
-            <button key={plan.level} className="rounded-xl border border-white/10 px-4 py-2 text-mist hover:bg-white/5" onClick={() => void handleUpgradePlan(plan.level)}>
-              Upgrade to Tier {plan.level} ({plan.label})
-            </button>
+            <div key={plan.level} className="flex flex-col gap-1 rounded-xl border border-white/10 px-4 py-2 text-mist">
+              <button className="text-left hover:text-white" onClick={() => void handleUpgradePlan(plan.level)}>
+                Upgrade to Tier {plan.level} ({plan.label})
+              </button>
+              <p className="text-xs text-mist/70">
+                {upgradeQuotes[plan.level]
+                  ? `Provider: ${upgradeQuotes[plan.level].provider} · Fee: ${formatCurrency(upgradeQuotes[plan.level].fee, plan.currency)} · Total: ${formatCurrency(upgradeQuotes[plan.level].total, plan.currency)}`
+                  : 'Loading fee quote...'}
+              </p>
+            </div>
           ))}
           <button className="rounded-xl border border-white/10 px-4 py-2 text-mist hover:bg-white/5" onClick={() => void refreshProfile()}>
             Refresh

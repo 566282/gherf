@@ -3,6 +3,7 @@ import { env } from '@/lib/env';
 import { getDeviceFingerprintInput, getOrCreateSessionId, sanitizeEmail } from '@/lib/security';
 import { releaseWithdrawalHolds } from '@/services/api/wallet';
 import { resolveMembershipLabel, resolveMembershipPlan } from '@/services/api/membership';
+import { createFiatPaymentIntent } from '@/services/api/p2pMerchant';
 import type {
   ActivityLogItem,
   AdminUserFilters,
@@ -594,6 +595,22 @@ export async function updateMemberPlan(userId: string, levelTier: number, paymen
   const resolvedPlan = resolveMembershipPlan(levelTier);
   const resolvedTier = resolvedPlan.level;
   const rpc = typeof supabase.rpc === 'function' ? supabase.rpc : null;
+
+  if (paymentAmount > 0) {
+    const idempotencyKey = `membership-upgrade-${userId}-${resolvedTier}-${Math.round(paymentAmount * 100)}`;
+    await createFiatPaymentIntent({
+      userId,
+      moduleKey: 'membership',
+      intentType: 'membership_plan_upgrade',
+      sourceReference: `membership-tier-${resolvedTier}`,
+      amount: paymentAmount,
+      currency: paymentCurrency,
+      idempotencyKey,
+      metadata: {
+        levelTier: resolvedTier,
+      },
+    });
+  }
 
   if (rpc) {
     const { error: rpcError } = await rpc('record_member_plan_change', {

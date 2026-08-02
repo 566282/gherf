@@ -1,6 +1,7 @@
 import { supabase } from '@/services/supabase/client';
 import { resolveMembershipPlan } from '@/services/api/membership';
 import { evaluateMultiplierPricing, type MembershipLifecycleConfig } from '@/services/api/membershipLifecycle';
+import { createFiatPaymentIntent } from '@/services/api/p2pMerchant';
 
 export type MembershipPlanRecord = {
   id: string;
@@ -338,15 +339,29 @@ export async function createMultiplierOrder(input: {
   config?: MembershipLifecycleConfig;
 }): Promise<void> {
   const pricing = evaluateMultiplierPricing(input.planLevel, input.config);
+  const amount = Number(input.overrideAmount ?? pricing.amount);
   const reference = `mult-${input.userId.slice(0, 8)}-${Date.now()}`;
+
+  const paymentIntent = await createFiatPaymentIntent({
+    userId: input.userId,
+    moduleKey: 'membership_multiplier',
+    intentType: 'membership_multiplier_activation',
+    sourceReference: reference,
+    amount,
+    currency: pricing.currency,
+    idempotencyKey: `${reference}-intent`,
+    metadata: {
+      planLevel: input.planLevel,
+    },
+  });
 
   const { error } = await supabase.from('membership_multiplier_orders').insert({
     user_id: input.userId,
     plan_level: input.planLevel,
-    amount: Number(input.overrideAmount ?? pricing.amount),
+    amount,
     currency: pricing.currency,
-    payment_provider: input.provider ?? null,
-    payment_reference: reference,
+    payment_provider: input.provider ?? paymentIntent.providerKey,
+    payment_reference: paymentIntent.id,
     status: 'pending',
     expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
   });

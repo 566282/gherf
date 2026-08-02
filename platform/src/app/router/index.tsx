@@ -23,6 +23,7 @@ import { NotFoundPage } from '@/features/errors/pages/NotFoundPage';
 
 // Authenticated pages
 import { DashboardPage } from '@/features/dashboard/pages/DashboardPage';
+import { MerchantDashboardPage } from '@/features/dashboard/pages/MerchantDashboardPage';
 import { CampaignBrowsePage } from '@/features/campaigns/pages/CampaignBrowsePage';
 import { CampaignDetailPage } from '@/features/campaigns/pages/CampaignDetailPage';
 import { UserTasksPage } from '@/features/rewards/pages/UserTasksPage';
@@ -61,6 +62,9 @@ import { CommunicationSystemPage } from '@/features/admin/pages/CommunicationSys
 import { AnalyticsReportingPage } from '@/features/admin/pages/AnalyticsReportingPage';
 import { GamificationAdminPage } from '@/features/admin/pages/GamificationAdminPage';
 import { SubmissionReviewPage } from '@/features/admin/pages/SubmissionReviewPage';
+import { P2PMerchantControlPage } from '@/features/admin/pages/P2PMerchantControlPage';
+import { P2PDisputesPage } from '@/features/admin/pages/P2PDisputesPage';
+import { P2PRiskConsolePage } from '@/features/admin/pages/P2PRiskConsolePage';
 
 // Super Admin pages
 import { AdminPanelPage } from '@/features/admin/pages/AdminPanelPage';
@@ -119,6 +123,7 @@ const routes: RouteObject[] = [
       { path: 'campaigns/:id', element: <CampaignDetailPage /> },
       { path: 'tasks', element: <UserTasksPage /> },
       { path: 'wallet', element: <RewardHistoryPage /> },
+      { path: 'merchant', element: <MerchantDashboardPage /> },
       { path: 'notifications', element: <NotificationHistoryPage /> },
       { path: 'rewards', element: <Navigate to="/app/wallet" replace /> },
       { path: 'gamification', element: <GamificationPage /> },
@@ -182,6 +187,9 @@ const routes: RouteObject[] = [
       { path: 'membership-multiplier', element: <RewardMultiplierPage /> },
       { path: 'membership-fees', element: <MembershipFeePage /> },
       { path: 'membership-analytics', element: <MembershipAnalyticsPage /> },
+      { path: 'p2p-merchants', element: <P2PMerchantControlPage /> },
+      { path: 'p2p-disputes', element: <P2PDisputesPage /> },
+      { path: 'p2p-risk', element: <P2PRiskConsolePage /> },
       { path: 'task-engine', element: <TaskEnginePage /> },
       { path: 'system-settings', element: <SystemSettingsPage /> },
       { path: 'email-templates', element: <EmailTemplatesPage /> },
