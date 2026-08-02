@@ -56,7 +56,7 @@ describe('AdminSidebar', () => {
       ['CMS', '/admin/cms'],
       ['Gamification', '/admin/gamification'],
       ['Communications', '/admin/communications'],
-      ['Analytics', '/admin/dashboard-analytics'],
+      ['Analytics', '/admin/analytics'],
       ['Verification', '/admin/verification'],
       ['Users', '/admin/users'],
       ['Audit Logs', '/admin/audit-logs'],
