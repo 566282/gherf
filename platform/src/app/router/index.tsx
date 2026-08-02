@@ -24,6 +24,7 @@ import { NotFoundPage } from '@/features/errors/pages/NotFoundPage';
 // Authenticated pages
 import { DashboardPage } from '@/features/dashboard/pages/DashboardPage';
 import { MerchantDashboardPage } from '@/features/dashboard/pages/MerchantDashboardPage';
+import { UserOrdersPage } from '@/features/dashboard/pages/UserOrdersPage';
 import { CampaignBrowsePage } from '@/features/campaigns/pages/CampaignBrowsePage';
 import { CampaignDetailPage } from '@/features/campaigns/pages/CampaignDetailPage';
 import { UserTasksPage } from '@/features/rewards/pages/UserTasksPage';
@@ -123,6 +124,7 @@ const routes: RouteObject[] = [
       { path: 'campaigns/:id', element: <CampaignDetailPage /> },
       { path: 'tasks', element: <UserTasksPage /> },
       { path: 'wallet', element: <RewardHistoryPage /> },
+      { path: 'orders', element: <UserOrdersPage /> },
       { path: 'merchant', element: <MerchantDashboardPage /> },
       { path: 'notifications', element: <NotificationHistoryPage /> },
       { path: 'rewards', element: <Navigate to="/app/wallet" replace /> },

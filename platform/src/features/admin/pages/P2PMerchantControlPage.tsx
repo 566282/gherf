@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import {
+  listMerchantProfiles,
   listFiatFeePolicies,
   listFiatProviderSettings,
   listP2PRuntimeSettings,
@@ -16,10 +17,12 @@ import {
   listP2PAssignmentEvents,
   listP2PKycQueue,
   processP2PNotificationEvents,
+  runExternalAmlScreening,
   runP2PComplianceJob,
   runP2PLiquidityHealthJob,
   runP2PMerchantAnalyticsJob,
 } from '@/services/api/p2pCompliance';
+import { applyMerchantWalletOperation } from '@/services/api/p2pAdmin';
 
 function toJsonText(value: unknown): string {
   return JSON.stringify(value ?? {}, null, 2);
@@ -38,6 +41,7 @@ export function P2PMerchantControlPage(): JSX.Element {
   const [fees, setFees] = useState<Array<Record<string, unknown>>>([]);
   const [rules, setRules] = useState<Array<Record<string, unknown>>>([]);
   const [rollouts, setRollouts] = useState<Array<Record<string, unknown>>>([]);
+  const [merchants, setMerchants] = useState<Array<Record<string, unknown>>>([]);
   const [runtimeSettings, setRuntimeSettings] = useState<Record<string, unknown>>({});
   const [kycQueue, setKycQueue] = useState<Array<Record<string, unknown>>>([]);
   const [assignmentEvents, setAssignmentEvents] = useState<Array<Record<string, unknown>>>([]);
@@ -49,6 +53,12 @@ export function P2PMerchantControlPage(): JSX.Element {
   const [feeMetadataText, setFeeMetadataText] = useState('{}');
   const [ruleCriteriaText, setRuleCriteriaText] = useState('{}');
   const [rolloutCohortText, setRolloutCohortText] = useState('{}');
+  const [selectedMerchantId, setSelectedMerchantId] = useState('');
+  const [walletEntryType, setWalletEntryType] = useState<'top_up' | 'withdrawal'>('top_up');
+  const [walletAmount, setWalletAmount] = useState('250');
+  const [walletCurrency, setWalletCurrency] = useState('USD');
+  const [walletNote, setWalletNote] = useState('Admin merchant wallet adjustment');
+  const [amlSummary, setAmlSummary] = useState('No AML screening run yet.');
   const [statusMessage, setStatusMessage] = useState('Loading P2P merchant control plane...');
   const [isSaving, setIsSaving] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
@@ -70,13 +80,18 @@ export function P2PMerchantControlPage(): JSX.Element {
     () => rollouts.find((item) => String(item.flag_key) === selectedRollout) ?? rollouts[0] ?? null,
     [rollouts, selectedRollout],
   );
+  const activeMerchant = useMemo(
+    () => merchants.find((item) => String(item.id) === selectedMerchantId) ?? merchants[0] ?? null,
+    [merchants, selectedMerchantId],
+  );
 
   const refresh = async (): Promise<void> => {
-    const [nextProviders, nextFees, nextRules, nextRollouts, nextRuntimeSettings, nextKycQueue, nextAssignmentEvents] = await Promise.all([
+    const [nextProviders, nextFees, nextRules, nextRollouts, nextMerchants, nextRuntimeSettings, nextKycQueue, nextAssignmentEvents] = await Promise.all([
       listFiatProviderSettings(),
       listFiatFeePolicies(),
       listQualificationRules(),
       listP2PRolloutFlags(),
+      listMerchantProfiles(120),
       listP2PRuntimeSettings(),
       listP2PKycQueue(120),
       listP2PAssignmentEvents(120),
@@ -86,6 +101,7 @@ export function P2PMerchantControlPage(): JSX.Element {
     setFees(nextFees);
     setRules(nextRules);
     setRollouts(nextRollouts);
+    setMerchants(nextMerchants);
     setRuntimeSettings(nextRuntimeSettings);
     setKycQueue(nextKycQueue);
     setAssignmentEvents(nextAssignmentEvents);
@@ -94,6 +110,7 @@ export function P2PMerchantControlPage(): JSX.Element {
     if (!selectedFee && nextFees.length) setSelectedFee(String(nextFees[0].policy_key));
     if (!selectedRule && nextRules.length) setSelectedRule(String(nextRules[0].rule_key));
     if (!selectedRollout && nextRollouts.length) setSelectedRollout(String(nextRollouts[0].flag_key));
+    if (!selectedMerchantId && nextMerchants.length) setSelectedMerchantId(String(nextMerchants[0].id));
 
     setStatusMessage('P2P merchant control plane synced from Supabase.');
   };
@@ -222,16 +239,18 @@ export function P2PMerchantControlPage(): JSX.Element {
 
   const runOps = async (): Promise<void> => {
     setIsRunning(true);
-    setStatusMessage('Running compliance, liquidity, and analytics jobs...');
+    setStatusMessage('Running compliance, AML, liquidity, and analytics jobs...');
     try {
-      const [compliance, liquidity, analytics, notificationsSent] = await Promise.all([
+      const [compliance, aml, liquidity, analytics, notificationsSent] = await Promise.all([
         runP2PComplianceJob(),
+        runExternalAmlScreening(25),
         runP2PLiquidityHealthJob(),
         runP2PMerchantAnalyticsJob(),
         processP2PNotificationEvents(50),
       ]);
+      setAmlSummary(`provider=${aml.providerName} screened=${aml.screened} flagged=${aml.flagged} mocked=${aml.mocked ? 'yes' : 'no'}`);
       setStatusMessage(
-        `Jobs completed. compliance=${JSON.stringify(compliance)} liquidity=${JSON.stringify(liquidity)} analytics=${JSON.stringify(analytics)} notificationsSent=${notificationsSent}`,
+        `Jobs completed. compliance=${JSON.stringify(compliance)} aml=${JSON.stringify({ screened: aml.screened, flagged: aml.flagged, mocked: aml.mocked })} liquidity=${JSON.stringify(liquidity)} analytics=${JSON.stringify(analytics)} notificationsSent=${notificationsSent}`,
       );
       await refresh();
     } catch (error) {
@@ -267,6 +286,49 @@ export function P2PMerchantControlPage(): JSX.Element {
       bucketInCohort: inBucket,
     };
   }, [activeRollout, runtimeSettings, simulationBucket]);
+
+  const saveMerchantWalletOperation = async (): Promise<void> => {
+    if (!activeMerchant) return;
+
+    setIsSaving(true);
+    setStatusMessage('');
+    try {
+      await applyMerchantWalletOperation({
+        merchantId: String(activeMerchant.id),
+        entryType: walletEntryType,
+        amount: Number(walletAmount || 0),
+        currency: walletCurrency,
+        note: walletNote,
+        referenceType: 'admin_wallet_operation',
+        referenceId: `${walletEntryType}-${Date.now()}`,
+        metadata: {
+          merchantCode: activeMerchant.merchant_code,
+          source: 'p2p_control_plane',
+        },
+      });
+      await refresh();
+      setStatusMessage(`Merchant wallet ${walletEntryType === 'top_up' ? 'top-up' : 'withdrawal'} applied.`);
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : 'Unable to apply merchant wallet operation.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const runAmlScreening = async (): Promise<void> => {
+    setIsRunning(true);
+    setStatusMessage('Running external AML and sanctions screening...');
+    try {
+      const aml = await runExternalAmlScreening(25);
+      setAmlSummary(`provider=${aml.providerName} screened=${aml.screened} flagged=${aml.flagged} mocked=${aml.mocked ? 'yes' : 'no'}`);
+      setStatusMessage('External AML screening completed.');
+      await refresh();
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : 'Unable to run AML screening.');
+    } finally {
+      setIsRunning(false);
+    }
+  };
 
   return (
     <div className="space-y-6 p-6">
@@ -332,6 +394,69 @@ export function P2PMerchantControlPage(): JSX.Element {
             <p>Bucket in cohort: <span className="text-foreground">{rolloutSimulation.bucketInCohort ? 'yes' : 'no'}</span></p>
             <p>Fallback provider: <span className="text-foreground">{rolloutSimulation.fallbackProvider}</span></p>
             <p>Selected provider: <span className="text-foreground">{rolloutSimulation.selectedProvider}</span></p>
+          </div>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <Card className="space-y-3 border border-border bg-surface-elevated">
+          <h2 className="text-2xl font-semibold text-foreground">Merchant wallet operations</h2>
+          <p className="text-sm text-muted">Dedicated admin top-up and withdrawal operations against merchant liquidity wallets.</p>
+          <label className="grid gap-2">
+            <span className="text-sm text-muted">Merchant</span>
+            <select className="input-base" value={selectedMerchantId} onChange={(event) => setSelectedMerchantId(event.target.value)}>
+              {merchants.map((item) => (
+                <option key={String(item.id)} value={String(item.id)}>
+                  {String(item.merchant_code ?? item.id)} · {String(item.display_name ?? item.legal_name ?? 'merchant')}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="grid gap-4 md:grid-cols-3">
+            <label className="grid gap-2">
+              <span className="text-sm text-muted">Operation</span>
+              <select className="input-base" value={walletEntryType} onChange={(event) => setWalletEntryType(event.target.value as 'top_up' | 'withdrawal')}>
+                <option value="top_up">Top up</option>
+                <option value="withdrawal">Withdraw</option>
+              </select>
+            </label>
+            <label className="grid gap-2">
+              <span className="text-sm text-muted">Amount</span>
+              <input className="input-base" type="number" min="0.01" step="0.01" value={walletAmount} onChange={(event) => setWalletAmount(event.target.value)} />
+            </label>
+            <label className="grid gap-2">
+              <span className="text-sm text-muted">Currency</span>
+              <select className="input-base" value={walletCurrency} onChange={(event) => setWalletCurrency(event.target.value)}>
+                {['USD', 'NGN', 'EUR', 'GBP'].map((currency) => <option key={currency} value={currency}>{currency}</option>)}
+              </select>
+            </label>
+          </div>
+          <label className="grid gap-2">
+            <span className="text-sm text-muted">Note</span>
+            <input className="input-base" value={walletNote} onChange={(event) => setWalletNote(event.target.value)} />
+          </label>
+          <div className="rounded-xl border border-border bg-surface p-3 text-sm text-muted">
+            <p>Merchant: <span className="text-foreground">{activeMerchant ? String(activeMerchant.display_name ?? activeMerchant.legal_name ?? activeMerchant.merchant_code) : 'n/a'}</span></p>
+            <p>Current status: <span className="text-foreground">{activeMerchant ? String(activeMerchant.status ?? 'unknown') : 'n/a'}</span></p>
+          </div>
+          <Button onClick={() => void saveMerchantWalletOperation()} disabled={isSaving || !activeMerchant}>
+            {isSaving ? 'Applying...' : walletEntryType === 'top_up' ? 'Apply top-up' : 'Apply withdrawal'}
+          </Button>
+        </Card>
+
+        <Card className="space-y-3 border border-border bg-surface-elevated">
+          <h2 className="text-2xl font-semibold text-foreground">AML and sanctions connector</h2>
+          <p className="text-sm text-muted">Normalized screening connector with optional external provider URL and deterministic mock fallback.</p>
+          <div className="rounded-xl border border-border bg-surface p-4 text-sm text-muted">
+            <p>Enabled: <span className="text-foreground">{String(runtimeSettings.p2p_aml_provider_enabled ?? true)}</span></p>
+            <p>Provider: <span className="text-foreground">{String(runtimeSettings.p2p_aml_provider_name ?? 'mock-sanctions-grid')}</span></p>
+            <p>Provider URL: <span className="text-foreground">{String(runtimeSettings.p2p_aml_provider_url ?? 'not configured')}</span></p>
+            <p>Mock mode: <span className="text-foreground">{String(runtimeSettings.p2p_aml_provider_mock_mode ?? true)}</span></p>
+          </div>
+          <p className="rounded-xl border border-border bg-surface px-4 py-3 text-sm text-muted">{amlSummary}</p>
+          <div className="flex flex-wrap gap-3">
+            <Button onClick={() => void runAmlScreening()} disabled={isRunning}>{isRunning ? 'Running AML...' : 'Run AML screening'}</Button>
+            <Button variant="ghost" onClick={() => void refresh()} disabled={isRunning}>Reload settings</Button>
           </div>
         </Card>
       </div>

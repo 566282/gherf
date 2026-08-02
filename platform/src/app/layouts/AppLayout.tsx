@@ -14,6 +14,7 @@ type NavItem = {
 
 const appNavItems: NavItem[] = [
   { label: 'Dashboard', path: '/app', description: 'Overview and status' },
+  { label: 'Orders', path: '/app/orders', description: 'Fiat purchases and P2P actions' },
   { label: 'Campaigns', path: '/app/campaigns', description: 'Browse available tasks' },
   { label: 'Tasks', path: '/app/tasks', description: 'Complete actions' },
   { label: 'Notifications', path: '/app/notifications', description: 'Full inbox and history' },

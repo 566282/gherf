@@ -307,6 +307,9 @@ export function DashboardPage(): JSX.Element {
               <Link to="/app/tasks" className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white transition hover:border-mint/30 hover:bg-mint/10">
                 Resume last task
               </Link>
+              <Link to="/app/orders" className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white transition hover:border-mint/30 hover:bg-mint/10">
+                Open orders and payments
+              </Link>
               <Link to="/app/wallet" className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white transition hover:border-mint/30 hover:bg-mint/10">
                 Claim reward
               </Link>
@@ -379,6 +382,9 @@ export function DashboardPage(): JSX.Element {
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Link to="/app/profile" className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white transition hover:border-mint/30 hover:bg-mint/10">
               Open profile
+            </Link>
+            <Link to="/app/orders" className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white transition hover:border-mint/30 hover:bg-mint/10">
+              Open orders
             </Link>
             <Link to="/app/wallet" className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white transition hover:border-mint/30 hover:bg-mint/10">
               Open wallet

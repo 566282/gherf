@@ -181,6 +181,10 @@ export async function listP2PRuntimeSettings(): Promise<Record<string, unknown>>
     'p2p_shadow_mode',
     'p2p_dispute_auto_escalation_hours',
     'p2p_min_operating_balance',
+    'p2p_aml_provider_enabled',
+    'p2p_aml_provider_name',
+    'p2p_aml_provider_url',
+    'p2p_aml_provider_mock_mode',
   ];
 
   const { data, error } = await supabase
@@ -195,4 +199,29 @@ export async function listP2PRuntimeSettings(): Promise<Record<string, unknown>>
   return Object.fromEntries(
     data.map((row) => [String((row as Record<string, unknown>).key), (row as Record<string, unknown>).value]),
   );
+}
+
+export async function applyMerchantWalletOperation(input: {
+  merchantId: string;
+  entryType: 'top_up' | 'withdrawal';
+  amount: number;
+  currency: string;
+  note?: string;
+  referenceType?: string | null;
+  referenceId?: string | null;
+  metadata?: Record<string, unknown>;
+}): Promise<Record<string, unknown>> {
+  const { data, error } = await supabase.rpc('merchant_wallet_apply_entry', {
+    p_merchant_id: input.merchantId,
+    p_entry_type: input.entryType,
+    p_amount: Number(input.amount || 0),
+    p_currency: input.currency.toUpperCase(),
+    p_reference_type: input.referenceType ?? null,
+    p_reference_id: input.referenceId ?? null,
+    p_note: input.note ?? null,
+    p_metadata: input.metadata ?? {},
+  });
+
+  if (error) throw error;
+  return (data as Record<string, unknown> | null) ?? {};
 }

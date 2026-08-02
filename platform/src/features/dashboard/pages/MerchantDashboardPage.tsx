@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
+import * as XLSX from 'xlsx';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/app/providers/AuthProvider';
 import {
   getMerchantProfileByUserId,
+  listMerchantAnalytics,
   getMerchantWalletAccounts,
   listMerchantAssignedOrders,
 } from '@/services/api/p2pMerchant';
@@ -19,11 +21,33 @@ function formatDate(value: string): string {
   return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(value));
 }
 
+function triggerDownload(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+function buildCsv(rows: Array<Record<string, string | number>>): string {
+  if (!rows.length) return 'No data\n';
+
+  const headers = Object.keys(rows[0]);
+  const escapeCell = (value: string | number) => {
+    const raw = String(value ?? '');
+    return raw.includes(',') || raw.includes('"') || raw.includes('\n') ? `"${raw.replace(/"/g, '""')}"` : raw;
+  };
+
+  return [headers.join(','), ...rows.map((row) => headers.map((header) => escapeCell(row[header] ?? '')).join(','))].join('\n');
+}
+
 export function MerchantDashboardPage(): JSX.Element {
   const { profile } = useAuth();
   const [merchant, setMerchant] = useState<Awaited<ReturnType<typeof getMerchantProfileByUserId>>>(null);
   const [wallets, setWallets] = useState<Awaited<ReturnType<typeof getMerchantWalletAccounts>>>([]);
   const [orders, setOrders] = useState<Awaited<ReturnType<typeof listMerchantAssignedOrders>>>([]);
+  const [analytics, setAnalytics] = useState<Awaited<ReturnType<typeof listMerchantAnalytics>>>([]);
   const [runtimeSettings, setRuntimeSettings] = useState<Record<string, unknown>>({});
   const [statusMessage, setStatusMessage] = useState('Loading merchant dashboard...');
 
@@ -36,18 +60,21 @@ export function MerchantDashboardPage(): JSX.Element {
     if (!nextMerchant) {
       setWallets([]);
       setOrders([]);
+      setAnalytics([]);
       setStatusMessage('No merchant profile found for this account.');
       return;
     }
 
-    const [nextWallets, nextOrders, nextRuntimeSettings] = await Promise.all([
+    const [nextWallets, nextOrders, nextAnalytics, nextRuntimeSettings] = await Promise.all([
       getMerchantWalletAccounts(nextMerchant.id),
       listMerchantAssignedOrders(nextMerchant.id, 40),
+      listMerchantAnalytics(nextMerchant.id, 30),
       listP2PRuntimeSettings(),
     ]);
 
     setWallets(nextWallets);
     setOrders(nextOrders);
+    setAnalytics(nextAnalytics);
     setRuntimeSettings(nextRuntimeSettings);
     setStatusMessage('Merchant dashboard synced from live P2P tables.');
   };
@@ -77,6 +104,38 @@ export function MerchantDashboardPage(): JSX.Element {
 
   const minOperatingBalance = Number(runtimeSettings.p2p_min_operating_balance ?? 0);
   const lowLiquidity = summary.available < minOperatingBalance;
+
+  const analyticsExportRows = useMemo(
+    () => analytics.map((item) => ({
+      report_date: item.reportDate,
+      assigned_orders: item.assignedOrders,
+      completed_orders: item.completedOrders,
+      disputed_orders: item.disputedOrders,
+      average_response_seconds: item.averageResponseSeconds,
+      completion_rate_percent: item.completionRate,
+      earnings_total: item.earningsTotal,
+    })),
+    [analytics],
+  );
+
+  const exportAnalytics = (format: 'csv' | 'excel') => {
+    if (!merchant) return;
+
+    if (format === 'csv') {
+      const csv = buildCsv(analyticsExportRows);
+      triggerDownload(new Blob([csv], { type: 'text/csv;charset=utf-8;' }), `merchant-analytics-${merchant.merchantCode}.csv`);
+      return;
+    }
+
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.json_to_sheet(analyticsExportRows.length ? analyticsExportRows : [{ empty: 'No analytics snapshots available' }]);
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Merchant Analytics');
+    const output = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+    triggerDownload(
+      new Blob([output], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+      `merchant-analytics-${merchant.merchantCode}.xlsx`,
+    );
+  };
 
   const handleOrderAction = async (orderId: string, action: 'confirm' | 'review' | 'dispute') => {
     if (!profile || !merchant) return;
@@ -234,6 +293,52 @@ export function MerchantDashboardPage(): JSX.Element {
               {!orders.length ? (
                 <tr>
                   <td className="px-4 py-6 text-muted" colSpan={5}>No merchant orders yet.</td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      <Card className="border border-border bg-surface-elevated">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-2xl font-semibold text-foreground">Analytics snapshots</h2>
+            <p className="mt-2 text-sm text-muted">Daily merchant KPI rollups ready for CSV or Excel export.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="ghost" onClick={() => exportAnalytics('csv')} disabled={!merchant}>Export CSV</Button>
+            <Button variant="ghost" onClick={() => exportAnalytics('excel')} disabled={!merchant}>Export Excel</Button>
+          </div>
+        </div>
+        <div className="mt-4 overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-left text-muted">
+                <th className="px-4 py-3">Date</th>
+                <th className="px-4 py-3">Assigned</th>
+                <th className="px-4 py-3">Completed</th>
+                <th className="px-4 py-3">Disputed</th>
+                <th className="px-4 py-3">Response</th>
+                <th className="px-4 py-3">Completion</th>
+                <th className="px-4 py-3">Earnings</th>
+              </tr>
+            </thead>
+            <tbody>
+              {analytics.map((item) => (
+                <tr key={item.id} className="border-b border-border/60 text-foreground last:border-0">
+                  <td className="px-4 py-3">{item.reportDate}</td>
+                  <td className="px-4 py-3">{item.assignedOrders}</td>
+                  <td className="px-4 py-3">{item.completedOrders}</td>
+                  <td className="px-4 py-3">{item.disputedOrders}</td>
+                  <td className="px-4 py-3">{Number(item.averageResponseSeconds).toFixed(2)}s</td>
+                  <td className="px-4 py-3">{Number(item.completionRate).toFixed(2)}%</td>
+                  <td className="px-4 py-3">{formatCurrency(item.earningsTotal, merchant?.preferredCurrency ?? 'USD')}</td>
+                </tr>
+              ))}
+              {!analytics.length ? (
+                <tr>
+                  <td className="px-4 py-6 text-muted" colSpan={7}>No merchant analytics snapshots available yet.</td>
                 </tr>
               ) : null}
             </tbody>

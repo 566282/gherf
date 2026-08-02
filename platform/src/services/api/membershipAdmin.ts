@@ -383,6 +383,21 @@ export async function listMembershipFeeInvoices(limit = 100): Promise<Membership
   return data.map((row) => toFeeInvoiceRecord(row as Record<string, unknown>));
 }
 
+export async function listMembershipFeeInvoicesForUser(userId: string, limit = 20): Promise<MembershipFeeInvoiceRecord[]> {
+  const { data, error } = await supabase
+    .from('membership_fee_invoices')
+    .select('id,user_id,fee_cycle_key,amount,currency,status,due_at,settled_at,created_at')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (error || !Array.isArray(data)) {
+    throw error ?? new Error('Unable to load membership fee invoices.');
+  }
+
+  return data.map((row) => toFeeInvoiceRecord(row as Record<string, unknown>));
+}
+
 export async function updateMembershipFeeInvoiceStatus(invoiceId: string, status: 'unpaid' | 'paid' | 'waived'): Promise<void> {
   const { error } = await supabase
     .from('membership_fee_invoices')

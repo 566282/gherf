@@ -104,6 +104,21 @@ export type MerchantOrderListItem = {
   updatedAt: string;
 };
 
+export type MerchantAnalyticsSnapshot = {
+  id: string;
+  reportDate: string;
+  merchantId: string;
+  assignedOrders: number;
+  completedOrders: number;
+  disputedOrders: number;
+  averageResponseSeconds: number;
+  completionRate: number;
+  earningsTotal: number;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type CreateP2POrderInput = {
   paymentIntentId: string;
   userId: string;
@@ -114,6 +129,15 @@ export type CreateP2POrderInput = {
   currency: string;
   countryCode?: string | null;
   metadata?: Record<string, unknown>;
+};
+
+export type StartFiatPurchaseInput = FiatPaymentIntentInput & {
+  createOrder?: boolean;
+};
+
+export type StartedFiatPurchase = {
+  intent: FiatPaymentIntent;
+  order: MerchantOrderListItem | null;
 };
 
 function mapIntent(row: Record<string, unknown>): FiatPaymentIntent {
@@ -190,6 +214,23 @@ function mapMerchantOrder(row: Record<string, unknown>): MerchantOrderListItem {
     totalAmount: Number(row.total_amount ?? 0),
     currency: String(row.currency ?? 'USD'),
     currentState: String(row.current_state ?? 'created'),
+    createdAt: String(row.created_at ?? ''),
+    updatedAt: String(row.updated_at ?? ''),
+  };
+}
+
+function mapMerchantAnalytics(row: Record<string, unknown>): MerchantAnalyticsSnapshot {
+  return {
+    id: String(row.id),
+    reportDate: String(row.report_date ?? ''),
+    merchantId: String(row.merchant_id),
+    assignedOrders: Number(row.assigned_orders ?? 0),
+    completedOrders: Number(row.completed_orders ?? 0),
+    disputedOrders: Number(row.disputed_orders ?? 0),
+    averageResponseSeconds: Number(row.average_response_seconds ?? 0),
+    completionRate: Number(row.completion_rate ?? 0),
+    earningsTotal: Number(row.earnings_total ?? 0),
+    metadata: (row.metadata as Record<string, unknown>) ?? {},
     createdAt: String(row.created_at ?? ''),
     updatedAt: String(row.updated_at ?? ''),
   };
@@ -307,6 +348,37 @@ export async function createP2POrder(input: CreateP2POrderInput): Promise<Mercha
   return mapMerchantOrder(data as Record<string, unknown>);
 }
 
+export async function startFiatPurchase(input: StartFiatPurchaseInput): Promise<StartedFiatPurchase> {
+  const intent = await createFiatPaymentIntent(input);
+
+  if (input.createOrder === false || intent.providerKey !== 'p2p_merchant') {
+    return {
+      intent,
+      order: null,
+    };
+  }
+
+  const order = await createP2POrder({
+    paymentIntentId: intent.id,
+    userId: input.userId,
+    moduleKey: input.moduleKey,
+    amount: intent.amount,
+    feeAmount: intent.feeAmount,
+    totalAmount: intent.totalAmount,
+    currency: intent.currency,
+    countryCode: intent.countryCode,
+    metadata: {
+      ...input.metadata,
+      paymentIntentId: intent.id,
+    },
+  });
+
+  return {
+    intent,
+    order,
+  };
+}
+
 export async function listFiatPaymentIntents(userId: string, limit = 50): Promise<FiatPaymentIntent[]> {
   const { data, error } = await supabase
     .from('fiat_payment_intents')
@@ -390,4 +462,19 @@ export async function listMerchantAssignedOrders(merchantId: string, limit = 50)
   }
 
   return data.map((row) => mapMerchantOrder(row as Record<string, unknown>));
+}
+
+export async function listMerchantAnalytics(merchantId: string, limit = 30): Promise<MerchantAnalyticsSnapshot[]> {
+  const { data, error } = await supabase
+    .from('p2p_merchant_daily_analytics')
+    .select('*')
+    .eq('merchant_id', merchantId)
+    .order('report_date', { ascending: false })
+    .limit(limit);
+
+  if (error || !Array.isArray(data)) {
+    throw error ?? new Error('Unable to load merchant analytics snapshots.');
+  }
+
+  return data.map((row) => mapMerchantAnalytics(row as Record<string, unknown>));
 }
