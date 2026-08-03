@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Card } from '@/components/ui/Card';
 import { Skeleton } from '@/components/ui/Skeleton';
+import { listUsers } from '@/services/api/auth';
+import type { UserProfile } from '@/types/auth';
 import {
+  sendInternalMessage,
+  publishLiveAnnouncement,
+  sendPromotionalNotification,
   communicationChannels,
   cancelNotificationQueueItem,
   listCommunicationConfig,
@@ -53,6 +58,14 @@ export function NotificationCenterPage(): JSX.Element {
   const [queueStatus, setQueueStatus] = useState<'all' | 'queued' | 'processing' | 'failed' | 'retry' | 'sent' | 'cancelled'>('all');
   const [queuePage, setQueuePage] = useState(1);
   const [hasMoreQueuePages, setHasMoreQueuePages] = useState(false);
+  const [users, setUsers] = useState<UserProfile[]>([]);
+  const [recipientMode, setRecipientMode] = useState<'all' | 'selected'>('all');
+  const [selectedRecipients, setSelectedRecipients] = useState<string[]>([]);
+  const [sendMode, setSendMode] = useState<'internal' | 'announcement' | 'promotional'>('internal');
+  const [sendTitle, setSendTitle] = useState('Important account update');
+  const [sendBody, setSendBody] = useState('Your account settings were reviewed. Visit profile to confirm details.');
+  const [sendChannels, setSendChannels] = useState<Array<(typeof communicationChannels)[number]>>(['in_app', 'email', 'push']);
+  const [isSending, setIsSending] = useState(false);
   const queuePageSize = 8;
 
   const loadData = async (pageNumber = queuePage) => {
@@ -76,6 +89,12 @@ export function NotificationCenterPage(): JSX.Element {
       .then(() => setStatusMessage('Notification center backed by Supabase templates, queue, and retry history.'))
       .catch(() => setStatusMessage('Notification center loaded from local defaults until Supabase data is available.'));
   }, [queuePage]);
+
+  useEffect(() => {
+    void listUsers()
+      .then((nextUsers) => setUsers(nextUsers))
+      .catch(() => setUsers([]));
+  }, []);
 
   const activeChannels = useMemo(
     () => communicationChannels.filter((channel) => config?.templates ? Object.values(config.templates).some((template) => template.channels.includes(channel)) : true),
@@ -118,6 +137,20 @@ export function NotificationCenterPage(): JSX.Element {
   const currentQueuePage = queuePage;
   const pagedQueueRows = filteredQueueRows;
 
+  const recipientIds = useMemo(() => {
+    if (recipientMode === 'all') {
+      return users.map((user) => user.id);
+    }
+
+    return selectedRecipients;
+  }, [recipientMode, selectedRecipients, users]);
+
+  const sendCtaLabel = useMemo(() => {
+    if (sendMode === 'announcement') return 'Publish announcement';
+    if (sendMode === 'promotional') return 'Send promotional notification';
+    return 'Send internal message';
+  }, [sendMode]);
+
   const handleProcessQueue = async () => {
     setIsProcessingQueue(true);
     setStatusMessage('Processing due notifications...');
@@ -159,6 +192,64 @@ export function NotificationCenterPage(): JSX.Element {
       setStatusMessage('Notification cancelled.');
     } catch {
       setStatusMessage('Unable to cancel the selected notification.');
+    }
+  };
+
+  const handleSendNotification = async () => {
+    if (!sendTitle.trim() || !sendBody.trim()) {
+      setStatusMessage('Add a title and body before sending.');
+      return;
+    }
+
+    if (!recipientIds.length) {
+      setStatusMessage('Choose at least one recipient.');
+      return;
+    }
+
+    if (sendMode === 'announcement' && !config?.liveAnnouncementsEnabled) {
+      setStatusMessage('Live announcements are currently disabled.');
+      return;
+    }
+
+    if (sendMode === 'promotional' && !config?.promotionalEnabled) {
+      setStatusMessage('Promotional notifications are currently disabled.');
+      return;
+    }
+
+    setIsSending(true);
+    setStatusMessage('Sending notifications...');
+
+    try {
+      if (sendMode === 'announcement') {
+        const sentCount = await publishLiveAnnouncement({
+          recipientIds,
+          title: sendTitle,
+          body: sendBody,
+        });
+        setStatusMessage(`Live announcement sent to ${sentCount} recipients.`);
+      } else if (sendMode === 'promotional') {
+        const sentCount = await sendPromotionalNotification({
+          recipientIds,
+          title: sendTitle,
+          body: sendBody,
+          channels: sendChannels,
+        });
+        setStatusMessage(`Promotional notifications queued: ${sentCount}.`);
+      } else {
+        const sentCount = await sendInternalMessage({
+          recipientIds,
+          title: sendTitle,
+          body: sendBody,
+          templateKey: 'internal_message',
+        });
+        setStatusMessage(`Internal message sent to ${sentCount} recipients.`);
+      }
+
+      await loadData();
+    } catch {
+      setStatusMessage('Unable to send notification right now.');
+    } finally {
+      setIsSending(false);
     }
   };
 
@@ -205,6 +296,118 @@ export function NotificationCenterPage(): JSX.Element {
       </div>
 
       <p className="rounded-xl border border-border bg-surface-elevated px-4 py-3 text-sm text-muted">{statusMessage}</p>
+
+      <Card className="space-y-5 border border-border bg-surface-elevated">
+        <p className="text-sm uppercase tracking-[0.24em] text-accent/70">Phase 1 unified composer</p>
+        <h2 className="text-2xl font-semibold text-foreground">Create and send notifications from this surface</h2>
+        <p className="text-sm text-muted">
+          This phase unifies message composition and send actions here. Delivery writes to backend notification records per selected channel.
+        </p>
+
+        <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+          <div className="space-y-4 rounded-2xl border border-border bg-surface p-4">
+            <label className="grid gap-2">
+              <span className="text-xs uppercase tracking-[0.2em] text-muted">Notification type</span>
+              <select
+                className="input-base"
+                value={sendMode}
+                onChange={(event) => setSendMode(event.target.value as 'internal' | 'announcement' | 'promotional')}
+              >
+                <option value="internal">Internal message</option>
+                <option value="announcement">Live announcement</option>
+                <option value="promotional">Promotional notification</option>
+              </select>
+            </label>
+
+            <label className="grid gap-2">
+              <span className="text-xs uppercase tracking-[0.2em] text-muted">Title</span>
+              <input
+                className="input-base"
+                value={sendTitle}
+                onChange={(event) => setSendTitle(event.target.value)}
+                placeholder="Notification title"
+              />
+            </label>
+
+            <label className="grid gap-2">
+              <span className="text-xs uppercase tracking-[0.2em] text-muted">Message</span>
+              <textarea
+                className="input-base min-h-24"
+                value={sendBody}
+                onChange={(event) => setSendBody(event.target.value)}
+                placeholder="Notification body"
+              />
+            </label>
+
+            {sendMode === 'promotional' ? (
+              <div className="grid gap-2 md:grid-cols-2">
+                {communicationChannels.map((channel) => (
+                  <label key={channel} className="flex items-center gap-2 rounded-xl border border-border bg-surface-elevated px-3 py-2 text-sm text-foreground">
+                    <input
+                      type="checkbox"
+                      checked={sendChannels.includes(channel)}
+                      onChange={(event) => {
+                        setSendChannels((current) => {
+                          if (event.target.checked) {
+                            return Array.from(new Set([...current, channel]));
+                          }
+
+                          const next = current.filter((entry) => entry !== channel);
+                          return next.length ? next : ['in_app'];
+                        });
+                      }}
+                    />
+                    {channelLabels[channel]}
+                  </label>
+                ))}
+              </div>
+            ) : null}
+
+            <button
+              type="button"
+              className="rounded-xl border border-border bg-surface px-4 py-2 text-sm font-medium text-foreground transition hover:bg-surface-elevated disabled:opacity-50"
+              onClick={() => void handleSendNotification()}
+              disabled={isSending}
+            >
+              {isSending ? 'Sending...' : sendCtaLabel}
+            </button>
+          </div>
+
+          <div className="space-y-4 rounded-2xl border border-border bg-surface p-4">
+            <p className="text-xs uppercase tracking-[0.2em] text-muted">Audience</p>
+            <label className="flex items-center gap-2 rounded-xl border border-border bg-surface-elevated px-3 py-2 text-sm text-foreground">
+              <input type="radio" checked={recipientMode === 'all'} onChange={() => setRecipientMode('all')} />
+              All users ({users.length})
+            </label>
+            <label className="flex items-center gap-2 rounded-xl border border-border bg-surface-elevated px-3 py-2 text-sm text-foreground">
+              <input type="radio" checked={recipientMode === 'selected'} onChange={() => setRecipientMode('selected')} />
+              Selected users
+            </label>
+
+            <div className="grid max-h-56 gap-2 overflow-auto rounded-xl border border-border bg-surface-elevated p-3">
+              {users.length ? users.map((user) => (
+                <label key={user.id} className="flex items-center gap-2 text-sm text-foreground">
+                  <input
+                    type="checkbox"
+                    disabled={recipientMode === 'all'}
+                    checked={selectedRecipients.includes(user.id)}
+                    onChange={(event) => {
+                      setSelectedRecipients((current) =>
+                        event.target.checked ? [...current, user.id] : current.filter((entry) => entry !== user.id),
+                      );
+                    }}
+                  />
+                  <span>{user.fullName ?? user.email ?? user.id}</span>
+                </label>
+              )) : <p className="text-sm text-muted">No users available.</p>}
+            </div>
+
+            <p className="text-sm text-muted">
+              Current recipient count: {recipientIds.length}
+            </p>
+          </div>
+        </div>
+      </Card>
 
       <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
         <Card className="space-y-4 border border-border bg-surface-elevated">

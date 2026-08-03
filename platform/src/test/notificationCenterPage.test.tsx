@@ -11,6 +11,13 @@ const apiState = vi.hoisted(() => ({
   processNotificationQueue: vi.fn(),
   retryNotificationQueueItem: vi.fn(),
   cancelNotificationQueueItem: vi.fn(),
+  sendInternalMessage: vi.fn(),
+  publishLiveAnnouncement: vi.fn(),
+  sendPromotionalNotification: vi.fn(),
+}));
+
+const authState = vi.hoisted(() => ({
+  listUsers: vi.fn(),
 }));
 
 vi.mock('@/services/api/communications', () => ({
@@ -22,6 +29,13 @@ vi.mock('@/services/api/communications', () => ({
   processNotificationQueue: apiState.processNotificationQueue,
   retryNotificationQueueItem: apiState.retryNotificationQueueItem,
   cancelNotificationQueueItem: apiState.cancelNotificationQueueItem,
+  sendInternalMessage: apiState.sendInternalMessage,
+  publishLiveAnnouncement: apiState.publishLiveAnnouncement,
+  sendPromotionalNotification: apiState.sendPromotionalNotification,
+}));
+
+vi.mock('@/services/api/auth', () => ({
+  listUsers: authState.listUsers,
 }));
 
 describe('NotificationCenterPage', () => {
@@ -68,6 +82,13 @@ describe('NotificationCenterPage', () => {
     apiState.processNotificationQueue.mockResolvedValue(1);
     apiState.retryNotificationQueueItem.mockResolvedValue(undefined);
     apiState.cancelNotificationQueueItem.mockResolvedValue(undefined);
+    apiState.sendInternalMessage.mockResolvedValue(1);
+    apiState.publishLiveAnnouncement.mockResolvedValue(1);
+    apiState.sendPromotionalNotification.mockResolvedValue(1);
+
+    authState.listUsers.mockResolvedValue([
+      { id: 'user-1', fullName: 'Test User', email: 'user@example.com' },
+    ]);
   });
 
   it('inspects a queue row and allows retry or cancel actions', async () => {
@@ -77,7 +98,7 @@ describe('NotificationCenterPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Inspect' }));
 
     expect(screen.getByText('Selected queue item')).toBeInTheDocument();
-    expect(screen.getByText('Withdrawal restriction')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Withdrawal restriction' })).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Retry item' }));
     await waitFor(() => expect(apiState.retryNotificationQueueItem).toHaveBeenCalledWith('queue-1'));
@@ -93,5 +114,21 @@ describe('NotificationCenterPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Process due notifications' }));
 
     await waitFor(() => expect(apiState.processNotificationQueue).toHaveBeenCalledWith(25));
+  });
+
+  it('sends an internal message from the phase 1 composer', async () => {
+    render(<NotificationCenterPage />);
+
+    await screen.findByText('Notification center');
+    await userEvent.click(screen.getByRole('button', { name: 'Send internal message' }));
+
+    await waitFor(() =>
+      expect(apiState.sendInternalMessage).toHaveBeenCalledWith({
+        recipientIds: ['user-1'],
+        title: 'Important account update',
+        body: 'Your account settings were reviewed. Visit profile to confirm details.',
+        templateKey: 'internal_message',
+      }),
+    );
   });
 });

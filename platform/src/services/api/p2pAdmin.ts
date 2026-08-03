@@ -1,5 +1,7 @@
 import { supabase } from '@/services/supabase/client';
 
+export { listMerchantProfiles } from '@/services/api/p2pMerchant';
+
 export async function listFiatProviderSettings(): Promise<Array<Record<string, unknown>>> {
   const { data, error } = await supabase
     .from('fiat_payment_provider_settings')

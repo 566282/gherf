@@ -745,6 +745,20 @@ Sprint 3:
   - `npm run typecheck`
   - `npm run build`
 
+### Additional Test Coverage Pass (2026-08-02)
+- Added concrete admin CRUD and automation runner coverage in:
+  - [platform/src/test/membershipAdminPages.test.tsx](platform/src/test/membershipAdminPages.test.tsx)
+  - [platform/src/test/membershipAutomationHandlers.test.ts](platform/src/test/membershipAutomationHandlers.test.ts)
+- Covered flows:
+  - plan create/update and archive,
+  - rule save and publish,
+  - fee policy save and invoice settlement,
+  - analytics-triggered membership job execution,
+  - automation runner HTTP handler,
+  - membership gateway webhook ingestion and failure handling.
+- Verification for this pass:
+  - `npx vitest run src/test/membershipAdminPages.test.tsx src/test/membershipAutomationHandlers.test.ts`
+
 ### Remaining Work Requiring Credentials or External Provider Setup
 - Live payment-provider adapters (Stripe, Paystack, Flutterwave, Monnify, PayPal, crypto rails) require provider credentials and signing secrets to finalize webhook signature verification and payout/retry logic.
 - Deploying and binding production edge/function endpoints to provider callback URLs requires production environment secrets and provider dashboard access.

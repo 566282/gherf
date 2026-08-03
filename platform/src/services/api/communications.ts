@@ -118,6 +118,7 @@ type NotificationPayload = {
 };
 
 const COMMUNICATION_SETTING_KEY = 'communication_config';
+const EMAIL_DISPATCH_FUNCTION = 'notification-email-dispatch';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -133,6 +134,10 @@ function toChannelArray(value: string[] | null): CommunicationChannel[] {
   }
 
   return value.filter((entry): entry is CommunicationChannel => communicationChannels.includes(entry as CommunicationChannel));
+}
+
+function isTemplateKey(value: string): value is CommunicationTemplateKey {
+  return communicationTemplateKeys.includes(value as CommunicationTemplateKey);
 }
 
 function buildDefaultTemplate(key: CommunicationTemplateKey): CommunicationTemplate {
@@ -241,6 +246,21 @@ export function buildDefaultCommunicationConfig(): CommunicationConfig {
   };
 }
 
+function mapTemplatesToRecord(
+  templates: CommunicationTemplate[],
+  fallback: Record<CommunicationTemplateKey, CommunicationTemplate>,
+): Record<CommunicationTemplateKey, CommunicationTemplate> {
+  const fromTable = Object.fromEntries(
+    templates
+      .filter((template) => isTemplateKey(template.key))
+      .map((template) => [template.key, template]),
+  ) as Partial<Record<CommunicationTemplateKey, CommunicationTemplate>>;
+
+  return Object.fromEntries(
+    communicationTemplateKeys.map((key) => [key, fromTable[key] ?? fallback[key] ?? buildDefaultTemplate(key)]),
+  ) as Record<CommunicationTemplateKey, CommunicationTemplate>;
+}
+
 function mergeTemplate(key: CommunicationTemplateKey, value: unknown): CommunicationTemplate {
   const fallback = buildDefaultTemplate(key);
 
@@ -291,30 +311,64 @@ function mergeCommunicationConfig(value: unknown): CommunicationConfig {
 }
 
 export async function listCommunicationConfig(): Promise<CommunicationConfig> {
-  const { data, error } = await supabase
-    .from('platform_settings')
-    .select('key,value')
-    .eq('key', COMMUNICATION_SETTING_KEY)
-    .single();
+  const [settingsResult, templates] = await Promise.all([
+    supabase
+      .from('platform_settings')
+      .select('key,value')
+      .eq('key', COMMUNICATION_SETTING_KEY)
+      .single(),
+    listCommunicationTemplates(),
+  ]);
 
-  if (error || !data) {
-    return buildDefaultCommunicationConfig();
-  }
+  const { data, error } = settingsResult;
+  const baseConfig = error || !data
+    ? buildDefaultCommunicationConfig()
+    : mergeCommunicationConfig((data as SettingRow).value);
 
-  return mergeCommunicationConfig((data as SettingRow).value);
+  return {
+    ...baseConfig,
+    templates: mapTemplatesToRecord(templates, baseConfig.templates),
+  };
 }
 
 export async function updateCommunicationConfig(config: CommunicationConfig): Promise<void> {
+  const { templates, ...configWithoutTemplates } = config;
+
   const { error } = await supabase.from('platform_settings').upsert(
     {
       key: COMMUNICATION_SETTING_KEY,
-      value: config,
-      description: 'Communication system settings, templates, and channel controls',
+      value: configWithoutTemplates,
+      description: 'Communication system settings and global channel controls',
     },
     { onConflict: 'key' },
   );
 
   if (error) throw error;
+
+  const templateRows = communicationTemplateKeys.map((key) => {
+    const template = templates[key] ?? buildDefaultTemplate(key);
+
+    return {
+      key,
+      name: template.name,
+      description: template.description,
+      channels: template.channels,
+      subject: template.subject,
+      body: template.body,
+      push_title: template.pushTitle,
+      push_body: template.pushBody,
+      sms_body: template.smsBody,
+      is_enabled: template.enabled,
+      metadata: { source: 'admin_template_studio' },
+      updated_at: new Date().toISOString(),
+    };
+  });
+
+  const { error: templateError } = await supabase
+    .from('communication_templates')
+    .upsert(templateRows, { onConflict: 'key' });
+
+  if (templateError) throw templateError;
 }
 
 export async function sendUserNotification(userId: string, payload: NotificationPayload): Promise<void> {
@@ -416,8 +470,10 @@ export async function listCommunicationTemplates(): Promise<CommunicationTemplat
     return Object.values(buildDefaultCommunicationConfig().templates);
   }
 
-  return (data as CommunicationTemplateRow[]).map((row) => ({
-    key: row.key as CommunicationTemplateKey,
+  return (data as CommunicationTemplateRow[])
+    .filter((row) => isTemplateKey(row.key))
+    .map((row) => ({
+    key: row.key,
     name: row.name,
     description: row.description,
     channels: toChannelArray(row.channels),
@@ -430,11 +486,49 @@ export async function listCommunicationTemplates(): Promise<CommunicationTemplat
   }));
 }
 
+type EmailDispatchPayload = {
+  notifications: Array<{
+    userId: string;
+    title: string;
+    message: string;
+    category?: CommunicationCategory;
+    templateKey?: CommunicationTemplateKey;
+    metadata?: Record<string, unknown>;
+  }>;
+};
+
+async function dispatchEmailChannelNotifications(rows: NotificationInsert[]): Promise<void> {
+  const emailRows = rows.filter((row) => row.channel === 'email');
+  if (!emailRows.length) return;
+
+  const payload: EmailDispatchPayload = {
+    notifications: emailRows.map((row) => ({
+      userId: row.user_id,
+      title: row.title,
+      message: row.message,
+      category: row.category,
+      templateKey: row.template_key,
+      metadata: row.metadata,
+    })),
+  };
+
+  const { error } = await supabase.functions.invoke(EMAIL_DISPATCH_FUNCTION, {
+    body: payload,
+  });
+
+  // Phase 9.3 uses best-effort dispatch to keep notification writes reliable.
+  if (error) {
+    console.warn('Email dispatch adapter failed:', error.message ?? error);
+  }
+}
+
 async function insertNotificationBatch(rows: NotificationInsert[]): Promise<number> {
   if (!rows.length) return 0;
 
   const { error } = await supabase.from('user_notifications').insert(rows);
   if (error) throw error;
+
+  await dispatchEmailChannelNotifications(rows);
 
   return rows.length;
 }

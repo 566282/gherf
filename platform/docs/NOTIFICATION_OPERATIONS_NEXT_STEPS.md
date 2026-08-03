@@ -1,5 +1,27 @@
 # Notification Operations Next Steps
 
+## Status Update (Phase 1 Complete)
+
+- Completed: Notification Center now supports create/send actions for internal messages, live announcements, and promotional notifications from the same admin surface as queue and retry operations.
+- Completed: Audience targeting (all users or selected users) is available directly in Notification Center.
+- Completed: Existing queue management controls remain active in Notification Center (process due items, retry failed items, cancel queue items).
+- Completed: Template source unification. Admin template editing and live template reads now use `communication_templates` as the backend source of truth.
+- Completed (initial): Email provider adapter path. Email-channel sends now trigger `notification-email-dispatch` (best-effort) for outbound provider delivery.
+- Remaining: Provider adapters still pending for SMS/push/WhatsApp/Telegram.
+
+## Edge Function Deployment (Email Adapter)
+
+- Deploy function: `notification-email-dispatch`
+- Ensure function uses JWT verification and super-admin role checks.
+- Configure secrets:
+  - `SUPABASE_URL`
+  - `SUPABASE_SERVICE_ROLE_KEY`
+  - `SUPABASE_ANON_KEY`
+  - `RESEND_API_KEY`
+  - `EMAIL_FROM`
+- Smoke test by sending a promotional notification with `email` channel selected and verify provider accepts the request.
+- Monitor function logs for failures and add alerts for repeated outbound errors.
+
 ## Supabase
 
 - Apply `016_notification_delivery_infra.sql`, `017_withdrawal_scheduled_date.sql`, and `018_notification_queue_worker.sql` to the target project in that order.
