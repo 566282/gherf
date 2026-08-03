@@ -11,11 +11,18 @@ export const communicationTemplateKeys = [
   'reward_update',
   'live_announcement',
   'promotional_blast',
+  'compliance_withdrawal_held',
+  'compliance_withdrawal_approved',
+  'compliance_verification_review_required',
+  'compliance_enforcement_applied',
+  'compliance_appeal_submitted',
+  'compliance_appeal_decided',
+  'compliance_ops_alert',
 ] as const;
 
 export type CommunicationTemplateKey = (typeof communicationTemplateKeys)[number];
 
-export const communicationCategories = ['internal', 'transactional', 'live_announcement', 'promotional'] as const;
+export const communicationCategories = ['internal', 'transactional', 'live_announcement', 'promotional', 'compliance'] as const;
 
 export type CommunicationCategory = (typeof communicationCategories)[number];
 
@@ -212,6 +219,111 @@ function buildDefaultTemplate(key: CommunicationTemplateKey): CommunicationTempl
       pushTitle: '{{announcement_title}}',
       pushBody: '{{announcement_body}}',
       smsBody: 'Announcement: {{announcement_title}}',
+      enabled: true,
+    };
+  }
+
+  if (key === 'compliance_withdrawal_held') {
+    return {
+      key,
+      name: 'Compliance withdrawal hold',
+      description: 'Sent when a withdrawal is held for manual compliance review.',
+      channels: ['in_app', 'email', 'push'],
+      subject: 'Withdrawal placed on compliance hold',
+      body: 'Hi {{full_name}},\n\nYour withdrawal is temporarily held while compliance checks are completed. We will notify you after review.',
+      pushTitle: 'Withdrawal on hold',
+      pushBody: 'Your withdrawal needs additional compliance review.',
+      smsBody: 'Withdrawal on hold for compliance review. Check your dashboard for updates.',
+      enabled: true,
+    };
+  }
+
+  if (key === 'compliance_withdrawal_approved') {
+    return {
+      key,
+      name: 'Compliance withdrawal approved',
+      description: 'Sent when a withdrawal clears automated compliance precheck.',
+      channels: ['in_app', 'email', 'push'],
+      subject: 'Withdrawal passed compliance checks',
+      body: 'Hi {{full_name}},\n\nYour withdrawal passed compliance checks and is now in the normal payout flow.',
+      pushTitle: 'Withdrawal approved',
+      pushBody: 'Your withdrawal passed compliance review.',
+      smsBody: 'Withdrawal passed compliance review and moved to payout queue.',
+      enabled: true,
+    };
+  }
+
+  if (key === 'compliance_verification_review_required') {
+    return {
+      key,
+      name: 'Compliance verification manual review',
+      description: 'Sent when task verification requires manual reviewer action.',
+      channels: ['in_app', 'email'],
+      subject: 'Task verification needs manual review',
+      body: 'Hi {{full_name}},\n\nYour task verification needs manual review before a final decision is made.',
+      pushTitle: 'Verification in manual review',
+      pushBody: 'Your verification is waiting for reviewer confirmation.',
+      smsBody: 'Task verification requires manual review. Check your dashboard for updates.',
+      enabled: true,
+    };
+  }
+
+  if (key === 'compliance_enforcement_applied') {
+    return {
+      key,
+      name: 'Compliance enforcement applied',
+      description: 'Sent when a compliance enforcement action is executed.',
+      channels: ['in_app', 'email', 'push'],
+      subject: 'Compliance action applied to your account',
+      body: 'Hi {{full_name}},\n\nA compliance enforcement action was applied to your account. Please review the compliance notice for details and appeal options.',
+      pushTitle: 'Compliance action applied',
+      pushBody: 'An enforcement action was applied to your account.',
+      smsBody: 'A compliance action was applied. Review your account notices.',
+      enabled: true,
+    };
+  }
+
+  if (key === 'compliance_appeal_submitted') {
+    return {
+      key,
+      name: 'Compliance appeal submitted',
+      description: 'Sent after a user submits a compliance appeal.',
+      channels: ['in_app', 'email'],
+      subject: 'Your compliance appeal was submitted',
+      body: 'Hi {{full_name}},\n\nYour compliance appeal has been submitted and queued for reviewer processing.',
+      pushTitle: 'Appeal submitted',
+      pushBody: 'Your compliance appeal is now in the review queue.',
+      smsBody: 'Your compliance appeal was submitted successfully.',
+      enabled: true,
+    };
+  }
+
+  if (key === 'compliance_appeal_decided') {
+    return {
+      key,
+      name: 'Compliance appeal decided',
+      description: 'Sent when a reviewer records a final appeal decision.',
+      channels: ['in_app', 'email', 'push'],
+      subject: 'Your compliance appeal was decided',
+      body: 'Hi {{full_name}},\n\nA decision has been recorded on your compliance appeal. Open your appeal center to view details.',
+      pushTitle: 'Appeal decision available',
+      pushBody: 'A decision was recorded for your compliance appeal.',
+      smsBody: 'Your compliance appeal decision is available in your dashboard.',
+      enabled: true,
+    };
+  }
+
+  if (key === 'compliance_ops_alert') {
+    return {
+      key,
+      name: 'Compliance operations alert',
+      description: 'Admin-only alert for queue failures, backlog spikes, and SLA breaches.',
+      channels: ['in_app', 'email', 'push'],
+      subject: 'Compliance operations alert',
+      body: '{{message_body}}',
+      pushTitle: 'Compliance operations alert',
+      pushBody: '{{message_body}}',
+      smsBody: 'Compliance ops alert: check admin dashboard for details.',
       enabled: true,
     };
   }

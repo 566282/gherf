@@ -2,6 +2,7 @@ import { supabase } from '@/services/supabase/client';
 import { notifySuperAdmins, sendUserNotification } from '@/services/api/communications';
 import { evaluateWithdrawalPolicy, resolveMembershipLabel } from '@/services/api/membership';
 import { canTransferFromWallet, isWalletTransferAllowed } from '@/services/api/walletPolicies';
+import { createWithdrawalCompliancePrecheck } from '@/services/api/taskCompliance';
 import type {
   WalletAccount,
   WalletAccountType,
@@ -26,6 +27,7 @@ type ProfileBalanceRow = {
   email?: string | null;
   level_tier?: number | null;
   level_label?: string | null;
+  created_at?: string | null;
 };
 
 type WalletAccountRow = {
@@ -583,7 +585,7 @@ export async function listPendingWithdrawalRequests(limit = 12): Promise<Withdra
     .select(
       'id,user_id,wallet_transaction_id,method,destination_label,destination_value,destination_currency,currency,amount,processing_fee,exchange_rate,net_amount,approval_workflow,status,scheduled_for,admin_notes,reviewed_by,reviewed_at,created_at,updated_at',
     )
-    .in('status', ['pending', 'held'])
+    .in('status', ['pending', 'pending_compliance', 'held', 'held_compliance'])
     .order('created_at', { ascending: false })
     .limit(limit);
 
@@ -610,7 +612,7 @@ export async function createWithdrawalRequest(userId: string, input: WithdrawalR
 
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
-    .select('wallet_balance,full_name,email,level_tier,level_label')
+    .select('wallet_balance,full_name,email,level_tier,level_label,created_at')
     .eq('id', userId)
     .single<ProfileBalanceRow>();
 
@@ -689,6 +691,9 @@ export async function createWithdrawalRequest(userId: string, input: WithdrawalR
     year: 'numeric',
   });
   const displayName = profile.full_name?.trim() || profile.email?.trim() || userId;
+  const accountAgeDays = profile.created_at
+    ? Math.max(0, Math.floor((Date.now() - new Date(profile.created_at).getTime()) / (1000 * 60 * 60 * 24)))
+    : 0;
 
   const { error: balanceError } = await supabase.from('profiles').update({ wallet_balance: nextBalance }).eq('id', userId);
   if (balanceError) throw balanceError;
@@ -761,13 +766,46 @@ export async function createWithdrawalRequest(userId: string, input: WithdrawalR
       throw requestError ?? new Error('Unable to create withdrawal request.');
     }
 
-    const requestLabel = isAccountOnHold ? 'held' : isAutoApproved ? 'approved' : 'pending';
+    const complianceReview = await createWithdrawalCompliancePrecheck({
+      userId,
+      withdrawalRequestId: request.id,
+      amount: input.amount,
+      currency: settings.currency,
+      membershipTier: memberPlanTier,
+      successfulWithdrawalCount,
+      accountAgeDays,
+      hasOutstandingFee: blockWithoutFeeSettlement && successfulWithdrawalCount >= feeEnforcementStart
+        ? await hasOutstandingMembershipFee(userId)
+        : false,
+    });
+
+    const finalRequestState = complianceReview.state === 'held_compliance'
+      ? 'held_compliance'
+      : complianceReview.state === 'approved' || complianceReview.state === 'bypassed'
+        ? (isAccountOnHold ? 'held' : isAutoApproved ? 'approved' : 'pending')
+        : complianceReview.state === 'rejected'
+          ? 'rejected'
+          : 'pending_compliance';
+
+    const { data: refreshedRequest, error: refreshedRequestError } = await supabase
+      .from('withdrawal_requests')
+      .select('id,user_id,wallet_transaction_id,method,destination_label,destination_value,destination_currency,currency,amount,processing_fee,exchange_rate,net_amount,approval_workflow,status,scheduled_for,admin_notes,reviewed_by,reviewed_at,created_at,updated_at')
+      .eq('id', request.id)
+      .single<WithdrawalRequestRow>();
+
+    if (refreshedRequestError || !refreshedRequest) {
+      throw refreshedRequestError ?? new Error('Unable to refresh withdrawal request after compliance precheck.');
+    }
+
+    const requestLabel = finalRequestState;
 
     void Promise.all([
       notifySuperAdmins({
         title: isAccountOnHold ? 'Withdrawal placed on hold' : isAutoApproved ? 'Withdrawal auto-approved' : 'Withdrawal request submitted',
         message: isAccountOnHold
           ? `${displayName} reached ${successfulWithdrawalCount} successful withdrawals on the ${memberPlanLabel} plan, so the new withdrawal has been placed on hold for ${settings.currency} ${input.amount.toFixed(2)} until the user upgrades.`
+          : finalRequestState === 'held_compliance'
+            ? `${displayName} submitted a withdrawal for ${settings.currency} ${input.amount.toFixed(2)} and it is held by compliance policy review.`
           : `${displayName} ${isAutoApproved ? 'received an auto-approved withdrawal' : 'submitted a withdrawal request'} for ${settings.currency} ${input.amount.toFixed(2)} on ${withdrawalDateLabel}.`,
         type: 'info',
         category: 'transactional',
@@ -779,6 +817,9 @@ export async function createWithdrawalRequest(userId: string, input: WithdrawalR
           effectiveWithdrawalLimit,
           scheduledFor: scheduledFor ? scheduledFor.toISOString() : null,
           withdrawalRequestId: request.id,
+          complianceReviewId: complianceReview.id,
+          complianceState: complianceReview.state,
+          complianceRiskScore: complianceReview.riskScore,
           successfulWithdrawalCount,
           holdThreshold,
           memberPlanTier,
@@ -789,13 +830,18 @@ export async function createWithdrawalRequest(userId: string, input: WithdrawalR
         title: isAccountOnHold ? 'Withdrawal on hold' : `Withdrawal ${requestLabel}`,
         message: isAccountOnHold
           ? `Your ${memberPlanLabel} plan has reached the withdrawal limit of ${holdThreshold} successful withdrawal${holdThreshold === 1 ? '' : 's'}. This request is on hold until you upgrade your plan.`
+          : finalRequestState === 'held_compliance'
+          ? `Your withdrawal is on compliance hold pending policy review. You will be notified when a decision is made.`
           : isAutoApproved
           ? `Your ${settings.currency} ${input.amount.toFixed(2)} withdrawal is within your limit of ${settings.currency} ${effectiveWithdrawalLimit.toFixed(2)} and has been approved for ${withdrawalDateLabel}.`
           : `Withdrawals are not allowed until ${withdrawalDateLabel}. Your ${settings.currency} ${input.amount.toFixed(2)} request is within your limit of ${settings.currency} ${effectiveWithdrawalLimit.toFixed(2)} and will remain pending until that fixed date.`,
-        type: isAccountOnHold ? 'warning' : isAutoApproved ? 'success' : 'info',
+        type: isAccountOnHold || finalRequestState === 'held_compliance' ? 'warning' : isAutoApproved ? 'success' : 'info',
         category: 'transactional',
         metadata: {
           withdrawalRequestId: request.id,
+          complianceReviewId: complianceReview.id,
+          complianceState: complianceReview.state,
+          complianceRiskScore: complianceReview.riskScore,
           amount: input.amount,
           currency: settings.currency,
           effectiveWithdrawalLimit,
@@ -808,7 +854,7 @@ export async function createWithdrawalRequest(userId: string, input: WithdrawalR
       }),
     ]).catch(() => undefined);
 
-    return mapWithdrawalRequest(request);
+    return mapWithdrawalRequest(refreshedRequest);
   } catch (error) {
     if (transactionId) {
       await supabase.from('wallet_transactions').delete().eq('id', transactionId);

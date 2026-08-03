@@ -60,3 +60,10 @@
 - Watch `notification_queue.status`, `retry_count`, and `last_error`.
 - Watch `notification_retry_history` for repeated failures.
 - Include `withdrawal_request_id` in logs for all withdrawal-related notifications.
+
+## Compliance Ops Rollout and Alerts
+
+- Use staged rollout controls in `task_compliance_rollout_v1` to avoid hard-cutover enforcement.
+- Use threshold controls in `task_compliance_alert_thresholds_v1` for queue and backlog alerting.
+- `complianceOpsRunner` sends `compliance_ops_alert` when thresholds are exceeded.
+- Runbook: `platform/docs/TASK_COMPLIANCE_ROLLOUT_RUNBOOK.md`

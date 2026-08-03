@@ -76,7 +76,15 @@ export function requireAuthMiddleware(requiredRoles?: UserRole[]) {
       .eq('id', session.user.id)
       .maybeSingle<ProfileGuardRow>();
 
-    if (error || !profile || !profile.is_active || profile.status !== 'active') {
+    if (error || !profile || !profile.is_active) {
+      return redirect('/unauthorized');
+    }
+
+    if (profile.status === 'suspended' || profile.status === 'banned') {
+      return redirect('/suspension');
+    }
+
+    if (profile.status !== 'active') {
       return redirect('/unauthorized');
     }
 

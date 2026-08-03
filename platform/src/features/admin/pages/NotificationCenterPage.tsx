@@ -45,6 +45,15 @@ function formatDate(value: string | null | undefined): string {
   });
 }
 
+function isComplianceQueueItem(row: { template_key: string | null; metadata: Record<string, unknown> | null }): boolean {
+  if (typeof row.template_key === 'string' && row.template_key.startsWith('compliance_')) {
+    return true;
+  }
+
+  const metadata = row.metadata;
+  return Boolean(metadata && typeof metadata.complianceEvent === 'string');
+}
+
 export function NotificationCenterPage(): JSX.Element {
   const [config, setConfig] = useState<CommunicationConfig | null>(null);
   const [templates, setTemplates] = useState<Array<{ key: string; name: string; description: string; channels: string[]; subject: string; body: string; enabled: boolean }>>([]);
@@ -117,6 +126,52 @@ export function NotificationCenterPage(): JSX.Element {
     );
 
     return counts;
+  }, [queueRows]);
+
+  const complianceObservability = useMemo(() => {
+    const complianceRows = queueRows.filter((row) => isComplianceQueueItem(row));
+
+    const statusCounts = complianceRows.reduce(
+      (accumulator, row) => {
+        accumulator.total += 1;
+        if (row.status === 'queued') accumulator.queued += 1;
+        if (row.status === 'processing') accumulator.processing += 1;
+        if (row.status === 'failed') accumulator.failed += 1;
+        if (row.status === 'retry') accumulator.retry += 1;
+        if (row.status === 'sent') accumulator.sent += 1;
+        return accumulator;
+      },
+      { total: 0, queued: 0, processing: 0, failed: 0, retry: 0, sent: 0 },
+    );
+
+    const channelCounts = communicationChannels.map((channel) => ({
+      channel,
+      total: complianceRows.filter((row) => row.channel === channel).length,
+      failed: complianceRows.filter((row) => row.channel === channel && row.status === 'failed').length,
+      retry: complianceRows.filter((row) => row.channel === channel && row.status === 'retry').length,
+      sent: complianceRows.filter((row) => row.channel === channel && row.status === 'sent').length,
+    }));
+
+    const eventCounts = complianceRows.reduce<Record<string, number>>((accumulator, row) => {
+      const metadata = row.metadata;
+      const eventKey =
+        metadata && typeof metadata.complianceEvent === 'string'
+          ? metadata.complianceEvent
+          : row.template_key ?? 'unknown';
+
+      accumulator[eventKey] = (accumulator[eventKey] ?? 0) + 1;
+      return accumulator;
+    }, {});
+
+    const topEvents = Object.entries(eventCounts)
+      .sort((left, right) => right[1] - left[1])
+      .slice(0, 6);
+
+    return {
+      ...statusCounts,
+      channelCounts,
+      topEvents,
+    };
   }, [queueRows]);
 
   const filteredQueueRows = useMemo(() => {
@@ -294,6 +349,67 @@ export function NotificationCenterPage(): JSX.Element {
         <Card className="border border-border bg-surface-elevated p-4"><p className="text-sm text-muted">Retrying</p><p className="mt-2 text-3xl font-bold text-foreground">{queueMetrics.retrying}</p></Card>
         <Card className="border border-border bg-surface-elevated p-4"><p className="text-sm text-muted">Cancelled</p><p className="mt-2 text-3xl font-bold text-foreground">{queueMetrics.cancelled}</p></Card>
       </div>
+
+      <Card className="space-y-4 border border-border bg-surface-elevated">
+        <p className="text-sm uppercase tracking-[0.24em] text-accent/70">Compliance delivery observability</p>
+        <h2 className="text-2xl font-semibold text-foreground">Compliance lifecycle notifications</h2>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <Card className="border border-border bg-surface p-4"><p className="text-sm text-muted">Total</p><p className="mt-2 text-2xl font-bold text-foreground">{complianceObservability.total}</p></Card>
+          <Card className="border border-border bg-surface p-4"><p className="text-sm text-muted">Queued</p><p className="mt-2 text-2xl font-bold text-foreground">{complianceObservability.queued}</p></Card>
+          <Card className="border border-border bg-surface p-4"><p className="text-sm text-muted">Processing</p><p className="mt-2 text-2xl font-bold text-foreground">{complianceObservability.processing}</p></Card>
+          <Card className="border border-border bg-surface p-4"><p className="text-sm text-muted">Failed</p><p className="mt-2 text-2xl font-bold text-foreground">{complianceObservability.failed}</p></Card>
+          <Card className="border border-border bg-surface p-4"><p className="text-sm text-muted">Retry</p><p className="mt-2 text-2xl font-bold text-foreground">{complianceObservability.retry}</p></Card>
+        </div>
+
+        <div className="grid gap-4 xl:grid-cols-2">
+          <div className="overflow-hidden rounded-2xl border border-border bg-surface">
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-surface-elevated text-muted">
+                <tr>
+                  <th className="px-4 py-3 font-medium uppercase tracking-[0.2em]">Channel</th>
+                  <th className="px-4 py-3 font-medium uppercase tracking-[0.2em]">Total</th>
+                  <th className="px-4 py-3 font-medium uppercase tracking-[0.2em]">Sent</th>
+                  <th className="px-4 py-3 font-medium uppercase tracking-[0.2em]">Failed</th>
+                </tr>
+              </thead>
+              <tbody>
+                {complianceObservability.channelCounts.map((entry) => (
+                  <tr key={entry.channel} className="border-t border-border">
+                    <td className="px-4 py-3 text-foreground">{channelLabels[entry.channel]}</td>
+                    <td className="px-4 py-3 text-muted">{entry.total}</td>
+                    <td className="px-4 py-3 text-muted">{entry.sent}</td>
+                    <td className="px-4 py-3 text-muted">{entry.failed + entry.retry}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="overflow-hidden rounded-2xl border border-border bg-surface">
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-surface-elevated text-muted">
+                <tr>
+                  <th className="px-4 py-3 font-medium uppercase tracking-[0.2em]">Lifecycle event</th>
+                  <th className="px-4 py-3 font-medium uppercase tracking-[0.2em]">Count</th>
+                </tr>
+              </thead>
+              <tbody>
+                {complianceObservability.topEvents.map(([eventKey, count]) => (
+                  <tr key={eventKey} className="border-t border-border">
+                    <td className="px-4 py-3 text-muted">{eventKey}</td>
+                    <td className="px-4 py-3 text-foreground">{count}</td>
+                  </tr>
+                ))}
+                {!complianceObservability.topEvents.length ? (
+                  <tr>
+                    <td className="px-4 py-6 text-muted" colSpan={2}>No compliance lifecycle notifications recorded in this queue slice.</td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </Card>
 
       <p className="rounded-xl border border-border bg-surface-elevated px-4 py-3 text-sm text-muted">{statusMessage}</p>
 

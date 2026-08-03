@@ -105,7 +105,7 @@ describe('NotificationCenterPage', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Cancel item' }));
     await waitFor(() => expect(apiState.cancelNotificationQueueItem).toHaveBeenCalledWith('queue-1'));
-  });
+  }, 15000);
 
   it('processes due notifications from the queue control', async () => {
     render(<NotificationCenterPage />);

@@ -20,6 +20,7 @@ import { CmsPublicPage } from '@/features/content/pages/CmsPublicPage';
 import { CmsCustomPage } from '@/features/content/pages/CmsCustomPage';
 import { UnauthorizedPage } from '@/features/errors/pages/UnauthorizedPage';
 import { NotFoundPage } from '@/features/errors/pages/NotFoundPage';
+import { SuspensionNoticePage } from '@/features/errors/pages/SuspensionNoticePage';
 
 // Authenticated pages
 import { DashboardPage } from '@/features/dashboard/pages/DashboardPage';
@@ -32,6 +33,7 @@ import { RewardHistoryPage } from '@/features/rewards/pages/RewardHistoryPage';
 import { GamificationPage } from '@/features/rewards/pages/GamificationPage';
 import { ProfilePage } from '@/features/profile/pages/ProfilePage';
 import { NotificationHistoryPage } from '@/features/profile/pages/NotificationHistoryPage';
+import { TaskOnboardingPage } from '@/features/profile/pages/TaskOnboardingPage';
 
 // Admin/Campaign Manager pages
 import { DashboardAnalyticsPage } from '@/features/admin/pages/DashboardAnalyticsPage';
@@ -66,6 +68,12 @@ import { SubmissionReviewPage } from '@/features/admin/pages/SubmissionReviewPag
 import { P2PMerchantControlPage } from '@/features/admin/pages/P2PMerchantControlPage';
 import { P2PDisputesPage } from '@/features/admin/pages/P2PDisputesPage';
 import { P2PRiskConsolePage } from '@/features/admin/pages/P2PRiskConsolePage';
+import { CompliancePoliciesPage } from '@/features/admin/pages/CompliancePoliciesPage';
+import { ComplianceDashboardPage } from '@/features/admin/pages/ComplianceDashboardPage';
+import { WithdrawalComplianceQueuePage } from '@/features/admin/pages/WithdrawalComplianceQueuePage';
+import { AppealsManagementPage } from '@/features/admin/pages/AppealsManagementPage';
+import { SocialPlatformsConfigPage } from '@/features/admin/pages/SocialPlatformsConfigPage';
+import { SuspensionCasesPage } from '@/features/admin/pages/SuspensionCasesPage';
 
 // Super Admin pages
 import { AdminPanelPage } from '@/features/admin/pages/AdminPanelPage';
@@ -105,6 +113,7 @@ const routes: RouteObject[] = [
       { path: 'forgot-password', loader: guestOnlyMiddleware(), element: <ForgotPasswordPage /> },
       { path: 'reset-password', loader: guestOnlyMiddleware(), element: <ResetPasswordPage /> },
       { path: 'unauthorized', element: <UnauthorizedPage /> },
+      { path: 'suspension', element: <SuspensionNoticePage /> },
     ],
   },
 
@@ -120,6 +129,7 @@ const routes: RouteObject[] = [
     children: [
       { index: true, element: <DashboardPage /> },
       { path: 'profile', element: <ProfilePage /> },
+      { path: 'onboarding', element: <TaskOnboardingPage /> },
       { path: 'campaigns', element: <CampaignBrowsePage /> },
       { path: 'campaigns/:id', element: <CampaignDetailPage /> },
       { path: 'tasks', element: <UserTasksPage /> },
@@ -192,6 +202,12 @@ const routes: RouteObject[] = [
       { path: 'p2p-merchants', element: <P2PMerchantControlPage /> },
       { path: 'p2p-disputes', element: <P2PDisputesPage /> },
       { path: 'p2p-risk', element: <P2PRiskConsolePage /> },
+      { path: 'compliance-policies', element: <CompliancePoliciesPage /> },
+      { path: 'compliance-dashboard', element: <ComplianceDashboardPage /> },
+      { path: 'withdrawal-compliance', element: <WithdrawalComplianceQueuePage /> },
+      { path: 'appeals-management', element: <AppealsManagementPage /> },
+      { path: 'social-platforms', element: <SocialPlatformsConfigPage /> },
+      { path: 'suspension-cases', element: <SuspensionCasesPage /> },
       { path: 'task-engine', element: <TaskEnginePage /> },
       { path: 'system-settings', element: <SystemSettingsPage /> },
       { path: 'email-templates', element: <EmailTemplatesPage /> },

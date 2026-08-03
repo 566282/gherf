@@ -211,6 +211,9 @@ export function ProfilePage(): JSX.Element {
               <Link to="/app/tasks" className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white transition hover:border-mint/30 hover:bg-mint/10">
                 Resume tasks
               </Link>
+              <Link to="/app/onboarding" className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white transition hover:border-mint/30 hover:bg-mint/10">
+                Task onboarding
+              </Link>
               <Link to="/app/gamification" className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white transition hover:border-mint/30 hover:bg-mint/10">
                 View leaderboard
               </Link>

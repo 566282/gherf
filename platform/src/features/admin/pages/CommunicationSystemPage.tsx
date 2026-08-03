@@ -26,6 +26,13 @@ const templateLabels: Record<CommunicationTemplateKey, string> = {
   reward_update: 'Reward update',
   live_announcement: 'Live announcement',
   promotional_blast: 'Promotional blast',
+  compliance_withdrawal_held: 'Compliance: withdrawal held',
+  compliance_withdrawal_approved: 'Compliance: withdrawal approved',
+  compliance_verification_review_required: 'Compliance: verification review required',
+  compliance_enforcement_applied: 'Compliance: enforcement applied',
+  compliance_appeal_submitted: 'Compliance: appeal submitted',
+  compliance_appeal_decided: 'Compliance: appeal decided',
+  compliance_ops_alert: 'Compliance: operations alert',
 };
 
 const channelLabels: Record<CommunicationChannel, string> = {

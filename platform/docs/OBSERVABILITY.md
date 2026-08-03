@@ -14,6 +14,9 @@
 - Correlate frontend failures with Supabase and Netlify release timestamps.
 - Capture logs for the notification queue worker and the RPCs that enqueue or process notifications.
 - Alert on repeated failures from `process_notification_queue` or a growing `notification_queue.status = 'failed'` count.
+- Track compliance lifecycle delivery by event, status, and channel in Notification Center.
+- Track compliance ops thresholds from `task_compliance_alert_thresholds_v1` and route `compliance_ops_alert` to on-call admins.
+- Use the rollout sequence in `platform/docs/TASK_COMPLIANCE_ROLLOUT_RUNBOOK.md` for staged enforcement.
 
 ## Logging Rules
 
