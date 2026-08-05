@@ -24,6 +24,7 @@ const CMS_SETTING_KEY = 'cms_content_config';
 
 const pageLabels: Record<CmsPageKey, string> = {
   home: 'Homepage',
+  benefits: 'Benefits',
   faqs: 'FAQs',
   about: 'About',
   contact: 'Contact',
@@ -51,6 +52,14 @@ const defaultItems: Record<CmsPageKey, CmsContentItem[]> = {
     { title: 'Premium advertiser controls', body: 'Launch and optimize campaigns with clear spend governance, brand-safe approvals, and fast execution.', meta: 'Trust' },
     { title: 'Rewarding user experiences', body: 'Keep the experience clean, mobile-first, and intuitive so engagement feels polished instead of gimmicky.', meta: 'Engagement' },
     { title: 'Operational clarity', body: 'Finance, support, content, and compliance all run from one reliable operating system.', meta: 'Scale' },
+  ],
+  benefits: [
+    { title: 'User earning model that stays realistic', body: 'Users earn by completing verified campaigns, referrals, and daily participation paths. Practical outcomes depend on consistency, campaign availability, geography, and membership level rather than guaranteed fixed income claims.', meta: 'For users' },
+    { title: 'How users can grow monthly earnings', body: 'High-intent users can increase results by focusing on campaigns with clear qualification rules, keeping account verification current, maintaining streaks, and avoiding disqualifying behavior that blocks reward eligibility.', meta: 'User income strategy' },
+    { title: 'Advertiser ROI through measurable actions', body: 'Advertisers pay for validated outcomes instead of broad untargeted exposure. Better budget efficiency comes from defined task funnels, campaign governance, and conversion-aware optimization rather than inflated vanity traffic.', meta: 'For advertisers' },
+    { title: 'What makes Go4Wealth stand out from common alternatives', body: 'Many competitors optimize for raw activity volume. Go4Wealth emphasizes trust controls, review-aware reward operations, and transparent payout policy so both users and advertisers can scale with less dispute risk.', meta: 'Competitive edge' },
+    { title: 'Lower friction for serious operators', body: 'Advertisers can work from one business workspace for onboarding, funding visibility, campaign controls, submissions, communications, and analytics, reducing coordination overhead across disconnected tools.', meta: 'Operator advantage' },
+    { title: 'Trust signals that protect long-term value', body: 'Clear policies, status-driven workflows, and governed publishing reduce confusion and improve retention. That stability helps users preserve earning continuity and helps advertisers sustain campaign quality over time.', meta: 'Long-term durability' },
   ],
   faqs: [
     { title: 'How does Go4Wealth work?', body: 'Advertisers launch high-trust campaigns, users complete guided actions, and the platform tracks rewards in a transparent flow.', meta: 'Product' },
@@ -214,6 +223,16 @@ const defaultPages: Record<CmsPageKey, CmsPageContent> = {
     highlights: ['Premium fintech-style UI', 'Fast mobile-first flows', 'Editable by administrators'],
     items: defaultItems.home,
     homeContent: defaultHomeContent,
+  },
+  benefits: {
+    eyebrow: 'Value outcomes',
+    title: 'Benefits for users and advertisers built around real earning and ROI outcomes.',
+    summary: 'This page explains who earns, how they earn, what influences performance, and why Go4Wealth is positioned differently from activity-only reward platforms.',
+    body: 'Go4Wealth is designed to align verified user effort with advertiser conversion goals. Users can increase earnings through consistent qualified participation, while advertisers improve return through governance, targeting, and measurable campaign execution.',
+    ctaLabel: 'View advertiser pages',
+    ctaHref: '/advertiser-pages',
+    highlights: ['Realistic user earning pathways', 'Advertiser ROI and budget efficiency focus', 'Trust-first differentiation versus volume-first competitors'],
+    items: defaultItems.benefits,
   },
   faqs: {
     eyebrow: 'Knowledge base',

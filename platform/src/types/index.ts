@@ -723,6 +723,7 @@ export interface AdminConsoleConfig {
 
 export const cmsPageKeys = [
   'home',
+  'benefits',
   'faqs',
   'about',
   'contact',

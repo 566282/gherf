@@ -89,6 +89,7 @@ const routes: RouteObject[] = [
     element: <PublicLayout />,
     children: [
       { index: true, element: <HomePage /> },
+      { path: 'benefits', element: <CmsPublicPage pageKey="benefits" /> },
       { path: 'about', element: <CmsPublicPage pageKey="about" /> },
       { path: 'contact', element: <CmsPublicPage pageKey="contact" /> },
       { path: 'news', element: <CmsPublicPage pageKey="news" /> },

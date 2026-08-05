@@ -131,16 +131,16 @@ export function HomePage(): JSX.Element {
           </div>
 
           <nav className="hidden items-center gap-2 xl:flex" aria-label={header.primaryNavLabel}>
-            <Link to="#benefits" className="rounded-full px-3 py-2 text-sm text-muted transition hover:bg-surface-elevated hover:text-foreground">
+            <Link to="/benefits" className="rounded-full px-3 py-2 text-sm text-muted transition hover:bg-surface-elevated hover:text-foreground">
               {header.benefitsLabel}
             </Link>
-            <Link to="#how-it-works" className="rounded-full px-3 py-2 text-sm text-muted transition hover:bg-surface-elevated hover:text-foreground">
+            <Link to="/user-guides" className="rounded-full px-3 py-2 text-sm text-muted transition hover:bg-surface-elevated hover:text-foreground">
               {header.howItWorksLabel}
             </Link>
-            <Link to="#security" className="rounded-full px-3 py-2 text-sm text-muted transition hover:bg-surface-elevated hover:text-foreground">
+            <Link to="/help-center" className="rounded-full px-3 py-2 text-sm text-muted transition hover:bg-surface-elevated hover:text-foreground">
               {header.securityLabel}
             </Link>
-            <Link to="#faq" className="rounded-full px-3 py-2 text-sm text-muted transition hover:bg-surface-elevated hover:text-foreground">
+            <Link to="/faqs" className="rounded-full px-3 py-2 text-sm text-muted transition hover:bg-surface-elevated hover:text-foreground">
               {header.faqLabel}
             </Link>
           </nav>
@@ -186,16 +186,16 @@ export function HomePage(): JSX.Element {
                 />
               </label>
               <div className="mt-3 grid gap-1">
-                <Link to="#benefits" className="rounded-xl px-3 py-2 text-sm text-foreground transition hover:bg-surface-elevated">
+                <Link to="/benefits" className="rounded-xl px-3 py-2 text-sm text-foreground transition hover:bg-surface-elevated">
                   {header.benefitsLabel}
                 </Link>
-                <Link to="#how-it-works" className="rounded-xl px-3 py-2 text-sm text-foreground transition hover:bg-surface-elevated">
+                <Link to="/user-guides" className="rounded-xl px-3 py-2 text-sm text-foreground transition hover:bg-surface-elevated">
                   {header.howItWorksLabel}
                 </Link>
-                <Link to="#campaigns" className="rounded-xl px-3 py-2 text-sm text-foreground transition hover:bg-surface-elevated">
+                <Link to="/app/campaigns" className="rounded-xl px-3 py-2 text-sm text-foreground transition hover:bg-surface-elevated">
                   {header.campaignsLabel}
                 </Link>
-                <Link to="#security" className="rounded-xl px-3 py-2 text-sm text-foreground transition hover:bg-surface-elevated">
+                <Link to="/help-center" className="rounded-xl px-3 py-2 text-sm text-foreground transition hover:bg-surface-elevated">
                   {header.securityLabel}
                 </Link>
                 <Link to="/login" className="rounded-xl px-3 py-2 text-sm text-foreground transition hover:bg-surface-elevated">
@@ -230,7 +230,7 @@ export function HomePage(): JSX.Element {
               <Link to={ctaHref} className="rounded-full bg-accent px-5 py-3 text-sm font-semibold text-accent-foreground transition hover:bg-accent-strong">
                 {ctaLabel}
               </Link>
-              <Link to="#campaigns" className="rounded-full border border-border bg-surface-elevated px-5 py-3 text-sm text-foreground transition hover:border-accent/40 hover:text-accent">
+              <Link to="/app/campaigns" className="rounded-full border border-border bg-surface-elevated px-5 py-3 text-sm text-foreground transition hover:border-accent/40 hover:text-accent">
                 {hero.browseCampaignsLabel}
               </Link>
               <Link to="/help-center" className="rounded-full border border-border bg-transparent px-5 py-3 text-sm text-foreground transition hover:border-accent/40 hover:bg-surface-elevated">
@@ -552,7 +552,7 @@ export function HomePage(): JSX.Element {
           <Link to="/" className="flex-1 rounded-full border border-border bg-surface-elevated px-4 py-3 text-center text-sm font-medium text-foreground">
             {footer.mobileHomeLabel}
           </Link>
-          <Link to="#campaigns" className="flex-1 rounded-full border border-border bg-surface-elevated px-4 py-3 text-center text-sm font-medium text-foreground">
+          <Link to="/app/campaigns" className="flex-1 rounded-full border border-border bg-surface-elevated px-4 py-3 text-center text-sm font-medium text-foreground">
             {footer.mobileCampaignsLabel}
           </Link>
           <Link to="/signup" className="flex-1 rounded-full bg-accent px-4 py-3 text-center text-sm font-semibold text-accent-foreground">
