@@ -4,7 +4,9 @@ import { useQuery } from '@tanstack/react-query';
 import { Card } from '@/components/ui/Card';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { RewardVaultWidget } from '@/components/ui/RewardVaultWidget';
+import { TelemetryDebugPanel } from '@/components/ui/TelemetryDebugPanel';
 import { useAuth } from '@/app/providers/AuthProvider';
+import { emitDashboardTelemetry } from '@/lib/telemetry';
 import { listNotifications, listRewardLedger, listWalletActivity } from '@/services/api/auth';
 import { listGamificationConfig, type GamificationConfig } from '@/services/api/gamification';
 import { listSupportTickets } from '@/services/api/support';
@@ -38,6 +40,9 @@ interface DashboardMetrics {
   };
 }
 
+const RECENT_ACTIVITY_LIMIT = 20;
+const ACTIVITY_BATCH_SIZE = 5;
+
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -66,27 +71,25 @@ function formatTimeAgo(time: string): string {
 }
 
 function mapRecentActivity(walletActivity: WalletActivity[], rewardLedger: RewardLedgerItem[]): DashboardMetrics['recentActivity'] {
-  const activity = walletActivity.slice(0, 4).map((item) => ({
-    id: item.id,
+  const walletEvents = walletActivity.map((item) => ({
+    id: `wallet-${item.id}`,
     title: item.note ?? 'Wallet update',
     amount: Math.abs(item.amount),
     time: item.createdAt,
     type: item.amount >= 0 ? 'earn' : 'task',
   }));
 
-  if (activity.length >= 4) {
-    return activity;
-  }
-
-  const rewardActivity = rewardLedger.slice(0, 4 - activity.length).map((item) => ({
-    id: item.id,
+  const rewardEvents = rewardLedger.map((item) => ({
+    id: `reward-${item.id}`,
     title: item.reason ?? `Reward ${item.action}`,
-    amount: item.amount,
+    amount: Math.abs(item.amount),
     time: item.createdAt,
     type: 'referral' as const,
   }));
 
-  return [...activity, ...rewardActivity];
+  return [...walletEvents, ...rewardEvents]
+    .sort((left, right) => new Date(right.time).getTime() - new Date(left.time).getTime())
+    .slice(0, RECENT_ACTIVITY_LIMIT);
 }
 
 function mapRecentNotifications(notifications: NotificationItem[]): DashboardMetrics['recentNotifications'] {
@@ -230,8 +233,14 @@ export function DashboardPage(): JSX.Element {
   });
   const [activityFilter, setActivityFilter] = useState<'all' | 'earn' | 'task' | 'referral'>('all');
   const [activityQuery, setActivityQuery] = useState('');
-  const [activityPage, setActivityPage] = useState(1);
-  const pageSize = 3;
+  const [visibleActivityCount, setVisibleActivityCount] = useState(ACTIVITY_BATCH_SIZE);
+  const [insightsExpanded, setInsightsExpanded] = useState(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return true;
+    }
+
+    return window.matchMedia('(min-width: 1280px)').matches;
+  });
 
   const filteredActivities = useMemo(() => {
     const items = dashboardData?.recentActivity ?? [];
@@ -244,9 +253,8 @@ export function DashboardPage(): JSX.Element {
     });
   }, [activityFilter, activityQuery, dashboardData?.recentActivity]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredActivities.length / pageSize));
-  const currentActivityPage = Math.min(activityPage, totalPages);
-  const activitySlice = filteredActivities.slice((currentActivityPage - 1) * pageSize, currentActivityPage * pageSize);
+  const activitySlice = filteredActivities.slice(0, visibleActivityCount);
+  const hasMoreActivity = filteredActivities.length > visibleActivityCount;
 
   const ticketStatusClass = (status: string): string => {
     if (status === 'completed' || status === 'resolved' || status === 'closed') return 'text-mint';
@@ -295,6 +303,7 @@ export function DashboardPage(): JSX.Element {
 
   return (
     <div className="space-y-6">
+      <TelemetryDebugPanel />
       {/* Header */}
       <Card>
         <div className="flex items-center justify-between">
@@ -514,7 +523,34 @@ export function DashboardPage(): JSX.Element {
       </div>
 
       {/* Notifications and goals */}
-      <div className="grid gap-6 xl:grid-cols-4">
+      <Card>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold text-white">More insights</h2>
+            <p className="text-sm text-mist/70">Notifications, leaderboard, referrals, and progress snapshots.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setInsightsExpanded((current) => {
+                const next = !current;
+                emitDashboardTelemetry({
+                  area: 'user',
+                  action: next ? 'expand_insights' : 'collapse_insights',
+                });
+                return next;
+              });
+            }}
+            aria-expanded={insightsExpanded}
+            aria-controls="dashboard-insights-panel"
+            className="rounded-full border border-white/10 px-3 py-1.5 text-sm text-mist transition hover:border-mint/30 hover:text-mint"
+          >
+            {insightsExpanded ? 'Collapse' : 'Expand'}
+          </button>
+        </div>
+      </Card>
+
+      <div id="dashboard-insights-panel" className={`grid gap-6 xl:grid-cols-4 ${insightsExpanded ? '' : 'hidden'}`}>
         <Card>
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-white">Notifications</h2>
@@ -623,7 +659,7 @@ export function DashboardPage(): JSX.Element {
                   value={activityQuery}
                   onChange={(event) => {
                     setActivityQuery(event.target.value);
-                    setActivityPage(1);
+                    setVisibleActivityCount(ACTIVITY_BATCH_SIZE);
                   }}
                   placeholder="Find an activity"
                   className="input-base bg-white/5"
@@ -635,7 +671,7 @@ export function DashboardPage(): JSX.Element {
                   value={activityFilter}
                   onChange={(event) => {
                     setActivityFilter(event.target.value as typeof activityFilter);
-                    setActivityPage(1);
+                    setVisibleActivityCount(ACTIVITY_BATCH_SIZE);
                   }}
                   className="input-base bg-white/5"
                 >
@@ -673,25 +709,40 @@ export function DashboardPage(): JSX.Element {
           </div>
           <div className="mt-4 flex items-center justify-between gap-3 border-t border-white/10 pt-4 text-sm text-mist/70">
             <span>
-              Page {currentActivityPage} of {totalPages}
+              Showing {Math.min(activitySlice.length, filteredActivities.length)} of {filteredActivities.length}
             </span>
             <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setActivityPage((page) => Math.max(1, page - 1))}
-                disabled={currentActivityPage === 1}
-                className="rounded-full border border-white/10 px-3 py-1.5 text-sm hover:border-mint/30 hover:text-mint disabled:opacity-40"
-              >
-                Previous
-              </button>
-              <button
-                type="button"
-                onClick={() => setActivityPage((page) => Math.min(totalPages, page + 1))}
-                disabled={currentActivityPage === totalPages}
-                className="rounded-full border border-white/10 px-3 py-1.5 text-sm hover:border-mint/30 hover:text-mint disabled:opacity-40"
-              >
-                Next
-              </button>
+              {hasMoreActivity ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVisibleActivityCount((count) => count + ACTIVITY_BATCH_SIZE);
+                    emitDashboardTelemetry({
+                      area: 'user',
+                      action: 'show_more_activity',
+                      metadata: { batchSize: ACTIVITY_BATCH_SIZE },
+                    });
+                  }}
+                  className="rounded-full border border-white/10 px-3 py-1.5 text-sm hover:border-mint/30 hover:text-mint"
+                >
+                  Show more
+                </button>
+              ) : null}
+              {visibleActivityCount > ACTIVITY_BATCH_SIZE && filteredActivities.length > ACTIVITY_BATCH_SIZE ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVisibleActivityCount(ACTIVITY_BATCH_SIZE);
+                    emitDashboardTelemetry({
+                      area: 'user',
+                      action: 'show_less_activity',
+                    });
+                  }}
+                  className="rounded-full border border-white/10 px-3 py-1.5 text-sm hover:border-mint/30 hover:text-mint"
+                >
+                  Show less
+                </button>
+              ) : null}
             </div>
           </div>
         </Card>

@@ -110,6 +110,20 @@ function renderDashboard(): void {
 
 describe('DashboardPage', () => {
   beforeEach(() => {
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      value: vi.fn().mockImplementation((query: string) => ({
+        matches: query.includes('min-width') ? true : false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    });
+
     authState.profile = baseProfile;
 
     apiState.listGamificationConfig.mockResolvedValue(gamificationConfig);
@@ -151,7 +165,8 @@ describe('DashboardPage', () => {
     expect(screen.getByText('Leaderboard active')).toBeInTheDocument();
     expect(screen.getByText('Reward approved')).toBeInTheDocument();
     expect(screen.getByText('New campaign available')).toBeInTheDocument();
-    expect(screen.getByText('Page 1 of 2')).toBeInTheDocument();
+    expect(screen.getByText('Showing 5 of 8')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Show more' })).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Find an activity')).toBeInTheDocument();
     expect(screen.getByText('Open profile notifications →')).toBeInTheDocument();
   });

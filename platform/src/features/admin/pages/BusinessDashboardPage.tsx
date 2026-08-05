@@ -3,7 +3,9 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { TelemetryDebugPanel } from '@/components/ui/TelemetryDebugPanel';
 import { formatCurrency } from '@/lib/auth';
+import { emitDashboardTelemetry } from '@/lib/telemetry';
 import { defaultFraudThresholds, describeFraudRiskChecks, fraudRiskChecks } from '@/services/api/fraud';
 import { campaignToFormValues, listCampaigns, saveCampaign, transitionCampaignStatus } from '@/services/api/campaigns';
 import { sendAdminPaymentNotification } from '@/services/api/communications';
@@ -72,6 +74,10 @@ const exportOptions: Array<{ value: ExportFormat; label: string }> = [
 const statusFilters = ['all', 'active', 'paused', 'scheduled', 'draft', 'completed', 'archived'] as const;
 
 const chartSeriesColors = ['hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))', 'hsl(var(--chart-5))'];
+const CAMPAIGN_ROWS_BATCH_SIZE = 8;
+const FEED_BATCH_SIZE = 4;
+
+type SectionKey = 'portfolio' | 'campaignOperations' | 'activityDiagnostics';
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
@@ -470,6 +476,14 @@ export function BusinessDashboardPage() {
   const [fontScale, setFontScale] = useState(100);
   const [exportFormat, setExportFormat] = useState<ExportFormat>('csv');
   const [searchQuery, setSearchQuery] = useState('');
+  const [campaignRowsVisibleCount, setCampaignRowsVisibleCount] = useState(CAMPAIGN_ROWS_BATCH_SIZE);
+  const [activityRowsVisibleCount, setActivityRowsVisibleCount] = useState(FEED_BATCH_SIZE);
+  const [conversionRowsVisibleCount, setConversionRowsVisibleCount] = useState(FEED_BATCH_SIZE);
+  const [expandedSections, setExpandedSections] = useState<Record<SectionKey, boolean>>({
+    portfolio: true,
+    campaignOperations: true,
+    activityDiagnostics: false,
+  });
   const [activityLog, setActivityLog] = useState<BusinessEvent[]>([
     {
       id: 'event-registration',
@@ -480,6 +494,15 @@ export function BusinessDashboardPage() {
     },
   ]);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+
+  const setSectionExpanded = (section: SectionKey, expanded: boolean) => {
+    setExpandedSections((current) => ({ ...current, [section]: expanded }));
+    emitDashboardTelemetry({
+      area: 'business',
+      action: expanded ? 'expand_section' : 'collapse_section',
+      metadata: { section },
+    });
+  };
 
   useEffect(() => {
     if (loadedCampaigns.length > 0) {
@@ -512,6 +535,11 @@ export function BusinessDashboardPage() {
       return matchesStatus && matchesChannel && matchesSearch;
     });
   }, [campaignRows, channelFilter, searchQuery, statusFilter]);
+
+  useEffect(() => {
+    setCampaignRowsVisibleCount(CAMPAIGN_ROWS_BATCH_SIZE);
+    setConversionRowsVisibleCount(FEED_BATCH_SIZE);
+  }, [searchQuery, statusFilter, channelFilter, timeWindow]);
 
   useEffect(() => {
     if (selectedCampaignIdValue && selectedCampaignIdValue !== selectedCampaignId) {
@@ -595,6 +623,23 @@ export function BusinessDashboardPage() {
       .sort((left, right) => right.count - left.count)
       .slice(0, 4);
   }, [campaignRows, filteredCampaignRows]);
+
+  const visibleCampaignRows = useMemo(
+    () => campaignRows.slice(0, campaignRowsVisibleCount),
+    [campaignRows, campaignRowsVisibleCount],
+  );
+  const visibleConversionFeed = useMemo(
+    () => conversionFeed.slice(0, conversionRowsVisibleCount),
+    [conversionFeed, conversionRowsVisibleCount],
+  );
+  const visibleActivityLog = useMemo(
+    () => activityLog.slice(0, activityRowsVisibleCount),
+    [activityLog, activityRowsVisibleCount],
+  );
+  const spendingHistoryMax = useMemo(
+    () => Math.max(...summary.spendingHistory.map((item) => item.value), 1),
+    [summary.spendingHistory],
+  );
 
   const chartCampaignRows = filteredCampaignRows.length > 0 ? filteredCampaignRows : campaignRows;
   const channelOptions = useMemo(
@@ -868,6 +913,7 @@ export function BusinessDashboardPage() {
 
   return (
     <div className="space-y-6 p-6" style={{ fontSize: `${fontScale}%` }} data-contrast={highContrast ? 'high' : 'normal'}>
+      <TelemetryDebugPanel />
       {statusMessage ? (
         <Card className="border border-white/10 bg-white/5" role="status" aria-live="polite">
           <p className="text-sm uppercase tracking-[0.24em] text-mint/70">Dashboard update</p>
@@ -875,6 +921,53 @@ export function BusinessDashboardPage() {
         </Card>
       ) : null}
 
+      <Card className="space-y-4 border border-white/10 bg-white/5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm uppercase tracking-[0.24em] text-mint/70">Workspace map</p>
+            <h2 className="mt-1 text-xl font-semibold text-white">Jump to sections</h2>
+          </div>
+          <div className="flex flex-wrap gap-2 text-sm">
+            <a href="#portfolio-performance" className="rounded-full border border-white/10 px-3 py-1.5 text-mist hover:border-mint/30 hover:text-mint">Portfolio</a>
+            <a href="#campaign-operations" className="rounded-full border border-white/10 px-3 py-1.5 text-mist hover:border-mint/30 hover:text-mint">Operations</a>
+            <a href="#activity-diagnostics" className="rounded-full border border-white/10 px-3 py-1.5 text-mist hover:border-mint/30 hover:text-mint">Diagnostics</a>
+          </div>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-3">
+          <button
+            type="button"
+            aria-expanded={expandedSections.portfolio}
+            aria-controls="portfolio-performance"
+            onClick={() => setSectionExpanded('portfolio', !expandedSections.portfolio)}
+            className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-left text-sm text-mist transition hover:border-mint/30 hover:text-mint"
+          >
+            {expandedSections.portfolio ? 'Hide' : 'Show'} portfolio performance
+          </button>
+          <button
+            type="button"
+            aria-expanded={expandedSections.campaignOperations}
+            aria-controls="campaign-operations"
+            onClick={() => setSectionExpanded('campaignOperations', !expandedSections.campaignOperations)}
+            className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-left text-sm text-mist transition hover:border-mint/30 hover:text-mint"
+          >
+            {expandedSections.campaignOperations ? 'Hide' : 'Show'} campaign operations
+          </button>
+          <button
+            type="button"
+            aria-expanded={expandedSections.activityDiagnostics}
+            aria-controls="activity-diagnostics"
+            onClick={() => setSectionExpanded('activityDiagnostics', !expandedSections.activityDiagnostics)}
+            className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-left text-sm text-mist transition hover:border-mint/30 hover:text-mint"
+          >
+            {expandedSections.activityDiagnostics ? 'Hide' : 'Show'} activity diagnostics
+          </button>
+        </div>
+      </Card>
+
+      <section
+        id="portfolio-performance"
+        className={`space-y-6 transition-opacity duration-300 motion-reduce:transition-none ${expandedSections.portfolio ? 'opacity-100' : 'hidden opacity-0'}`}
+      >
       {/* Quick actions row for power users */}
       <div className="flex flex-wrap items-center gap-2">
         <Link to="/business/analytics">
@@ -1235,7 +1328,12 @@ export function BusinessDashboardPage() {
           </div>
         </Card>
       </div>
+      </section>
 
+      <section
+        id="campaign-operations"
+        className={`space-y-6 transition-opacity duration-300 motion-reduce:transition-none ${expandedSections.campaignOperations ? 'opacity-100' : 'hidden opacity-0'}`}
+      >
       <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
         <Card className="space-y-5 border border-white/5 bg-white/5">
           <div className="space-y-3">
@@ -1369,33 +1467,7 @@ export function BusinessDashboardPage() {
             </div>
           </div>
 
-          <div className="space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <h3 className="text-lg font-semibold text-white">Budget history</h3>
-                <p className="text-sm text-mist">Weekly spend trend calculated from the current campaign portfolio.</p>
-              </div>
-              <p className="text-sm text-mist">{formatCurrency(summary.totalSpend, 'USD')}</p>
-            </div>
-            <div className="space-y-3">
-              {summary.spendingHistory.map((point) => {
-                const maxValue = Math.max(...summary.spendingHistory.map((item) => item.value), 1);
-                const width = Math.max(8, (point.value / maxValue) * 100);
-
-                return (
-                  <div key={point.label} className="space-y-1">
-                    <div className="flex items-center justify-between text-sm text-mist/80">
-                      <span>{point.label}</span>
-                      <span>{formatCurrency(point.value, 'USD')}</span>
-                    </div>
-                    <div className="h-2 rounded-full bg-white/10">
-                      <div className="h-full rounded-full bg-gradient-to-r from-ember to-mint" style={{ width: `${width}%` }} />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          <p className="text-sm text-mist">Budget history is shown in the diagnostics section to avoid duplicate reporting blocks.</p>
         </Card>
 
         <Card className="space-y-5 border border-white/5 bg-white/5">
@@ -1571,7 +1643,7 @@ export function BusinessDashboardPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
-                  {campaignRows.map(({ campaign, metrics }) => (
+                  {visibleCampaignRows.map(({ campaign, metrics }) => (
                     <tr key={campaign.id} className={`align-top transition ${campaign.id === selectedCampaign?.id ? 'bg-ember/5' : 'bg-transparent'}`}>
                       <td className="px-4 py-4">
                         <button className="text-left text-white hover:text-ember" onClick={() => setSelectedCampaignId(campaign.id)}>
@@ -1607,6 +1679,32 @@ export function BusinessDashboardPage() {
                 </tbody>
               </table>
             </div>
+            {campaignRows.length > visibleCampaignRows.length ? (
+              <div className="flex justify-end border-t border-white/10 p-3">
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setCampaignRowsVisibleCount((count) => count + CAMPAIGN_ROWS_BATCH_SIZE);
+                    emitDashboardTelemetry({ area: 'business', action: 'show_more_campaign_rows', metadata: { batchSize: CAMPAIGN_ROWS_BATCH_SIZE } });
+                  }}
+                >
+                  Show more campaigns
+                </Button>
+              </div>
+            ) : null}
+            {campaignRowsVisibleCount > CAMPAIGN_ROWS_BATCH_SIZE && campaignRows.length > CAMPAIGN_ROWS_BATCH_SIZE ? (
+              <div className="flex justify-end border-t border-white/10 p-3">
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setCampaignRowsVisibleCount(CAMPAIGN_ROWS_BATCH_SIZE);
+                    emitDashboardTelemetry({ area: 'business', action: 'show_less_campaign_rows' });
+                  }}
+                >
+                  Show fewer campaigns
+                </Button>
+              </div>
+            ) : null}
           </div>
         </Card>
 
@@ -1617,7 +1715,7 @@ export function BusinessDashboardPage() {
               <h2 className="mt-1 text-2xl font-bold text-white">Recent conversion sources</h2>
             </div>
             <div className="space-y-3">
-              {conversionFeed.map((entry) => (
+              {visibleConversionFeed.map((entry) => (
                 <div key={entry.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
@@ -1632,6 +1730,17 @@ export function BusinessDashboardPage() {
                   <p className="mt-2 text-xs text-mist/60">Updated {formatDate(entry.updatedAt)}</p>
                 </div>
               ))}
+              {conversionFeed.length > visibleConversionFeed.length ? (
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setConversionRowsVisibleCount((count) => count + FEED_BATCH_SIZE);
+                    emitDashboardTelemetry({ area: 'business', action: 'show_more_conversion_feed', metadata: { batchSize: FEED_BATCH_SIZE } });
+                  }}
+                >
+                  Show more sources
+                </Button>
+              ) : null}
             </div>
           </Card>
 
@@ -1643,8 +1752,7 @@ export function BusinessDashboardPage() {
             </div>
             <div className="space-y-3">
               {summary.spendingHistory.map((point) => {
-                const maxValue = Math.max(...summary.spendingHistory.map((item) => item.value), 1);
-                const width = Math.max(8, (point.value / maxValue) * 100);
+                const width = Math.max(8, (point.value / spendingHistoryMax) * 100);
 
                 return (
                   <div key={point.label} className="space-y-1">
@@ -1667,7 +1775,7 @@ export function BusinessDashboardPage() {
               <h2 className="mt-1 text-2xl font-bold text-white">Latest actions</h2>
             </div>
             <div className="space-y-3">
-              {activityLog.map((entry) => (
+              {visibleActivityLog.map((entry) => (
                 <div key={entry.id} className={`rounded-2xl border p-4 text-sm ${toneClass(entry.tone)}`}>
                   <div className="flex items-start justify-between gap-3">
                     <p className="font-medium text-white">{entry.title}</p>
@@ -1676,10 +1784,28 @@ export function BusinessDashboardPage() {
                   <p className="mt-2 text-mist/80">{entry.detail}</p>
                 </div>
               ))}
+              {activityLog.length > visibleActivityLog.length ? (
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setActivityRowsVisibleCount((count) => count + FEED_BATCH_SIZE);
+                    emitDashboardTelemetry({ area: 'business', action: 'show_more_activity_log', metadata: { batchSize: FEED_BATCH_SIZE } });
+                  }}
+                >
+                  Show more activity
+                </Button>
+              ) : null}
             </div>
           </Card>
         </div>
       </div>
+
+      </section>
+
+      <section
+        id="activity-diagnostics"
+        className={`space-y-6 transition-opacity duration-300 motion-reduce:transition-none ${expandedSections.activityDiagnostics ? 'opacity-100' : 'hidden opacity-0'}`}
+      >
 
       <Card className="space-y-4 border border-white/5 bg-white/5">
         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -1718,6 +1844,7 @@ export function BusinessDashboardPage() {
           </div>
         </div>
       </Card>
+      </section>
     </div>
   );
 }

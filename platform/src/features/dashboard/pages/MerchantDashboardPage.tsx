@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { TelemetryDebugPanel } from '@/components/ui/TelemetryDebugPanel';
 import { useAuth } from '@/app/providers/AuthProvider';
+import { emitDashboardTelemetry } from '@/lib/telemetry';
 import {
   getMerchantProfileByUserId,
   listMerchantAnalytics,
@@ -18,6 +20,12 @@ import {
 import { transitionP2POrderState } from '@/services/api/p2pEscrow';
 import { openP2PDispute } from '@/services/api/p2pDisputes';
 import { listP2PRuntimeSettings } from '@/services/api/p2pAdmin';
+
+const ASSIGNMENT_BATCH_SIZE = 12;
+const ORDER_BATCH_SIZE = 10;
+const ANALYTICS_BATCH_SIZE = 10;
+
+type MerchantSection = 'assignments' | 'orders' | 'analytics';
 
 function formatCurrency(value: number, currency = 'USD'): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: 2 }).format(value);
@@ -60,6 +68,24 @@ export function MerchantDashboardPage(): JSX.Element {
   const [assignmentPaymentRefs, setAssignmentPaymentRefs] = useState<Record<string, string>>({});
   const [isApplyingWithdrawalAction, setIsApplyingWithdrawalAction] = useState(false);
   const [statusMessage, setStatusMessage] = useState('Loading merchant dashboard...');
+  const [assignmentsExpanded, setAssignmentsExpanded] = useState(true);
+  const [ordersExpanded, setOrdersExpanded] = useState(true);
+  const [analyticsExpanded, setAnalyticsExpanded] = useState(false);
+  const [visibleAssignmentCount, setVisibleAssignmentCount] = useState(ASSIGNMENT_BATCH_SIZE);
+  const [visibleOrderCount, setVisibleOrderCount] = useState(ORDER_BATCH_SIZE);
+  const [visibleAnalyticsCount, setVisibleAnalyticsCount] = useState(ANALYTICS_BATCH_SIZE);
+
+  const setSectionExpanded = (section: MerchantSection, expanded: boolean) => {
+    if (section === 'assignments') setAssignmentsExpanded(expanded);
+    if (section === 'orders') setOrdersExpanded(expanded);
+    if (section === 'analytics') setAnalyticsExpanded(expanded);
+
+    emitDashboardTelemetry({
+      area: 'merchant',
+      action: expanded ? 'expand_section' : 'collapse_section',
+      metadata: { section },
+    });
+  };
 
   const refresh = async (): Promise<void> => {
     if (!profile) return;
@@ -119,6 +145,22 @@ export function MerchantDashboardPage(): JSX.Element {
 
   const minOperatingBalance = Number(runtimeSettings.p2p_min_operating_balance ?? 0);
   const lowLiquidity = summary.available < minOperatingBalance;
+
+  const urgentAssignments = useMemo(
+    () =>
+      withdrawalAssignments.filter(
+        (assignment) =>
+          assignment.assignmentStatus === 'assigned' ||
+          assignment.assignmentStatus === 'reassigned' ||
+          assignment.assignmentStatus === 'accepted' ||
+          assignment.workflowStateKey === 'merchant_acknowledged',
+      ),
+    [withdrawalAssignments],
+  );
+  const assignmentSource = urgentAssignments.length ? urgentAssignments : withdrawalAssignments;
+  const visibleAssignments = assignmentSource.slice(0, visibleAssignmentCount);
+  const visibleOrders = orders.slice(0, visibleOrderCount);
+  const visibleAnalytics = analytics.slice(0, visibleAnalyticsCount);
 
   const analyticsExportRows = useMemo(
     () => analytics.map((item) => ({
@@ -251,6 +293,7 @@ export function MerchantDashboardPage(): JSX.Element {
 
   return (
     <div className="space-y-6 p-6">
+      <TelemetryDebugPanel />
       <Card className="border border-border bg-surface-elevated">
         <p className="text-sm uppercase tracking-[0.24em] text-accent/70">P2P merchant</p>
         <h1 className="mt-2 text-4xl font-semibold text-foreground">Merchant dashboard</h1>
@@ -312,8 +355,52 @@ export function MerchantDashboardPage(): JSX.Element {
       </div>
 
       <Card className="border border-border bg-surface-elevated">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm uppercase tracking-[0.24em] text-accent/70">Workspace map</p>
+            <h2 className="mt-1 text-2xl font-semibold text-foreground">Jump and collapse sections</h2>
+          </div>
+          <div className="flex flex-wrap gap-2 text-sm">
+            <a href="#merchant-assignments" className="rounded-full border border-border bg-surface px-3 py-1.5 text-muted hover:text-foreground">Assignments</a>
+            <a href="#merchant-orders" className="rounded-full border border-border bg-surface px-3 py-1.5 text-muted hover:text-foreground">Orders</a>
+            <a href="#merchant-analytics" className="rounded-full border border-border bg-surface px-3 py-1.5 text-muted hover:text-foreground">Analytics</a>
+          </div>
+        </div>
+        <div className="mt-4 grid gap-2 md:grid-cols-3">
+          <button
+            type="button"
+            aria-expanded={assignmentsExpanded}
+            aria-controls="merchant-assignments"
+            onClick={() => setSectionExpanded('assignments', !assignmentsExpanded)}
+            className="rounded-xl border border-border bg-surface px-3 py-2 text-left text-sm text-muted transition hover:text-foreground"
+          >
+            {assignmentsExpanded ? 'Hide' : 'Show'} payout assignments
+          </button>
+          <button
+            type="button"
+            aria-expanded={ordersExpanded}
+            aria-controls="merchant-orders"
+            onClick={() => setSectionExpanded('orders', !ordersExpanded)}
+            className="rounded-xl border border-border bg-surface px-3 py-2 text-left text-sm text-muted transition hover:text-foreground"
+          >
+            {ordersExpanded ? 'Hide' : 'Show'} assigned orders
+          </button>
+          <button
+            type="button"
+            aria-expanded={analyticsExpanded}
+            aria-controls="merchant-analytics"
+            onClick={() => setSectionExpanded('analytics', !analyticsExpanded)}
+            className="rounded-xl border border-border bg-surface px-3 py-2 text-left text-sm text-muted transition hover:text-foreground"
+          >
+            {analyticsExpanded ? 'Hide' : 'Show'} analytics snapshots
+          </button>
+        </div>
+      </Card>
+
+      <section id="merchant-assignments" className={`transition-opacity duration-300 motion-reduce:transition-none ${assignmentsExpanded ? 'opacity-100' : 'hidden opacity-0'}`}>
+      <Card className="border border-border bg-surface-elevated">
         <h2 className="text-2xl font-semibold text-foreground">Withdrawal payout assignments</h2>
-        <p className="mt-2 text-sm text-muted">Accept or decline assignments, then mark payout sent so users can confirm receipt.</p>
+        <p className="mt-2 text-sm text-muted">Accept or decline assignments, then mark payout sent so users can confirm receipt. Urgent queues are shown first when present.</p>
         <div className="mt-4 overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead>
@@ -327,7 +414,7 @@ export function MerchantDashboardPage(): JSX.Element {
               </tr>
             </thead>
             <tbody>
-              {withdrawalAssignments.map((assignment) => {
+              {visibleAssignments.map((assignment) => {
                 const allowAccept = assignment.assignmentStatus === 'assigned' || assignment.assignmentStatus === 'reassigned';
                 const allowDecline = allowAccept || assignment.assignmentStatus === 'accepted';
                 const allowPayoutSent = assignment.assignmentStatus === 'accepted' && assignment.workflowStateKey === 'merchant_acknowledged';
@@ -381,7 +468,7 @@ export function MerchantDashboardPage(): JSX.Element {
                   </tr>
                 );
               })}
-              {!withdrawalAssignments.length ? (
+              {!visibleAssignments.length ? (
                 <tr>
                   <td className="px-4 py-6 text-muted" colSpan={6}>No withdrawal payout assignments available.</td>
                 </tr>
@@ -389,7 +476,32 @@ export function MerchantDashboardPage(): JSX.Element {
             </tbody>
           </table>
         </div>
+        <div className="mt-4 flex flex-wrap justify-end gap-2">
+          {assignmentSource.length > visibleAssignments.length ? (
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setVisibleAssignmentCount((count) => count + ASSIGNMENT_BATCH_SIZE);
+                emitDashboardTelemetry({ area: 'merchant', action: 'show_more_assignments', metadata: { batchSize: ASSIGNMENT_BATCH_SIZE } });
+              }}
+            >
+              Show more assignments
+            </Button>
+          ) : null}
+          {visibleAssignmentCount > ASSIGNMENT_BATCH_SIZE && assignmentSource.length > ASSIGNMENT_BATCH_SIZE ? (
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setVisibleAssignmentCount(ASSIGNMENT_BATCH_SIZE);
+                emitDashboardTelemetry({ area: 'merchant', action: 'show_fewer_assignments' });
+              }}
+            >
+              Show fewer assignments
+            </Button>
+          ) : null}
+        </div>
       </Card>
+      </section>
 
       <Card className="border border-border bg-surface-elevated">
         <h2 className="text-2xl font-semibold text-foreground">Merchant profile</h2>
@@ -407,6 +519,7 @@ export function MerchantDashboardPage(): JSX.Element {
         )}
       </Card>
 
+      <section id="merchant-orders" className={`transition-opacity duration-300 motion-reduce:transition-none ${ordersExpanded ? 'opacity-100' : 'hidden opacity-0'}`}>
       <Card className="border border-border bg-surface-elevated">
         <h2 className="text-2xl font-semibold text-foreground">Assigned orders</h2>
         <div className="mt-4 overflow-x-auto">
@@ -421,7 +534,7 @@ export function MerchantDashboardPage(): JSX.Element {
               </tr>
             </thead>
             <tbody>
-              {orders.map((order) => (
+              {visibleOrders.map((order) => (
                 <tr key={order.id} className="border-b border-border/60 text-foreground last:border-0">
                   <td className="px-4 py-3">{order.orderCode}</td>
                   <td className="px-4 py-3">{formatCurrency(order.totalAmount, order.currency)}</td>
@@ -436,7 +549,7 @@ export function MerchantDashboardPage(): JSX.Element {
                   </td>
                 </tr>
               ))}
-              {!orders.length ? (
+              {!visibleOrders.length ? (
                 <tr>
                   <td className="px-4 py-6 text-muted" colSpan={5}>No merchant orders yet.</td>
                 </tr>
@@ -444,8 +557,34 @@ export function MerchantDashboardPage(): JSX.Element {
             </tbody>
           </table>
         </div>
+        <div className="mt-4 flex flex-wrap justify-end gap-2">
+          {orders.length > visibleOrders.length ? (
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setVisibleOrderCount((count) => count + ORDER_BATCH_SIZE);
+                emitDashboardTelemetry({ area: 'merchant', action: 'show_more_orders', metadata: { batchSize: ORDER_BATCH_SIZE } });
+              }}
+            >
+              Show more orders
+            </Button>
+          ) : null}
+          {visibleOrderCount > ORDER_BATCH_SIZE && orders.length > ORDER_BATCH_SIZE ? (
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setVisibleOrderCount(ORDER_BATCH_SIZE);
+                emitDashboardTelemetry({ area: 'merchant', action: 'show_fewer_orders' });
+              }}
+            >
+              Show fewer orders
+            </Button>
+          ) : null}
+        </div>
       </Card>
+      </section>
 
+      <section id="merchant-analytics" className={`transition-opacity duration-300 motion-reduce:transition-none ${analyticsExpanded ? 'opacity-100' : 'hidden opacity-0'}`}>
       <Card className="border border-border bg-surface-elevated">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -471,7 +610,7 @@ export function MerchantDashboardPage(): JSX.Element {
               </tr>
             </thead>
             <tbody>
-              {analytics.map((item) => (
+              {visibleAnalytics.map((item) => (
                 <tr key={item.id} className="border-b border-border/60 text-foreground last:border-0">
                   <td className="px-4 py-3">{item.reportDate}</td>
                   <td className="px-4 py-3">{item.assignedOrders}</td>
@@ -482,7 +621,7 @@ export function MerchantDashboardPage(): JSX.Element {
                   <td className="px-4 py-3">{formatCurrency(item.earningsTotal, merchant?.preferredCurrency ?? 'USD')}</td>
                 </tr>
               ))}
-              {!analytics.length ? (
+              {!visibleAnalytics.length ? (
                 <tr>
                   <td className="px-4 py-6 text-muted" colSpan={7}>No merchant analytics snapshots available yet.</td>
                 </tr>
@@ -490,7 +629,32 @@ export function MerchantDashboardPage(): JSX.Element {
             </tbody>
           </table>
         </div>
+        <div className="mt-4 flex flex-wrap justify-end gap-2">
+          {analytics.length > visibleAnalytics.length ? (
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setVisibleAnalyticsCount((count) => count + ANALYTICS_BATCH_SIZE);
+                emitDashboardTelemetry({ area: 'merchant', action: 'show_more_analytics_rows', metadata: { batchSize: ANALYTICS_BATCH_SIZE } });
+              }}
+            >
+              Show more analytics
+            </Button>
+          ) : null}
+          {visibleAnalyticsCount > ANALYTICS_BATCH_SIZE && analytics.length > ANALYTICS_BATCH_SIZE ? (
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setVisibleAnalyticsCount(ANALYTICS_BATCH_SIZE);
+                emitDashboardTelemetry({ area: 'merchant', action: 'show_fewer_analytics_rows' });
+              }}
+            >
+              Show fewer analytics
+            </Button>
+          ) : null}
+        </div>
       </Card>
+      </section>
     </div>
   );
 }
