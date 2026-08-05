@@ -64,8 +64,16 @@ const defaultItems: Record<CmsPageKey, CmsContentItem[]> = {
   ],
   faqs: [
     { title: 'How does Go4Wealth work?', body: 'Advertisers launch high-trust campaigns, users complete guided actions, and the platform tracks rewards in a transparent flow.', meta: 'Product' },
-    { title: 'Can administrators edit all site content?', body: 'Yes. Homepage copy, legal pages, blog content, landing pages, advertiser pages, and user guides are all managed from the admin CMS.', meta: 'CMS' },
+    { title: 'How quickly can support resolve account or reward issues?', body: 'Most issues are resolved faster when users include account email, affected page, timestamp, and related task, withdrawal, or transaction IDs. Support prioritizes security, payout, and access-impacting cases first.', meta: 'Support' },
     { title: 'Is the experience mobile-friendly?', body: 'The interface is built mobile-first with responsive layout, streamlined content blocks, and touch-friendly controls.', meta: 'UX' },
+    { title: 'Why was my reward claim delayed or not credited?', body: 'Claims can be delayed when verification checks fail, required session thresholds are not met, or anti-abuse signals are triggered. Users should review task status and notifications before escalating.', meta: 'Task verification' },
+    { title: 'When can I withdraw funds from my wallet?', body: 'Withdrawal availability depends on membership policy, compliance state, and account eligibility. Free-tier accounts are restricted, and approved tiers still follow limits, fees, and review controls.', meta: 'Withdrawals' },
+    { title: 'What causes a withdrawal to remain pending?', body: 'Pending states usually come from compliance checks, destination validation, fee settlement, or receipt confirmation requirements. Status updates are shown in wallet and notification flows.', meta: 'Payout operations' },
+    { title: 'How do promotional spin rewards become withdrawable?', body: 'Spin rewards may enter a reservation state first. Release can require registration, verification, referral or membership actions, and completion before expiry.', meta: 'Promotions' },
+    { title: 'Can users earn beyond task rewards?', body: 'Yes. Eligible users can enroll as P2P merchants and earn from completed transaction flow by applying approved service fees within policy limits.', meta: 'Merchant earnings' },
+    { title: 'How do advertisers avoid budget waste?', body: 'Advertisers reduce waste by using clear campaign criteria, verification-aware submissions, controlled lifecycle states, and KPI-based optimization instead of broad untargeted activity.', meta: 'Advertiser ROI' },
+    { title: 'What metrics matter most for campaign performance?', body: 'Core indicators include CTR, conversions, spend utilization, ROI, and status distribution across active, paused, and completed campaigns, supported by exportable reports for deeper analysis.', meta: 'Analytics' },
+    { title: 'How should users improve monthly earnings realistically?', body: 'Users typically improve outcomes by maintaining profile integrity, completing qualified tasks consistently, protecting account trust signals, and prioritizing campaigns with clear rules and reliable completion paths.', meta: 'Earning strategy' },
   ],
   about: [
     { title: 'Who we are', body: 'Go4Wealth is a trust-first growth and rewards platform for advertisers, operators, and participating users. We are headquartered in the United Kingdom and focused on responsible, long-term platform operations.', meta: 'Company' },
