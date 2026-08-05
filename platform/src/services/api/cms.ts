@@ -56,6 +56,7 @@ const defaultItems: Record<CmsPageKey, CmsContentItem[]> = {
   benefits: [
     { title: 'User earning model that stays realistic', body: 'Users earn by completing verified campaigns, referrals, and daily participation paths. Practical outcomes depend on consistency, campaign availability, geography, and membership level rather than guaranteed fixed income claims.', meta: 'For users' },
     { title: 'How users can grow monthly earnings', body: 'High-intent users can increase results by focusing on campaigns with clear qualification rules, keeping account verification current, maintaining streaks, and avoiding disqualifying behavior that blocks reward eligibility.', meta: 'User income strategy' },
+    { title: 'P2P merchant enrollment and transaction-fee income', body: 'Eligible users can enroll as P2P merchants and earn from completed order flow by applying approved service fees within platform policy. This creates a transaction-based income path tied to fulfillment quality and market demand.', meta: 'Merchant monetization' },
     { title: 'Advertiser ROI through measurable actions', body: 'Advertisers pay for validated outcomes instead of broad untargeted exposure. Better budget efficiency comes from defined task funnels, campaign governance, and conversion-aware optimization rather than inflated vanity traffic.', meta: 'For advertisers' },
     { title: 'What makes Go4Wealth stand out from common alternatives', body: 'Many competitors optimize for raw activity volume. Go4Wealth emphasizes trust controls, review-aware reward operations, and transparent payout policy so both users and advertisers can scale with less dispute risk.', meta: 'Competitive edge' },
     { title: 'Lower friction for serious operators', body: 'Advertisers can work from one business workspace for onboarding, funding visibility, campaign controls, submissions, communications, and analytics, reducing coordination overhead across disconnected tools.', meta: 'Operator advantage' },
@@ -228,10 +229,10 @@ const defaultPages: Record<CmsPageKey, CmsPageContent> = {
     eyebrow: 'Value outcomes',
     title: 'Benefits for users and advertisers built around real earning and ROI outcomes.',
     summary: 'This page explains who earns, how they earn, what influences performance, and why Go4Wealth is positioned differently from activity-only reward platforms.',
-    body: 'Go4Wealth is designed to align verified user effort with advertiser conversion goals. Users can increase earnings through consistent qualified participation, while advertisers improve return through governance, targeting, and measurable campaign execution.',
+    body: 'Go4Wealth is designed to align verified user effort with advertiser conversion goals. Users can increase earnings through consistent qualified participation and approved merchant transaction fees, while advertisers improve return through governance, targeting, and measurable campaign execution.',
     ctaLabel: 'View advertiser pages',
     ctaHref: '/advertiser-pages',
-    highlights: ['Realistic user earning pathways', 'Advertiser ROI and budget efficiency focus', 'Trust-first differentiation versus volume-first competitors'],
+    highlights: ['Realistic user earning pathways', 'P2P merchant fee-income opportunity via approved fees', 'Trust-first differentiation versus volume-first competitors'],
     items: defaultItems.benefits,
   },
   faqs: {

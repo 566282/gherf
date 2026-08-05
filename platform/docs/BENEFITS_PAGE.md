@@ -29,6 +29,10 @@ Policy-driven wallet and withdrawal logic clarifies who can withdraw, when, and 
 
 Review states, verification checkpoints, and explicit status updates provide clearer feedback when actions are approved, pending, or blocked. Users can adapt behavior instead of guessing.
 
+### 5) P2P merchant fee-income pathway
+
+Users who qualify for merchant enrollment can earn through completed P2P transaction flow by charging platform-approved fees. This creates an additional income stream beyond tasks and referrals, with outcomes tied to order volume, execution reliability, and policy compliance.
+
 ## Benefits to advertisers
 
 ### 1) Budget efficiency from outcome-focused campaigns
