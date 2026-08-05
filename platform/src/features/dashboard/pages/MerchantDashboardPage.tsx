@@ -9,6 +9,12 @@ import {
   getMerchantWalletAccounts,
   listMerchantAssignedOrders,
 } from '@/services/api/p2pMerchant';
+import {
+  listMerchantWithdrawalAssignments,
+  merchantMarkWithdrawalPayoutSent,
+  merchantRespondWithdrawalAssignment,
+  type MerchantWithdrawalAssignment,
+} from '@/services/api/withdrawalOperations';
 import { transitionP2POrderState } from '@/services/api/p2pEscrow';
 import { openP2PDispute } from '@/services/api/p2pDisputes';
 import { listP2PRuntimeSettings } from '@/services/api/p2pAdmin';
@@ -47,8 +53,12 @@ export function MerchantDashboardPage(): JSX.Element {
   const [merchant, setMerchant] = useState<Awaited<ReturnType<typeof getMerchantProfileByUserId>>>(null);
   const [wallets, setWallets] = useState<Awaited<ReturnType<typeof getMerchantWalletAccounts>>>([]);
   const [orders, setOrders] = useState<Awaited<ReturnType<typeof listMerchantAssignedOrders>>>([]);
+  const [withdrawalAssignments, setWithdrawalAssignments] = useState<MerchantWithdrawalAssignment[]>([]);
   const [analytics, setAnalytics] = useState<Awaited<ReturnType<typeof listMerchantAnalytics>>>([]);
   const [runtimeSettings, setRuntimeSettings] = useState<Record<string, unknown>>({});
+  const [assignmentNotes, setAssignmentNotes] = useState<Record<string, string>>({});
+  const [assignmentPaymentRefs, setAssignmentPaymentRefs] = useState<Record<string, string>>({});
+  const [isApplyingWithdrawalAction, setIsApplyingWithdrawalAction] = useState(false);
   const [statusMessage, setStatusMessage] = useState('Loading merchant dashboard...');
 
   const refresh = async (): Promise<void> => {
@@ -60,20 +70,23 @@ export function MerchantDashboardPage(): JSX.Element {
     if (!nextMerchant) {
       setWallets([]);
       setOrders([]);
+      setWithdrawalAssignments([]);
       setAnalytics([]);
       setStatusMessage('No merchant profile found for this account.');
       return;
     }
 
-    const [nextWallets, nextOrders, nextAnalytics, nextRuntimeSettings] = await Promise.all([
+    const [nextWallets, nextOrders, nextWithdrawalAssignments, nextAnalytics, nextRuntimeSettings] = await Promise.all([
       getMerchantWalletAccounts(nextMerchant.id),
       listMerchantAssignedOrders(nextMerchant.id, 40),
+      listMerchantWithdrawalAssignments(80),
       listMerchantAnalytics(nextMerchant.id, 30),
       listP2PRuntimeSettings(),
     ]);
 
     setWallets(nextWallets);
     setOrders(nextOrders);
+    setWithdrawalAssignments(nextWithdrawalAssignments);
     setAnalytics(nextAnalytics);
     setRuntimeSettings(nextRuntimeSettings);
     setStatusMessage('Merchant dashboard synced from live P2P tables.');
@@ -99,8 +112,10 @@ export function MerchantDashboardPage(): JSX.Element {
       assigned: orders.filter((order) => order.currentState === 'merchant_assigned').length,
       completed: orders.filter((order) => order.currentState === 'completed').length,
       disputed: orders.filter((order) => order.currentState === 'disputed' || order.currentState === 'under_review').length,
+      payoutAssignments: withdrawalAssignments.filter((assignment) => assignment.assignmentStatus === 'assigned' || assignment.assignmentStatus === 'accepted').length,
+      receiptPending: withdrawalAssignments.filter((assignment) => assignment.workflowStateKey === 'user_receipt_pending').length,
     };
-  }, [orders, wallets]);
+  }, [orders, wallets, withdrawalAssignments]);
 
   const minOperatingBalance = Number(runtimeSettings.p2p_min_operating_balance ?? 0);
   const lowLiquidity = summary.available < minOperatingBalance;
@@ -180,6 +195,49 @@ export function MerchantDashboardPage(): JSX.Element {
     }
   };
 
+  const handleWithdrawalAssignmentAction = async (
+    assignment: MerchantWithdrawalAssignment,
+    action: 'accept' | 'decline' | 'payout_sent',
+  ) => {
+    setIsApplyingWithdrawalAction(true);
+
+    try {
+      if (action === 'payout_sent') {
+        const paymentReference = assignmentPaymentRefs[assignment.assignmentId]?.trim();
+        await merchantMarkWithdrawalPayoutSent({
+          assignmentId: assignment.assignmentId,
+          paymentReference: paymentReference || undefined,
+          note: assignmentNotes[assignment.assignmentId]?.trim() || undefined,
+          idempotencyKey: `merchant-payout:${assignment.assignmentId}:${Date.now()}`,
+        });
+        setStatusMessage('Payout marked as sent. User receipt confirmation is now pending.');
+      } else {
+        const result = await merchantRespondWithdrawalAssignment({
+          assignmentId: assignment.assignmentId,
+          action,
+          note: assignmentNotes[assignment.assignmentId]?.trim() || undefined,
+          idempotencyKey: `merchant-${action}:${assignment.assignmentId}:${Date.now()}`,
+        });
+
+        if (action === 'accept') {
+          setStatusMessage('Assignment accepted. You can now mark payout as sent when complete.');
+        } else {
+          setStatusMessage(
+            result.reassignedAssignmentId
+              ? 'Assignment declined. Withdrawal was auto-reassigned to the next eligible merchant.'
+              : 'Assignment declined. No eligible fallback merchant available at this time.',
+          );
+        }
+      }
+
+      await refresh();
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : 'Unable to apply withdrawal assignment action.');
+    } finally {
+      setIsApplyingWithdrawalAction(false);
+    }
+  };
+
   if (!profile) {
     return (
       <div className="space-y-6 p-6">
@@ -243,7 +301,95 @@ export function MerchantDashboardPage(): JSX.Element {
           <p className="text-sm text-muted">Dispute/review orders</p>
           <p className="mt-2 text-3xl font-bold text-foreground">{summary.disputed}</p>
         </Card>
+        <Card className="border border-border bg-surface-elevated">
+          <p className="text-sm text-muted">Active payout assignments</p>
+          <p className="mt-2 text-3xl font-bold text-foreground">{summary.payoutAssignments}</p>
+        </Card>
+        <Card className="border border-border bg-surface-elevated">
+          <p className="text-sm text-muted">Awaiting user receipt confirm</p>
+          <p className="mt-2 text-3xl font-bold text-foreground">{summary.receiptPending}</p>
+        </Card>
       </div>
+
+      <Card className="border border-border bg-surface-elevated">
+        <h2 className="text-2xl font-semibold text-foreground">Withdrawal payout assignments</h2>
+        <p className="mt-2 text-sm text-muted">Accept or decline assignments, then mark payout sent so users can confirm receipt.</p>
+        <div className="mt-4 overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-left text-muted">
+                <th className="px-4 py-3">User</th>
+                <th className="px-4 py-3">Amount</th>
+                <th className="px-4 py-3">Destination</th>
+                <th className="px-4 py-3">State</th>
+                <th className="px-4 py-3">SLA</th>
+                <th className="px-4 py-3">Action controls</th>
+              </tr>
+            </thead>
+            <tbody>
+              {withdrawalAssignments.map((assignment) => {
+                const allowAccept = assignment.assignmentStatus === 'assigned' || assignment.assignmentStatus === 'reassigned';
+                const allowDecline = allowAccept || assignment.assignmentStatus === 'accepted';
+                const allowPayoutSent = assignment.assignmentStatus === 'accepted' && assignment.workflowStateKey === 'merchant_acknowledged';
+
+                return (
+                  <tr key={assignment.assignmentId} className="border-b border-border/60 text-foreground last:border-0">
+                    <td className="px-4 py-3">
+                      <p className="font-medium">{assignment.userDisplayName}</p>
+                      <p className="text-xs text-muted">{assignment.userEmail ?? assignment.userId}</p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <p className="font-medium">{formatCurrency(assignment.netAmount || assignment.amount, assignment.currency)}</p>
+                      <p className="text-xs text-muted">Gross {formatCurrency(assignment.amount, assignment.currency)}</p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <p>{assignment.destinationLabel}</p>
+                      <p className="text-xs text-muted break-all">{assignment.destinationValue ?? '-'}</p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <p>{assignment.workflowStateKey}</p>
+                      <p className="text-xs text-muted">{assignment.assignmentStatus}</p>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-muted">{assignment.dueAt ? formatDate(assignment.dueAt) : '-'}</td>
+                    <td className="px-4 py-3">
+                      <div className="grid gap-2">
+                        <input
+                          className="input-base"
+                          value={assignmentPaymentRefs[assignment.assignmentId] ?? ''}
+                          onChange={(event) => setAssignmentPaymentRefs((current) => ({ ...current, [assignment.assignmentId]: event.target.value }))}
+                          placeholder="Payment reference"
+                        />
+                        <textarea
+                          className="input-base min-h-20"
+                          value={assignmentNotes[assignment.assignmentId] ?? ''}
+                          onChange={(event) => setAssignmentNotes((current) => ({ ...current, [assignment.assignmentId]: event.target.value }))}
+                          placeholder="Assignment note"
+                        />
+                        <div className="flex flex-wrap gap-2">
+                          <Button disabled={!allowAccept || isApplyingWithdrawalAction} onClick={() => void handleWithdrawalAssignmentAction(assignment, 'accept')}>
+                            Accept
+                          </Button>
+                          <Button disabled={!allowDecline || isApplyingWithdrawalAction} onClick={() => void handleWithdrawalAssignmentAction(assignment, 'decline')}>
+                            Decline
+                          </Button>
+                          <Button disabled={!allowPayoutSent || isApplyingWithdrawalAction} onClick={() => void handleWithdrawalAssignmentAction(assignment, 'payout_sent')}>
+                            Mark payout sent
+                          </Button>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+              {!withdrawalAssignments.length ? (
+                <tr>
+                  <td className="px-4 py-6 text-muted" colSpan={6}>No withdrawal payout assignments available.</td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      </Card>
 
       <Card className="border border-border bg-surface-elevated">
         <h2 className="text-2xl font-semibold text-foreground">Merchant profile</h2>

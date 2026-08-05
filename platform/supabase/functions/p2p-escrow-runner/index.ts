@@ -18,15 +18,16 @@ Deno.serve(async (request) => {
     });
   }
 
-  const [liquidity, analytics] = await Promise.all([
+  const [liquidity, analytics, withdrawalTimeouts] = await Promise.all([
     admin.rpc('run_p2p_liquidity_health_job'),
     admin.rpc('run_p2p_merchant_analytics_job'),
+    admin.rpc('process_withdrawal_assignment_timeouts', { p_limit: 200 }),
   ]);
 
-  if (liquidity.error || analytics.error) {
+  if (liquidity.error || analytics.error || withdrawalTimeouts.error) {
     return new Response(
       JSON.stringify({
-        error: liquidity.error?.message ?? analytics.error?.message ?? 'Unable to run P2P escrow jobs.',
+        error: liquidity.error?.message ?? analytics.error?.message ?? withdrawalTimeouts.error?.message ?? 'Unable to run P2P escrow jobs.',
       }),
       {
         status: 500,
@@ -40,6 +41,7 @@ Deno.serve(async (request) => {
       ok: true,
       liquidity: liquidity.data,
       analytics: analytics.data,
+      withdrawalTimeouts: withdrawalTimeouts.data,
     }),
     {
       status: 200,

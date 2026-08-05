@@ -433,6 +433,13 @@ export const campaignTypeOptions: CampaignTypeDefinition[] = [
     defaultVerificationMethod: 'api_verification' as const,
   },
   {
+    value: 'promotional_spin_wheel',
+    label: 'Promotional spin wheel',
+    description: 'Configure guest-triggered onboarding spin campaigns with vault unlock requirements.',
+    defaultInstructions: 'Users spin once, reserve the reward, then complete unlock milestones before release.',
+    defaultVerificationMethod: 'api_verification' as const,
+  },
+  {
     value: 'custom_tasks',
     label: 'Custom tasks',
     description: 'Free-form campaigns for any workflow not covered by a preset.',

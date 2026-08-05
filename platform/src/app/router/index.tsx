@@ -81,6 +81,7 @@ import { CmsManagementPage } from '@/features/admin/pages/CmsManagementPage';
 import { UsersManagementPage } from '@/features/admin/pages/UsersManagementPage';
 import { PlatformSettingsPage } from '@/features/admin/pages/PlatformSettingsPage';
 import { AuditLogsPage } from '@/features/admin/pages/AuditLogsPage';
+import { WithdrawalApprovalPage } from '@/features/admin/pages/WithdrawalApprovalPage';
 
 const routes: RouteObject[] = [
   {
@@ -106,6 +107,7 @@ const routes: RouteObject[] = [
       { path: 'custom-urls', element: <CmsPublicPage pageKey="custom-urls" /> },
       { path: 'landing-pages', element: <CmsPublicPage pageKey="landing-pages" /> },
       { path: 'advertiser-pages', element: <CmsPublicPage pageKey="advertiser-pages" /> },
+      { path: 'membership-plans', element: <CmsPublicPage pageKey="membership-plans" /> },
       { path: 'user-guides', element: <CmsPublicPage pageKey="user-guides" /> },
       { path: 'pages/:slug', element: <CmsCustomPage /> },
       { path: 'login', loader: guestOnlyMiddleware(), element: <LoginPage /> },
@@ -186,7 +188,7 @@ const routes: RouteObject[] = [
       { path: 'referral-ops', element: <ReferralOpsPage /> },
       { path: 'fraud-detection', element: <FraudDetectionPage /> },
       { path: 'reports', element: <ReportsPage /> },
-      { path: 'withdrawal-approval', element: <PlatformSettingsPage /> },
+      { path: 'withdrawal-approval', element: <WithdrawalApprovalPage /> },
       { path: 'settings', element: <Navigate to="/admin/withdrawal-approval" replace /> },
       { path: 'wallet', element: <WalletManagementPage /> },
       { path: 'gamification', element: <GamificationAdminPage /> },

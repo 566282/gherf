@@ -121,11 +121,26 @@ type NotificationPayload = {
   channel?: CommunicationChannel;
   category?: CommunicationCategory;
   templateKey?: CommunicationTemplateKey;
+  deliverAt?: string;
   metadata?: Record<string, unknown>;
 };
 
 const COMMUNICATION_SETTING_KEY = 'communication_config';
 const EMAIL_DISPATCH_FUNCTION = 'notification-email-dispatch';
+const PUSH_DISPATCH_FUNCTION = 'notification-push-dispatch';
+const SMS_DISPATCH_FUNCTION = 'notification-sms-dispatch';
+
+type ChannelDispatchPayload = {
+  notifications: Array<{
+    userId: string;
+    title: string;
+    message: string;
+    channel?: CommunicationChannel;
+    category?: CommunicationCategory;
+    templateKey?: CommunicationTemplateKey;
+    metadata?: Record<string, unknown>;
+  }>;
+};
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -484,22 +499,23 @@ export async function updateCommunicationConfig(config: CommunicationConfig): Pr
 }
 
 export async function sendUserNotification(userId: string, payload: NotificationPayload): Promise<void> {
-  const { error } = await supabase
-    .from('user_notifications')
-    .insert({
-      user_id: userId,
-      title: payload.title,
-      message: payload.message,
-      type: payload.type ?? 'info',
-      channel: payload.channel ?? 'in_app',
-      category: payload.category ?? 'transactional',
-      template_key: payload.templateKey ?? null,
-      is_promotional: false,
-      metadata: payload.metadata ?? {},
-    })
-  ;
+  const row: NotificationInsert = {
+    user_id: userId,
+    title: payload.title,
+    message: payload.message,
+    type: payload.type ?? 'info',
+    channel: payload.channel ?? 'in_app',
+    category: payload.category ?? 'transactional',
+    template_key: payload.templateKey ?? null,
+    is_promotional: false,
+    metadata: payload.metadata ?? {},
+  };
+
+  const { error } = await supabase.from('user_notifications').insert(row);
 
   if (error) throw error;
+
+  await dispatchChannelNotifications([row]);
 }
 
 export async function enqueueUserNotification(userId: string, payload: NotificationPayload): Promise<string> {
@@ -609,6 +625,20 @@ type EmailDispatchPayload = {
   }>;
 };
 
+function toChannelDispatchPayload(rows: NotificationInsert[]): ChannelDispatchPayload {
+  return {
+    notifications: rows.map((row) => ({
+      userId: row.user_id,
+      title: row.title,
+      message: row.message,
+      channel: row.channel,
+      category: row.category,
+      templateKey: row.template_key,
+      metadata: row.metadata,
+    })),
+  };
+}
+
 async function dispatchEmailChannelNotifications(rows: NotificationInsert[]): Promise<void> {
   const emailRows = rows.filter((row) => row.channel === 'email');
   if (!emailRows.length) return;
@@ -634,13 +664,49 @@ async function dispatchEmailChannelNotifications(rows: NotificationInsert[]): Pr
   }
 }
 
+async function dispatchPushChannelNotifications(rows: NotificationInsert[]): Promise<void> {
+  const pushRows = rows.filter((row) => row.channel === 'push');
+  if (!pushRows.length) return;
+
+  const { error } = await supabase.functions.invoke(PUSH_DISPATCH_FUNCTION, {
+    body: toChannelDispatchPayload(pushRows),
+  });
+
+  // Best-effort adapter to avoid blocking notification persistence.
+  if (error) {
+    console.warn('Push dispatch adapter failed:', error.message ?? error);
+  }
+}
+
+async function dispatchSmsChannelNotifications(rows: NotificationInsert[]): Promise<void> {
+  const smsRows = rows.filter((row) => row.channel === 'sms' || row.channel === 'whatsapp' || row.channel === 'telegram');
+  if (!smsRows.length) return;
+
+  const { error } = await supabase.functions.invoke(SMS_DISPATCH_FUNCTION, {
+    body: toChannelDispatchPayload(smsRows),
+  });
+
+  // Best-effort adapter to avoid blocking notification persistence.
+  if (error) {
+    console.warn('SMS dispatch adapter failed:', error.message ?? error);
+  }
+}
+
+async function dispatchChannelNotifications(rows: NotificationInsert[]): Promise<void> {
+  await Promise.all([
+    dispatchEmailChannelNotifications(rows),
+    dispatchPushChannelNotifications(rows),
+    dispatchSmsChannelNotifications(rows),
+  ]);
+}
+
 async function insertNotificationBatch(rows: NotificationInsert[]): Promise<number> {
   if (!rows.length) return 0;
 
   const { error } = await supabase.from('user_notifications').insert(rows);
   if (error) throw error;
 
-  await dispatchEmailChannelNotifications(rows);
+  await dispatchChannelNotifications(rows);
 
   return rows.length;
 }

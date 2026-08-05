@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Card } from '@/components/ui/Card';
 import { Skeleton } from '@/components/ui/Skeleton';
+import { RewardVaultWidget } from '@/components/ui/RewardVaultWidget';
 import { useAuth } from '@/app/providers/AuthProvider';
 import { listNotifications, listRewardLedger, listWalletActivity } from '@/services/api/auth';
 import { listGamificationConfig, type GamificationConfig } from '@/services/api/gamification';
@@ -326,6 +327,8 @@ export function DashboardPage(): JSX.Element {
           </button>
         </div>
       </Card>
+
+      {profile?.id ? <RewardVaultWidget userId={profile.id} /> : null}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
         <Link to="/app/profile" className="group block h-full">

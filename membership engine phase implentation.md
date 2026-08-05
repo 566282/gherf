@@ -8,6 +8,19 @@ Plan and sequence the implementation of an enterprise-grade, fully configurable 
 
 This plan is based on confirmed current code, schema, and admin architecture in this repository.
 
+## Delta Update (2026-08-04)
+
+A dedicated implementation plan has been created for the promotional Spin Wheel and Reward Vault rollout:
+
+- `platform/docs/PHASE_17_PROMOTIONAL_SPIN_WHEEL_REWARD_VAULT.md`
+
+That Phase 17 document includes:
+
+- End-to-end confirmation of what already exists in code and schema.
+- Best insertion points across frontend, services, and migrations.
+- A phase-by-phase production rollout plan (guest trigger popup, secure server-side spin outcomes, reward reservation/unlock workflow, and Reward Vault dashboard widget + drawer + mobile bottom sheet).
+- Security-consistent handling of guaranteed non-losing onboarding rewards as an admin-configurable campaign rule (not client-side hardcoded outcomes).
+
 ## Codebase Confirmation Summary (Current State)
 
 The current platform already has useful foundations, but membership behavior is still limited and partially hardcoded.

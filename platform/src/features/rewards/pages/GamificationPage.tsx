@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Skeleton } from '@/components/ui/Skeleton';
+import { PromotionalSpinWheel } from '@/components/ui/PromotionalSpinWheel';
 import { useAuth } from '@/app/providers/AuthProvider';
 import {
   buildDefaultGamificationConfig,
@@ -15,6 +16,13 @@ import {
   type GamificationConfig,
   type GamificationPlayerState,
 } from '@/services/api/gamification';
+import {
+  buildPromotionalWheelSegments,
+  claimPromotionalRewardReserve,
+  listPromotionalSpinSettings,
+  resolvePromotionalWheelSegmentId,
+  startPromotionalSpin,
+} from '@/services/api/promotionalRewards';
 
 type QuestState = {
   id: string;
@@ -116,7 +124,18 @@ export function GamificationPage() {
   const [isLoadingState, setIsLoadingState] = useState(true);
   const [showConfetti, setShowConfetti] = useState(false);
   const [state, setState] = useState<GamificationPlayerState>(() => buildDefaultGamificationState({ xp: Math.max((profile?.levelTier ?? 1) * 120, 120), streak: Math.max(1, Math.min(14, profile?.rewardHistoryCount ?? 6)) }));
+  const [promoSpinBusy, setPromoSpinBusy] = useState(false);
+  const [promoSpinning, setPromoSpinning] = useState(false);
+  const [promoAttemptId, setPromoAttemptId] = useState<string | null>(null);
+  const [promoSelectedSegmentId, setPromoSelectedSegmentId] = useState<string | null>(null);
+  const [promoMessage, setPromoMessage] = useState('');
+  const [promoWheelLabels, setPromoWheelLabels] = useState<string[] | null>(null);
   const confettiTimer = useRef<number | null>(null);
+
+  const promoWheelSegments = useMemo(
+    () => buildPromotionalWheelSegments(promoWheelLabels),
+    [promoWheelLabels],
+  );
 
   useEffect(() => {
     void listGamificationConfig()
@@ -130,6 +149,24 @@ export function GamificationPage() {
         setIsLoadingConfig(false);
         setStatusMessage('Using local gamification defaults until admin settings are available.');
       });
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    void listPromotionalSpinSettings()
+      .then((settings) => {
+        if (!active) return;
+        setPromoWheelLabels(settings.wheelSegmentLabels);
+      })
+      .catch(() => {
+        if (!active) return;
+        setPromoWheelLabels(null);
+      });
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -318,6 +355,47 @@ export function GamificationPage() {
     triggerConfetti();
   };
 
+  const startPromotionalWheelSpin = async () => {
+    setPromoSpinBusy(true);
+    setPromoMessage('');
+    try {
+      const response = await startPromotionalSpin('home');
+      if (!response.ok || !response.attemptId) {
+        setPromoMessage(response.error ? `Promotional spin unavailable: ${response.error}` : 'Promotional spin unavailable.');
+        return;
+      }
+
+      setPromoAttemptId(response.attemptId);
+      setPromoSelectedSegmentId(resolvePromotionalWheelSegmentId(response.rewardAmount, promoWheelSegments));
+      setPromoSpinning(true);
+    } catch (error) {
+      setPromoMessage(error instanceof Error ? error.message : 'Unable to run promotional spin.');
+    } finally {
+      setPromoSpinBusy(false);
+    }
+  };
+
+  const reservePromotionalSpinReward = async () => {
+    if (!promoAttemptId) {
+      setPromoMessage('Complete a promotional spin before reserving.');
+      return;
+    }
+
+    setPromoSpinBusy(true);
+    try {
+      const reservation = await claimPromotionalRewardReserve(promoAttemptId);
+      if (!reservation.ok) {
+        setPromoMessage(reservation.error ? `Reserve failed: ${reservation.error}` : 'Reserve failed.');
+      } else {
+        setPromoMessage(`Reserved ${reservation.currency ?? 'USD'} ${reservation.amount ?? 0}. Follow vault steps to unlock.`);
+      }
+    } catch (error) {
+      setPromoMessage(error instanceof Error ? error.message : 'Unable to reserve promotional reward.');
+    } finally {
+      setPromoSpinBusy(false);
+    }
+  };
+
   if (isLoadingConfig) {
     return (
       <div className="space-y-6 p-6">
@@ -355,6 +433,35 @@ export function GamificationPage() {
 
   return (
     <div className="page-transition space-y-6 p-6">
+      <Card className="space-y-4 border border-white/10 bg-white/5">
+        <div>
+          <p className="text-sm uppercase tracking-[0.24em] text-mint/70">Promotional wheel</p>
+          <h2 className="mt-2 text-2xl font-semibold text-white">Server-verified onboarding spin</h2>
+          <p className="text-sm text-mist/75">Outcomes are generated server-side and can be reserved into the Reward Vault unlock flow.</p>
+        </div>
+
+        <PromotionalSpinWheel
+          segments={promoWheelSegments}
+          spinning={promoSpinning}
+          selectedSegmentId={promoSelectedSegmentId}
+          onSpinEnd={() => {
+            setPromoSpinning(false);
+            setPromoMessage('Promotional spin completed. Reserve reward to move it into your vault.');
+          }}
+        />
+
+        <div className="flex flex-wrap gap-3">
+          <Button type="button" onClick={() => void startPromotionalWheelSpin()} disabled={promoSpinBusy || promoSpinning}>
+            {promoSpinning ? 'Spinning...' : 'Run promotional spin'}
+          </Button>
+          <Button type="button" variant="ghost" onClick={() => void reservePromotionalSpinReward()} disabled={promoSpinBusy || promoSpinning || !promoAttemptId}>
+            Reserve to vault
+          </Button>
+        </div>
+
+        {promoMessage ? <p className="text-sm text-amber-200">{promoMessage}</p> : null}
+      </Card>
+
       <Card className="relative overflow-hidden border border-white/10 bg-[linear-gradient(135deg,rgba(12,16,22,0.98),rgba(19,24,32,0.96))] interactive-card">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,140,61,0.12),transparent_32%)]" />
         <div className="absolute inset-0 bg-[linear-gradient(120deg,transparent,rgba(255,255,255,0.025),transparent)]" />

@@ -16,6 +16,12 @@ import {
 import { evaluateWithdrawalPolicy, resolveMembershipPlan } from '@/services/api/membership';
 import { evaluateMultiplierPricing } from '@/services/api/membershipLifecycle';
 import { getAllowedTransferTargets, walletOperationalRules, walletTransferSources } from '@/services/api/walletPolicies';
+import {
+  listUserWithdrawalReceiptQueue,
+  reportWithdrawalNonReceipt,
+  userConfirmWithdrawalReceipt,
+  type UserWithdrawalReceiptQueueItem,
+} from '@/services/api/withdrawalOperations';
 import type { WalletAccount, WalletTransaction, WalletTransfer, WalletWithdrawalMethod, WithdrawalRequest, WithdrawalRequestInput, WalletSettings, WalletAccountType } from '@/types';
 import { walletAccountTypes } from '@/types';
 
@@ -47,6 +53,11 @@ function getDefaultWithdrawalDate(): string {
   return nextDay.toISOString().slice(0, 10);
 }
 
+function formatDateTime(value: string | null): string {
+  if (!value) return '-';
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(value));
+}
+
 export function RewardHistoryPage() {
   const { profile } = useAuth();
   const [settings, setSettings] = useState<WalletSettings | null>(null);
@@ -54,6 +65,8 @@ export function RewardHistoryPage() {
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
   const [withdrawals, setWithdrawals] = useState<WithdrawalRequest[]>([]);
   const [transfers, setTransfers] = useState<WalletTransfer[]>([]);
+  const [receiptQueue, setReceiptQueue] = useState<UserWithdrawalReceiptQueueItem[]>([]);
+  const [receiptNotes, setReceiptNotes] = useState<Record<string, string>>({});
   const [rewards, setRewards] = useState<Awaited<ReturnType<typeof listRewardLedger>>>([]);
   const [walletActivity, setWalletActivity] = useState<Awaited<ReturnType<typeof listWalletActivity>>>([]);
   const [amount, setAmount] = useState('50');
@@ -71,6 +84,8 @@ export function RewardHistoryPage() {
   const [scheduledFor, setScheduledFor] = useState(getDefaultWithdrawalDate());
   const [note, setNote] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isConfirmingReceipt, setIsConfirmingReceipt] = useState(false);
+  const [isReportingNonReceipt, setIsReportingNonReceipt] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -81,6 +96,7 @@ export function RewardHistoryPage() {
     void listWalletTransactions(profile.id, 20).then(setTransactions).catch(() => setTransactions([]));
     void listWithdrawalRequests(profile.id, 12).then(setWithdrawals).catch(() => setWithdrawals([]));
     void listWalletTransfers(profile.id, 20).then(setTransfers).catch(() => setTransfers([]));
+    void listUserWithdrawalReceiptQueue(20).then(setReceiptQueue).catch(() => setReceiptQueue([]));
     void listRewardLedger(profile.id).then(setRewards).catch(() => setRewards([]));
     void listWalletActivity(profile.id).then(setWalletActivity).catch(() => setWalletActivity([]));
   }, [profile]);
@@ -218,12 +234,13 @@ export function RewardHistoryPage() {
       setScheduledFor(getDefaultWithdrawalDate());
       setNote('');
 
-      const [nextSettings, nextAccounts, nextTransactions, nextWithdrawals, nextTransfers, nextRewards, nextWalletActivity] = await Promise.all([
+      const [nextSettings, nextAccounts, nextTransactions, nextWithdrawals, nextTransfers, nextReceiptQueue, nextRewards, nextWalletActivity] = await Promise.all([
         listWalletSettings(),
         listWalletAccounts(profile.id),
         listWalletTransactions(profile.id, 20),
         listWithdrawalRequests(profile.id, 12),
         listWalletTransfers(profile.id, 20),
+        listUserWithdrawalReceiptQueue(20),
         listRewardLedger(profile.id),
         listWalletActivity(profile.id),
       ]);
@@ -233,12 +250,80 @@ export function RewardHistoryPage() {
       setTransactions(nextTransactions);
       setWithdrawals(nextWithdrawals);
       setTransfers(nextTransfers);
+      setReceiptQueue(nextReceiptQueue);
       setRewards(nextRewards);
       setWalletActivity(nextWalletActivity);
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : 'Unable to submit withdrawal request.');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleConfirmReceipt = async (item: UserWithdrawalReceiptQueueItem) => {
+    if (!profile) return;
+
+    setIsConfirmingReceipt(true);
+    setStatusMessage(null);
+
+    try {
+      await userConfirmWithdrawalReceipt({
+        withdrawalRequestId: item.withdrawalRequestId,
+        note: receiptNotes[item.withdrawalRequestId]?.trim() || undefined,
+        idempotencyKey: `user-receipt:${item.withdrawalRequestId}:${Date.now()}`,
+      });
+
+      const [nextWithdrawals, nextReceiptQueue, nextTransactions, nextAccounts] = await Promise.all([
+        listWithdrawalRequests(profile.id, 12),
+        listUserWithdrawalReceiptQueue(20),
+        listWalletTransactions(profile.id, 20),
+        listWalletAccounts(profile.id),
+      ]);
+
+      setWithdrawals(nextWithdrawals);
+      setReceiptQueue(nextReceiptQueue);
+      setTransactions(nextTransactions);
+      setAccounts(nextAccounts);
+      setStatusMessage('Receipt confirmed. Withdrawal settlement has been completed.');
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : 'Unable to confirm withdrawal receipt.');
+    } finally {
+      setIsConfirmingReceipt(false);
+    }
+  };
+
+  const handleReportNonReceipt = async (item: UserWithdrawalReceiptQueueItem) => {
+    if (!profile) return;
+
+    setIsReportingNonReceipt(true);
+    setStatusMessage(null);
+
+    try {
+      await reportWithdrawalNonReceipt({
+        withdrawalRequestId: item.withdrawalRequestId,
+        actorUserId: profile.id,
+        assignmentId: item.assignmentId,
+        note: receiptNotes[item.withdrawalRequestId]?.trim() || undefined,
+        reason: 'non_receipt_reported',
+        idempotencyKey: `user-non-receipt:${item.withdrawalRequestId}:${Date.now()}`,
+      });
+
+      const [nextWithdrawals, nextReceiptQueue, nextTransactions, nextAccounts] = await Promise.all([
+        listWithdrawalRequests(profile.id, 12),
+        listUserWithdrawalReceiptQueue(20),
+        listWalletTransactions(profile.id, 20),
+        listWalletAccounts(profile.id),
+      ]);
+
+      setWithdrawals(nextWithdrawals);
+      setReceiptQueue(nextReceiptQueue);
+      setTransactions(nextTransactions);
+      setAccounts(nextAccounts);
+      setStatusMessage('A dispute review has been opened for this withdrawal.');
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : 'Unable to report non-receipt.');
+    } finally {
+      setIsReportingNonReceipt(false);
     }
   };
 
@@ -616,6 +701,50 @@ export function RewardHistoryPage() {
               >
                 Reset form
               </Button>
+            </div>
+          </Card>
+
+          <Card>
+            <h2 className="text-2xl font-semibold text-white">Payout receipt confirmation</h2>
+            <p className="mt-1 text-sm text-mist/70">When a merchant marks payout as sent, confirm receipt here to finalize settlement.</p>
+            <div className="mt-4 space-y-3">
+              {receiptQueue.length ? receiptQueue.map((item) => (
+                <div key={item.withdrawalRequestId} className="rounded-xl border border-white/10 bg-white/[0.04] p-4 text-sm text-mist/80 shadow-soft">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-medium text-white">{item.merchantName ?? item.merchantCode ?? 'Assigned merchant'}</p>
+                    <span className="rounded-full border border-white/10 px-3 py-1 text-xs uppercase tracking-[0.18em] text-mist/70">
+                      {item.workflowStateKey}
+                    </span>
+                  </div>
+                  <p className="mt-2">Amount: {formatCurrency(item.netAmount || item.amount, item.currency)}</p>
+                  <p>Payout sent: {formatDateTime(item.payoutSentAt)}</p>
+                  <p>Reference: {item.payoutReference || '-'}</p>
+                  <label className="mt-3 grid gap-2">
+                    <span className="text-xs text-mist/70">Receipt note (optional)</span>
+                    <textarea
+                      className="input-base min-h-20"
+                      value={receiptNotes[item.withdrawalRequestId] ?? ''}
+                      onChange={(event) => setReceiptNotes((current) => ({ ...current, [item.withdrawalRequestId]: event.target.value }))}
+                      placeholder="Add confirmation context"
+                    />
+                  </label>
+                  <div className="mt-3 flex flex-wrap gap-3">
+                    <Button
+                      onClick={() => void handleConfirmReceipt(item)}
+                      disabled={isConfirmingReceipt || item.workflowStateKey !== 'user_receipt_pending'}
+                    >
+                      {isConfirmingReceipt ? 'Submitting...' : 'I have received payment'}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      onClick={() => void handleReportNonReceipt(item)}
+                      disabled={isReportingNonReceipt || item.workflowStateKey !== 'user_receipt_pending'}
+                    >
+                      {isReportingNonReceipt ? 'Submitting...' : 'Report non-receipt'}
+                    </Button>
+                  </div>
+                </div>
+              )) : <p className="text-sm text-mist/60">No payout receipts awaiting your confirmation.</p>}
             </div>
           </Card>
 

@@ -61,6 +61,7 @@ export const campaignTypeValues = [
   'weekly_challenges',
   'seasonal_campaigns',
   'referral_campaigns',
+  'promotional_spin_wheel',
   'custom_tasks',
 ] as const;
 

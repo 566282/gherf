@@ -1,8 +1,24 @@
 # Project State Summary
 
-**Date**: July 3, 2026  
-**Status**: Production Readiness Audit Complete + Component Fixes Applied  
-**Validation**: All changes pass TypeScript strict mode and ESLint
+**Date**: August 4, 2026  
+**Status**: Withdrawal workflow W6–W8 rollout implemented + production build verified  
+**Validation**: Platform build succeeds and the new withdrawal runtime-settings regression tests pass
+
+## Delta Update - Withdrawal Workflow W6–W8
+
+### Implementation Status
+
+- The admin withdrawal operations experience now serves as the live queue and monitoring surface for W6–W8.
+- Timeout processing, reminder configuration, reassignment controls, duplicate-prevention toggles, and dispute escalation settings are now wired into the platform.
+- The admin route for withdrawal approvals now targets the live operations dashboard instead of the placeholder settings page.
+- Validation completed with a successful production build and passing regression tests for the new runtime settings flow.
+
+### Notes
+
+- Relevant implementation work is captured in the withdrawal operations admin page, the withdrawal operations API layer, and the router wiring.
+- The update is intended to support safer rollout and tuning of the merchant payout workflow without requiring code edits.
+
+---
 
 ## Delta Update - Phase 5 Reward and Wallet System
 

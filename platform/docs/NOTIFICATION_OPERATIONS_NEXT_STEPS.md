@@ -6,12 +6,17 @@
 - Completed: Audience targeting (all users or selected users) is available directly in Notification Center.
 - Completed: Existing queue management controls remain active in Notification Center (process due items, retry failed items, cancel queue items).
 - Completed: Template source unification. Admin template editing and live template reads now use `communication_templates` as the backend source of truth.
-- Completed (initial): Email provider adapter path. Email-channel sends now trigger `notification-email-dispatch` (best-effort) for outbound provider delivery.
-- Remaining: Provider adapters still pending for SMS/push/WhatsApp/Telegram.
+- Completed: Multi-channel provider adapter path. Channel sends now trigger best-effort dispatch functions:
+  - `notification-email-dispatch`
+  - `notification-push-dispatch`
+  - `notification-sms-dispatch` (used for SMS/WhatsApp/Telegram channel family)
+- Remaining: Production provider endpoint/API-key configuration and monitoring hardening.
 
-## Edge Function Deployment (Email Adapter)
+## Edge Function Deployment (Channel Adapters)
 
 - Deploy function: `notification-email-dispatch`
+- Deploy function: `notification-push-dispatch`
+- Deploy function: `notification-sms-dispatch`
 - Ensure function uses JWT verification and super-admin role checks.
 - Configure secrets:
   - `SUPABASE_URL`
@@ -19,7 +24,13 @@
   - `SUPABASE_ANON_KEY`
   - `RESEND_API_KEY`
   - `EMAIL_FROM`
-- Smoke test by sending a promotional notification with `email` channel selected and verify provider accepts the request.
+- Configure push provider secrets:
+  - `PUSH_DISPATCH_ENDPOINT`
+  - `PUSH_DISPATCH_API_KEY` (optional when endpoint does not require bearer auth)
+- Configure SMS-family provider secrets:
+  - `SMS_DISPATCH_ENDPOINT`
+  - `SMS_DISPATCH_API_KEY` (optional when endpoint does not require bearer auth)
+- Smoke test by sending notifications through `email`, `push`, and `sms` channels and verify provider acceptance.
 - Monitor function logs for failures and add alerts for repeated outbound errors.
 
 ## Supabase

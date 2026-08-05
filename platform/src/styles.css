@@ -278,6 +278,109 @@ img {
     border-radius: 999px;
     animation: confetti-fall 1.8s ease-out forwards;
   }
+
+  .promo-wheel-shell {
+    background: transparent;
+    filter: drop-shadow(0 18px 40px rgba(0, 0, 0, 0.35));
+  }
+
+  .promo-wheel-svg {
+    overflow: visible;
+    background: transparent;
+  }
+
+  .promo-wheel-pointer {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    z-index: 20;
+    width: 0;
+    height: 0;
+    transform: translate(-50%, -42%);
+    border-left: 16px solid transparent;
+    border-right: 16px solid transparent;
+    border-top: 28px solid #f9c74f;
+    filter: drop-shadow(0 8px 12px rgba(0, 0, 0, 0.45));
+  }
+
+  .promo-wheel-pointer::after {
+    content: '';
+    position: absolute;
+    left: -9px;
+    top: -27px;
+    width: 18px;
+    height: 8px;
+    border-radius: 99px;
+    background: rgba(255, 242, 189, 0.65);
+  }
+
+  .promo-wheel-rotor {
+    will-change: transform;
+    transform: translateZ(0);
+  }
+
+  .promo-wheel-led {
+    transform-origin: center;
+    animation: promo-wheel-led-pulse 1.5s ease-in-out infinite;
+    filter:
+      drop-shadow(0 0 6px #fff59d)
+      drop-shadow(0 0 12px #ffd54f)
+      drop-shadow(0 0 20px rgba(255, 215, 0, 0.9));
+  }
+
+  .promo-wheel-led--win {
+    animation-duration: 700ms;
+  }
+
+  .promo-wheel-segment--winner {
+    transform-origin: 250px 250px;
+    animation: promo-wheel-winning-segment 560ms ease-out 2;
+  }
+
+  .promo-wheel-hub {
+    filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.35));
+  }
+
+  .promo-wheel-hub--flash {
+    animation: promo-wheel-hub-flash 420ms ease-out 3;
+  }
+
+  .promo-wheel-svg--winning {
+    filter:
+      drop-shadow(0 0 8px rgba(255, 215, 0, 0.9))
+      drop-shadow(0 0 25px rgba(255, 140, 0, 0.6))
+      drop-shadow(0 0 40px rgba(255, 215, 0, 0.4));
+  }
+
+  .promo-wheel-confetti {
+    pointer-events: none;
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+  }
+
+  .promo-wheel-confetti-piece {
+    position: absolute;
+    top: 16%;
+    width: 0.45rem;
+    height: 0.9rem;
+    border-radius: 999px;
+    animation: promo-wheel-confetti 1.05s ease-out forwards;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .promo-wheel-shell {
+    transition: transform 220ms ease, filter 220ms ease;
+    cursor: pointer;
+  }
+
+  .promo-wheel-shell:hover {
+    transform: scale(1.02);
+    filter:
+      drop-shadow(0 18px 40px rgba(0, 0, 0, 0.35))
+      drop-shadow(0 0 16px rgba(255, 215, 0, 0.35));
+  }
 }
 
 @keyframes page-fade-in {
@@ -311,5 +414,62 @@ img {
   100% {
     opacity: 0;
     transform: translate3d(var(--confetti-x, 0), 160px, 0) rotate(720deg) scale(1);
+  }
+}
+
+@keyframes promo-wheel-led-pulse {
+  0%,
+  100% {
+    opacity: 0.72;
+    transform: scale(0.92);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+
+@keyframes promo-wheel-winning-segment {
+  0% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.03);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes promo-wheel-hub-flash {
+  0% {
+    filter: drop-shadow(0 0 0 rgba(255, 229, 127, 0));
+  }
+
+  50% {
+    filter: drop-shadow(0 0 18px rgba(255, 229, 127, 0.95));
+  }
+
+  100% {
+    filter: drop-shadow(0 0 0 rgba(255, 229, 127, 0));
+  }
+}
+
+@keyframes promo-wheel-confetti {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) rotate(0deg) scale(0.82);
+  }
+
+  15% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate3d(var(--promo-confetti-x, 0), 145px, 0) rotate(660deg) scale(1);
   }
 }

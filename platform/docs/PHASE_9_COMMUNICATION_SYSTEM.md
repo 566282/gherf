@@ -126,7 +126,7 @@ Migration: `supabase/migrations/006_communication_system.sql`
 ### Remaining phases
 
 - Phase 9.2: Completed. Template editing and template listing now share `communication_templates` as the primary backend source.
-- Phase 9.3: Started. First provider adapter added for email dispatch through Supabase Edge Function `notification-email-dispatch`.
+- Phase 9.3: Completed in code. Provider adapters now cover email, push, and SMS-family channels (SMS/WhatsApp/Telegram) through Supabase Edge Functions.
 - Phase 9.4: Delivery receipt ingestion and per-channel delivery status dashboard.
 - Phase 9.5: Per-channel retry policies, exponential backoff tuning, and dead-letter queue workflows.
 
@@ -142,13 +142,14 @@ Migration: `supabase/migrations/006_communication_system.sql`
 
 - `src/services/api/communications.ts`
 
-## Phase 9.3: Email Provider Adapter (Initial)
+## Phase 9.3: Multi-Channel Provider Adapters (Completed in Code)
 
 ### What changed
 
-- Added Supabase Edge Function `notification-email-dispatch` for secure server-side provider calls.
-- Added best-effort adapter invocation from communication send pipeline when rows include `channel = email`.
-- Adapter currently targets Resend API using function environment secrets.
+- Added Supabase Edge Function `notification-email-dispatch` for secure server-side email provider calls.
+- Added Supabase Edge Function `notification-push-dispatch` for push provider webhooks.
+- Added Supabase Edge Function `notification-sms-dispatch` for SMS-family provider webhooks (SMS/WhatsApp/Telegram).
+- Added best-effort adapter invocation from communication send pipeline by channel.
 
 ### Required function secrets
 
@@ -157,13 +158,18 @@ Migration: `supabase/migrations/006_communication_system.sql`
 - `SUPABASE_ANON_KEY`
 - `RESEND_API_KEY`
 - `EMAIL_FROM`
+- `PUSH_DISPATCH_ENDPOINT`
+- `PUSH_DISPATCH_API_KEY` (optional)
+- `SMS_DISPATCH_ENDPOINT`
+- `SMS_DISPATCH_API_KEY` (optional)
 
 ### Files
 
 - `supabase/functions/notification-email-dispatch/index.ts`
+- `supabase/functions/notification-push-dispatch/index.ts`
+- `supabase/functions/notification-sms-dispatch/index.ts`
 - `src/services/api/communications.ts`
 
 ### Still left in Phase 9.3
 
-- Add provider adapters for push, SMS, WhatsApp, and Telegram.
-- Add delivery event ingestion back to DB for sent/delivered/bounced analytics.
+- Delivery event ingestion back to DB for sent/delivered/bounced analytics.

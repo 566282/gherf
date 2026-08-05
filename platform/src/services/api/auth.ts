@@ -1,6 +1,7 @@
 import { generateReferralCode, getUserLevel } from '@/lib/auth';
 import { env } from '@/lib/env';
 import { getDeviceFingerprintInput, getOrCreateSessionId, sanitizeEmail } from '@/lib/security';
+import { bindStoredReservationToUser } from '@/services/api/promotionalRewards';
 import { releaseWithdrawalHolds } from '@/services/api/wallet';
 import { resolveMembershipLabel, resolveMembershipPlan } from '@/services/api/membership';
 import { createFiatPaymentIntent } from '@/services/api/p2pMerchant';
@@ -350,9 +351,17 @@ export async function signUp(
   referralCode?: string,
   role: AppRole = 'registered_user',
 ): Promise<void> {
-  const { error } = await supabase.auth.signUp(buildReferralSignupRequest(email, password, fullName, referralCode, role));
+  const { data, error } = await supabase.auth.signUp(buildReferralSignupRequest(email, password, fullName, referralCode, role));
 
   if (error) throw error;
+
+  if (data.user?.id) {
+    try {
+      await bindStoredReservationToUser(data.user.id);
+    } catch {
+      // Best effort bind: signup should not fail if reward binding is temporarily unavailable.
+    }
+  }
 }
 
 export async function createAdminUser(input: AdminCreateUserRequest): Promise<UserProfile> {
