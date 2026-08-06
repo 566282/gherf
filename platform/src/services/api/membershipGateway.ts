@@ -1,5 +1,5 @@
-import { supabase } from '@/services/supabase/client';
-import { resolvePaymentGatewayRoute } from '@/services/api/membershipLifecycle';
+import { supabase } from '../supabase/client';
+import { resolvePaymentGatewayRoute } from './membershipLifecycle';
 
 export type MembershipGatewayProvider = {
   id: string;
