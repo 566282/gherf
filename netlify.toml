@@ -1,7 +1,6 @@
 [build]
   base = "platform"
   command = "npm run build"
-  functions = "supabase/functions"
   publish = "dist"
 
 [build.environment]
