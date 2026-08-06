@@ -1,0 +1,63 @@
+-- 053_backfill_confirmed_auth_users.sql
+-- Backfill any confirmed auth users into active profiles so existing accounts can pass auth guards.
+
+INSERT INTO public.profiles (
+  id,
+  email,
+  full_name,
+  avatar_url,
+  role,
+  status,
+  is_active,
+  is_email_verified,
+  two_factor_enabled,
+  referral_code,
+  referred_by_code,
+  wallet_balance,
+  reward_balance,
+  reward_history_count,
+  unread_notifications_count,
+  reputation_score,
+  level_label,
+  level_tier,
+  badges,
+  last_login_at,
+  created_at,
+  updated_at
+)
+SELECT
+  u.id,
+  u.email,
+  COALESCE(NULLIF(u.raw_user_meta_data ->> 'full_name', ''), SPLIT_PART(u.email, '@', 1)),
+  NULLIF(u.raw_user_meta_data ->> 'avatar_url', ''),
+  COALESCE(NULLIF(u.raw_user_meta_data ->> 'role', '')::public.user_role, 'registered_user'::public.user_role),
+  CASE WHEN u.email_confirmed_at IS NULL THEN 'pending_verification'::public.user_status ELSE 'active'::public.user_status END,
+  u.email_confirmed_at IS NOT NULL,
+  u.email_confirmed_at IS NOT NULL,
+  COALESCE((u.raw_user_meta_data ->> 'two_factor_enabled')::BOOLEAN, FALSE),
+  COALESCE(NULLIF(u.raw_user_meta_data ->> 'referral_code', ''), UPPER(REGEXP_REPLACE(COALESCE(NULLIF(u.raw_user_meta_data ->> 'full_name', ''), SPLIT_PART(u.email, '@', 1)), '[^a-zA-Z0-9]+', '', 'g')) || '-' || UPPER(SUBSTRING(MD5(u.id::text), 1, 4))),
+  NULLIF(u.raw_user_meta_data ->> 'referred_by_code', ''),
+  0,
+  0,
+  0,
+  0,
+  0,
+  'Starter',
+  1,
+  '{}'::TEXT[],
+  NULL,
+  COALESCE(u.created_at, CURRENT_TIMESTAMP),
+  CURRENT_TIMESTAMP
+FROM auth.users u
+ON CONFLICT (id) DO UPDATE
+  SET email = EXCLUDED.email,
+      full_name = EXCLUDED.full_name,
+      avatar_url = EXCLUDED.avatar_url,
+      role = EXCLUDED.role,
+      status = EXCLUDED.status,
+      is_active = EXCLUDED.is_active,
+      is_email_verified = EXCLUDED.is_email_verified,
+      referral_code = COALESCE(public.profiles.referral_code, EXCLUDED.referral_code),
+      referred_by_code = COALESCE(public.profiles.referred_by_code, EXCLUDED.referred_by_code),
+      two_factor_enabled = COALESCE(public.profiles.two_factor_enabled, EXCLUDED.two_factor_enabled),
+      updated_at = CURRENT_TIMESTAMP;

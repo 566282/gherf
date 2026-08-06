@@ -137,6 +137,7 @@ See `netlify.toml` for deployment configuration.
 2. Pushes to `main` can deploy to Netlify once the production secrets are configured.
 3. Required secrets: `NETLIFY_AUTH_TOKEN`, `NETLIFY_SITE_ID`.
 4. Required build variables: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_APP_ENV=production`.
+5. Set `VITE_APP_PUBLIC_URL=https://go4wealth.org` so Supabase email redirects land on the production site instead of localhost.
 
 ### Supabase Production
 

@@ -20,6 +20,11 @@ import { supabase } from '@/services/supabase/client';
 
 type OAuthProvider = 'google' | 'facebook' | 'apple';
 
+function buildPublicAppUrl(pathname: string): string {
+  const baseUrl = env.publicAppUrl || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
+  return new URL(pathname, baseUrl).toString();
+}
+
 export interface ReferralSignupRequest {
   email: string;
   password: string;
@@ -194,7 +199,7 @@ async function signInWithOAuthProvider(provider: OAuthProvider, rememberLogin = 
   const { error } = await supabase.auth.signInWithOAuth({
     provider,
     options: {
-      redirectTo: `${window.location.origin}/app`,
+      redirectTo: buildPublicAppUrl('/app'),
       queryParams: rememberLogin ? { prompt: 'consent' } : undefined,
     },
   });
@@ -210,13 +215,13 @@ export function buildReferralSignupRequest(
   fullName: string,
   referralCode?: string,
   role: AppRole = 'registered_user',
-  redirectOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost',
+  redirectOrigin = env.publicAppUrl || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost'),
 ): ReferralSignupRequest {
   return {
     email,
     password,
     options: {
-      emailRedirectTo: `${redirectOrigin}/login`,
+      emailRedirectTo: new URL('/login', redirectOrigin).toString(),
       data: {
         full_name: fullName,
         referral_code: generateReferralCode(fullName, email),
@@ -358,19 +363,20 @@ export async function signUp(
   role: AppRole = 'registered_user',
 ): Promise<SignUpResult> {
   const { data, error } = await supabase.auth.signUp(buildReferralSignupRequest(email, password, fullName, referralCode, role));
+  const signupData = data ?? {};
 
   if (error) throw error;
 
-  if (data.user?.id) {
+  if (signupData.user?.id) {
     try {
-      await bindStoredReservationToUser(data.user.id);
+      await bindStoredReservationToUser(signupData.user.id);
     } catch {
       // Best effort bind: signup should not fail if reward binding is temporarily unavailable.
     }
   }
 
   return {
-    emailConfirmationRequired: !data.session,
+    emailConfirmationRequired: !signupData.session,
     email,
     role,
   };
@@ -381,7 +387,7 @@ export async function resendSignupConfirmation(email: string): Promise<void> {
     type: 'signup',
     email,
     options: {
-      emailRedirectTo: `${window.location.origin}/login`,
+      emailRedirectTo: buildPublicAppUrl('/login'),
     },
   });
 
@@ -576,7 +582,7 @@ export async function revokeSession(sessionId: string, reason = 'manual_revocati
 
 export async function requestPasswordReset(email: string): Promise<void> {
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${window.location.origin}/reset-password`,
+    redirectTo: buildPublicAppUrl('/reset-password'),
   });
 
   if (error) throw error;
@@ -587,7 +593,7 @@ export async function resendVerificationEmail(email: string): Promise<void> {
     type: 'signup',
     email,
     options: {
-      emailRedirectTo: `${window.location.origin}/login`,
+      emailRedirectTo: buildPublicAppUrl('/login'),
     },
   });
 

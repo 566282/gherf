@@ -38,6 +38,7 @@ if (missingRequiredEnv.length > 0) {
 export const env = {
   supabaseUrl: getRuntimeValue('VITE_SUPABASE_URL', getRuntimeValue('SUPABASE_URL', isDevelopment ? 'https://example.supabase.co' : '')),
   supabaseAnonKey: getRuntimeValue('VITE_SUPABASE_ANON_KEY', getRuntimeValue('SUPABASE_ANON_KEY', isDevelopment ? 'public-anon-key' : '')),
+  publicAppUrl: getRuntimeValue('VITE_APP_PUBLIC_URL', getRuntimeValue('APP_PUBLIC_URL', '')),
   appEnv: getRuntimeValue('VITE_APP_ENV', getRuntimeValue('APP_ENV', 'development')),
   captchaSiteKey: getRuntimeValue('VITE_TURNSTILE_SITE_KEY', ''),
   captchaEnabled: getRuntimeBoolean('VITE_SECURITY_CAPTCHA_ENABLED', false),

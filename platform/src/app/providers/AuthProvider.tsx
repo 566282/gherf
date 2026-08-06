@@ -21,19 +21,29 @@ const defaultState: AuthState = {
 export function AuthProvider({ children }: PropsWithChildren): JSX.Element {
   const [state, setState] = useState<AuthState>(defaultState);
 
+  const clearAuthState = () => {
+    setState({
+      isLoading: false,
+      isAuthenticated: false,
+      profile: null,
+    });
+  };
+
   const refreshProfile = async () => {
     setState((prev) => ({ ...prev, isLoading: prev.profile ? prev.isLoading : true }));
 
     const {
       data: { session },
+      error,
     } = await supabase.auth.getSession();
 
+    if (error) {
+      clearAuthState();
+      return;
+    }
+
     if (!session?.user) {
-      setState({
-        isLoading: false,
-        isAuthenticated: false,
-        profile: null,
-      });
+      clearAuthState();
       return;
     }
 
@@ -45,6 +55,14 @@ export function AuthProvider({ children }: PropsWithChildren): JSX.Element {
         isAuthenticated: true,
         profile,
       });
+      return;
+    }
+
+    const { error: userError } = await supabase.auth.getUser();
+    if (userError?.message?.includes('User from sub claim in JWT does not exist')) {
+      await supabase.auth.signOut();
+      clearSecuritySessionState();
+      clearAuthState();
       return;
     }
 
