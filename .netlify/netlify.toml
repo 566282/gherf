@@ -1,14 +1,8 @@
+functionsDirectory = "/workspaces/gherf/platform/netlify/functions"
+functionsDirectoryOrigin = "config"
 headersOrigin = "config"
 redirectsOrigin = "config"
 plugins = []
-
-[dev]
-command = "npm run dev"
-targetPort = 5173.0
-
-[functions]
-
-[functions."*"]
 
 [build]
 publish = "/workspaces/gherf/platform/dist"
@@ -16,6 +10,7 @@ publishOrigin = "config"
 commandOrigin = "config"
 command = "npm run build"
 base = "/workspaces/gherf/platform"
+functions = "/workspaces/gherf/platform/netlify/functions"
 
 [build.environment]
 NODE_VERSION = "20"
@@ -31,6 +26,14 @@ NODE_VERSION = "20"
 [build.processing.js]
 
 [build.services]
+
+[dev]
+command = "npm run dev"
+targetPort = 5173.0
+
+[functions]
+
+[functions."*"]
 
 [[headers]]
 for = "/*"
