@@ -78,6 +78,7 @@ vi.mock('@/services/api/auth', () => ({
 }));
 
 vi.mock('@/services/api/gamification', () => ({
+  buildDefaultGamificationConfig: () => gamificationConfig,
   listGamificationConfig: apiState.listGamificationConfig,
 }));
 
@@ -161,11 +162,11 @@ describe('DashboardPage', () => {
     renderDashboard();
 
     expect(await screen.findByRole('heading', { name: 'Leaderboard' })).toBeInTheDocument();
-    expect(screen.getByText('Season of Momentum')).toBeInTheDocument();
-    expect(screen.getByText('Leaderboard active')).toBeInTheDocument();
-    expect(screen.getByText('Reward approved')).toBeInTheDocument();
-    expect(screen.getByText('New campaign available')).toBeInTheDocument();
-    expect(screen.getByText('Showing 5 of 8')).toBeInTheDocument();
+    expect(await screen.findByText('Season of Momentum')).toBeInTheDocument();
+    expect(await screen.findByText('Leaderboard active')).toBeInTheDocument();
+    expect(await screen.findByText('Reward approved')).toBeInTheDocument();
+    expect(await screen.findByText('New campaign available')).toBeInTheDocument();
+    expect(await screen.findByText('Showing 5 of 8')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Show more' })).toBeInTheDocument();
     expect(screen.getByPlaceholderText('Find an activity')).toBeInTheDocument();
     expect(screen.getByText('Open profile notifications →')).toBeInTheDocument();
@@ -186,5 +187,49 @@ describe('DashboardPage', () => {
     expect(screen.getByText('No withdrawal requests yet.')).toBeInTheDocument();
     expect(screen.getByText('No support tickets yet.')).toBeInTheDocument();
     expect(screen.getByText('No activity yet. Complete a task or earn a reward to populate this feed.')).toBeInTheDocument();
+  });
+
+  it('renders the dashboard even when one data source fails', async () => {
+    apiState.listSupportTickets.mockRejectedValueOnce(new Error('support tickets unavailable'));
+
+    renderDashboard();
+
+    expect(await screen.findByRole('heading', { name: 'Leaderboard' })).toBeInTheDocument();
+    expect(screen.getByText('No support tickets yet.')).toBeInTheDocument();
+  });
+
+  it('renders the dashboard even when a data source throws synchronously', async () => {
+    apiState.listWalletTransactions.mockImplementation(() => {
+      throw new Error('wallet transactions unavailable');
+    });
+
+    renderDashboard();
+
+    expect(await screen.findByRole('heading', { name: 'Leaderboard' })).toBeInTheDocument();
+    expect(screen.getByText('No support tickets yet.')).toBeInTheDocument();
+  });
+
+  it('renders the dashboard when a data source returns a null payload', async () => {
+    apiState.listNotifications.mockResolvedValue(null as never);
+    apiState.listRewardLedger.mockResolvedValue(null as never);
+    apiState.listWalletActivity.mockResolvedValue(null as never);
+    apiState.listWalletTransactions.mockResolvedValue(null as never);
+    apiState.listWithdrawalRequests.mockResolvedValue(null as never);
+    apiState.listSupportTickets.mockResolvedValue(null as never);
+    apiState.listGamificationConfig.mockResolvedValue(null as never);
+
+    renderDashboard();
+
+    expect(await screen.findByRole('heading', { name: 'Leaderboard' })).toBeInTheDocument();
+    expect(screen.getByText('No notifications yet.')).toBeInTheDocument();
+    expect(screen.getByText('No campaign history yet.')).toBeInTheDocument();
+  });
+
+  it('shows a friendly state while the profile is still unavailable', () => {
+    authState.profile = null;
+
+    renderDashboard();
+
+    expect(screen.getByText('Loading your dashboard...')).toBeInTheDocument();
   });
 });

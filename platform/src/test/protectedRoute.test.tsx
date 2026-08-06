@@ -89,4 +89,29 @@ describe('ProtectedRoute', () => {
     expect(screen.getByText('Protected content')).toBeInTheDocument();
     expect(screen.queryByText('Login screen')).not.toBeInTheDocument();
   });
+
+  it('shows loading while the authenticated session is still hydrating its profile', () => {
+    authState.isLoading = true;
+    authState.isAuthenticated = false;
+    authState.profile = null;
+
+    render(
+      <MemoryRouter initialEntries={['/app']}>
+        <Routes>
+          <Route path="/login" element={<div>Login screen</div>} />
+          <Route
+            path="/app"
+            element={
+              <ProtectedRoute requiredRoles={[UserRole.REGISTERED_USER]}>
+                <div>Protected content</div>
+              </ProtectedRoute>
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText('Loading...')).toBeInTheDocument();
+    expect(screen.queryByText('Login screen')).not.toBeInTheDocument();
+  });
 });

@@ -1,4 +1,5 @@
 import { generateReferralCode, getUserLevel } from '@/lib/auth';
+import { resolveAccountRole } from '@/lib/authRole';
 import { env } from '@/lib/env';
 import { getDeviceFingerprintInput, getOrCreateSessionId, sanitizeEmail } from '@/lib/security';
 import { bindStoredReservationToUser } from '@/services/api/promotionalRewards';
@@ -98,6 +99,36 @@ type ProfileRow = {
   last_login_at: string | null;
 };
 
+function buildFallbackProfileFromAuthUser(user: { id: string; email?: string | null; user_metadata?: Record<string, unknown> | null; app_metadata?: Record<string, unknown> | null }, role: AppRole): UserProfile {
+  const fullName = typeof user.user_metadata?.full_name === 'string' ? user.user_metadata.full_name : null;
+  const email = user.email ?? null;
+  const level = getUserLevel(0);
+  const resolvedMembershipPlan = resolveMembershipPlan(1);
+
+  return {
+    id: user.id,
+    email,
+    fullName,
+    avatarUrl: null,
+    role,
+    status: 'active',
+    isActive: true,
+    isEmailVerified: true,
+    twoFactorEnabled: false,
+    referralCode: generateReferralCode(fullName ?? '', email ?? ''),
+    referredByCode: null,
+    walletBalance: 0,
+    rewardBalance: 0,
+    rewardHistoryCount: 0,
+    unreadNotificationsCount: 0,
+    reputationScore: 0,
+    levelLabel: resolvedMembershipPlan.label ?? level.label,
+    levelTier: resolvedMembershipPlan.level ?? level.tier,
+    badges: [],
+    lastLoginAt: null,
+  };
+}
+
 function mapProfile(row: ProfileRow, email: string | null): UserProfile {
   const level = getUserLevel(row.reputation_score ?? 0);
   const resolvedMembershipPlan = resolveMembershipPlan(row.level_tier ?? 1);
@@ -195,6 +226,46 @@ async function registerCurrentSession(rememberLogin = false): Promise<void> {
   });
 }
 
+async function waitForAuthSessionStabilization(delayMs = 75): Promise<void> {
+  await new Promise((resolve) => {
+    globalThis.setTimeout(resolve, delayMs);
+  });
+}
+
+function shouldRetryPostLoginProfile(profile: UserProfile | null, attempt: number, maxAttempts: number): boolean {
+  if (attempt >= maxAttempts - 1) {
+    return false;
+  }
+
+  return !profile || profile.role === 'registered_user' || profile.role === 'guest';
+}
+
+async function getCurrentAuthUserWithRetry(retries = 3): Promise<{ user: { id: string; email?: string | null; user_metadata?: Record<string, unknown> | null; app_metadata?: Record<string, unknown> | null } | null; error: unknown }> {
+  let lastError: unknown = null;
+
+  for (let attempt = 0; attempt < retries; attempt += 1) {
+    const { data, error } = await supabase.auth.getUser();
+
+    if (error) {
+      lastError = error;
+      if (attempt < retries - 1) {
+        await waitForAuthSessionStabilization();
+      }
+      continue;
+    }
+
+    if (data.user) {
+      return { user: data.user, error: null };
+    }
+
+    if (attempt < retries - 1) {
+      await waitForAuthSessionStabilization();
+    }
+  }
+
+  return { user: null, error: lastError };
+}
+
 async function signInWithOAuthProvider(provider: OAuthProvider, rememberLogin = false): Promise<void> {
   const { error } = await supabase.auth.signInWithOAuth({
     provider,
@@ -252,17 +323,45 @@ async function getCurrentAccessToken(): Promise<string> {
 }
 
 export async function getCurrentProfile(): Promise<UserProfile | null> {
-  const { data: authData, error: authError } = await supabase.auth.getUser();
-  if (authError || !authData.user) return null;
+  const { user: authUser, error: authError } = await getCurrentAuthUserWithRetry();
+  if (authError || !authUser) return null;
 
   const { data, error } = await supabase
     .from('profiles')
     .select('id,email,full_name,avatar_url,role,status,is_active,is_email_verified,two_factor_enabled,referral_code,referred_by_code,wallet_balance,reward_balance,reward_history_count,unread_notifications_count,reputation_score,level_label,level_tier,badges,last_login_at')
-    .eq('id', authData.user.id)
+    .eq('id', authUser.id)
     .maybeSingle<ProfileRow>();
 
-  if (error || !data) return null;
-  return mapProfile(data, authData.user.email ?? null);
+  if (error) return null;
+
+  if (!data) {
+    const effectiveRole = resolveAccountRole(null, authUser);
+    return buildFallbackProfileFromAuthUser(authUser, effectiveRole);
+  }
+
+  const effectiveRole = resolveAccountRole(data.role, authUser);
+
+  if (effectiveRole !== data.role) {
+    void supabase.from('profiles').update({ role: effectiveRole }).eq('id', authUser.id);
+  }
+
+  return mapProfile({ ...data, role: effectiveRole }, authUser.email ?? null);
+}
+
+export async function getCurrentProfileForPostLogin(maxAttempts = 4): Promise<UserProfile | null> {
+  let profile: UserProfile | null = null;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    profile = await getCurrentProfile();
+
+    if (!shouldRetryPostLoginProfile(profile, attempt, maxAttempts)) {
+      return profile;
+    }
+
+    await waitForAuthSessionStabilization(150 * (attempt + 1));
+  }
+
+  return profile;
 }
 
 export async function signIn(email: string, password: string, rememberLogin = false): Promise<void> {

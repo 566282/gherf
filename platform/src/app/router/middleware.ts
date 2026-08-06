@@ -1,5 +1,6 @@
 import type { LoaderFunctionArgs } from 'react-router-dom';
 import { redirect } from 'react-router-dom';
+import { resolveAccountRole } from '@/lib/authRole';
 import { supabase } from '@/services/supabase/client';
 import { UserRole } from '@/types';
 import type { AppRole } from '@/types/auth';
@@ -53,7 +54,9 @@ export function guestOnlyMiddleware() {
         .eq('id', session.user.id)
         .maybeSingle<{ role: AppRole }>();
 
-      return redirect(getDefaultRouteForRole(profile?.role));
+      const effectiveRole = resolveAccountRole(profile?.role, session.user);
+
+      return redirect(getDefaultRouteForRole(effectiveRole));
     }
 
     return null;
@@ -76,6 +79,8 @@ export function requireAuthMiddleware(requiredRoles?: UserRole[]) {
       .eq('id', session.user.id)
       .maybeSingle<ProfileGuardRow>();
 
+    const effectiveRole = resolveAccountRole(profile?.role, session.user);
+
     if (error) {
       return null;
     }
@@ -96,7 +101,7 @@ export function requireAuthMiddleware(requiredRoles?: UserRole[]) {
       return null;
     }
 
-    if (requiredRoles && requiredRoles.length > 0 && !hasAnyRequiredRole(profile.role, requiredRoles)) {
+    if (requiredRoles && requiredRoles.length > 0 && !hasAnyRequiredRole(effectiveRole, requiredRoles)) {
       return redirect('/unauthorized');
     }
 

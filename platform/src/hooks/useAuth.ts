@@ -5,9 +5,9 @@ import { UserRole } from '@/types';
  * Hook to access current user profile and auth state.
  */
 export function useAuth() {
-  const { isLoading, profile } = useAuthContext();
+  const { isLoading, isAuthenticated, profile } = useAuthContext();
 
-  return { user: profile, loading: isLoading, error: null };
+  return { user: profile, loading: isLoading, isAuthenticated, error: null };
 }
 
 /**

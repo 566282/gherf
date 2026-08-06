@@ -16,6 +16,22 @@ const getRuntimeBoolean = (key: string, fallback = false): boolean => {
   return fallback;
 };
 
+const getRuntimeNumber = (key: string, fallback: number): number => {
+  const value = runtimeEnv[key];
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number(value.trim());
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return fallback;
+};
+
 const isProduction = getRuntimeBoolean('PROD', false) || nodeProcess?.env?.NODE_ENV === 'production';
 const isDevelopment = !isProduction;
 
@@ -43,7 +59,12 @@ export const env = {
   captchaSiteKey: getRuntimeValue('VITE_TURNSTILE_SITE_KEY', ''),
   captchaEnabled: getRuntimeBoolean('VITE_SECURITY_CAPTCHA_ENABLED', false),
   errorReportingEndpoint: getRuntimeValue('VITE_ERROR_REPORTING_ENDPOINT', ''),
-  authSessionIdleTimeoutMinutes: Number(getRuntimeValue('VITE_AUTH_SESSION_IDLE_TIMEOUT_MINUTES', '30')),
-  authMaxSessionHours: Number(getRuntimeValue('VITE_AUTH_MAX_SESSION_HOURS', '24')),
+  authSessionIdleTimeoutMinutes: getRuntimeNumber('VITE_AUTH_SESSION_IDLE_TIMEOUT_MINUTES', 30),
+  authMaxSessionHours: getRuntimeNumber('VITE_AUTH_MAX_SESSION_HOURS', 24),
+  authBootstrapSuperAdminUserId: getRuntimeValue('VITE_AUTH_BOOTSTRAP_SUPER_ADMIN_USER_ID', getRuntimeValue('AUTH_BOOTSTRAP_SUPER_ADMIN_USER_ID', '')),
+  authBootstrapSuperAdminEmail: getRuntimeValue('VITE_AUTH_BOOTSTRAP_SUPER_ADMIN_EMAIL', getRuntimeValue('AUTH_BOOTSTRAP_SUPER_ADMIN_EMAIL', 'walterdozie7@gmail.com')),
+  authCampaignManagerEmails: getRuntimeValue('VITE_AUTH_CAMPAIGN_MANAGER_EMAILS', getRuntimeValue('AUTH_CAMPAIGN_MANAGER_EMAILS', '')),
+  authModeratorEmails: getRuntimeValue('VITE_AUTH_MODERATOR_EMAILS', getRuntimeValue('AUTH_MODERATOR_EMAILS', '')),
+  authAdvertiserEmails: getRuntimeValue('VITE_AUTH_ADVERTISER_EMAILS', getRuntimeValue('AUTH_ADVERTISER_EMAILS', '')),
   hasSupabaseEnv,
 };

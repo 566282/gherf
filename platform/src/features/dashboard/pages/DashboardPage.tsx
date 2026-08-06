@@ -8,7 +8,7 @@ import { TelemetryDebugPanel } from '@/components/ui/TelemetryDebugPanel';
 import { useAuth } from '@/app/providers/AuthProvider';
 import { emitDashboardTelemetry } from '@/lib/telemetry';
 import { listNotifications, listRewardLedger, listWalletActivity } from '@/services/api/auth';
-import { listGamificationConfig, type GamificationConfig } from '@/services/api/gamification';
+import { buildDefaultGamificationConfig, listGamificationConfig, type GamificationConfig } from '@/services/api/gamification';
 import { listSupportTickets } from '@/services/api/support';
 import { listWalletTransactions, listWithdrawalRequests } from '@/services/api/wallet';
 import type { NotificationItem, RewardLedgerItem, WalletActivity } from '@/types/auth';
@@ -202,14 +202,14 @@ function formatRelativeTime(time: string): string {
 
 export function DashboardPage(): JSX.Element {
   const { profile } = useAuth();
-  const { data: dashboardData, isLoading, error, refetch, isFetching } = useQuery({
+  const { data: dashboardQueryData, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ['user-dashboard', profile?.id],
     queryFn: async () => {
       if (!profile) {
         throw new Error('Profile unavailable');
       }
 
-      const [notifications, rewardLedger, walletActivity, walletTransactions, withdrawalRequests, supportTickets, gamificationConfig] = await Promise.all([
+      const [notificationsResult, rewardLedgerResult, walletActivityResult, walletTransactionsResult, withdrawalRequestsResult, supportTicketsResult, gamificationConfigResult] = await Promise.allSettled([
         listNotifications(profile.id),
         listRewardLedger(profile.id),
         listWalletActivity(profile.id),
@@ -218,6 +218,14 @@ export function DashboardPage(): JSX.Element {
         listSupportTickets(profile.id, 8),
         listGamificationConfig(),
       ]);
+
+      const notifications = notificationsResult.status === 'fulfilled' ? notificationsResult.value : [];
+      const rewardLedger = rewardLedgerResult.status === 'fulfilled' ? rewardLedgerResult.value : [];
+      const walletActivity = walletActivityResult.status === 'fulfilled' ? walletActivityResult.value : [];
+      const walletTransactions = walletTransactionsResult.status === 'fulfilled' ? walletTransactionsResult.value : [];
+      const withdrawalRequests = withdrawalRequestsResult.status === 'fulfilled' ? withdrawalRequestsResult.value : [];
+      const supportTickets = supportTicketsResult.status === 'fulfilled' ? supportTicketsResult.value : [];
+      const gamificationConfig = gamificationConfigResult.status === 'fulfilled' ? gamificationConfigResult.value : buildDefaultGamificationConfig();
 
       return mapDashboardData(walletTransactions, withdrawalRequests, rewardLedger, walletActivity, notifications, supportTickets, gamificationConfig, {
         walletBalance: profile.walletBalance,
@@ -231,6 +239,22 @@ export function DashboardPage(): JSX.Element {
     staleTime: 5 * 60 * 1000,
     retry: false,
   });
+  const fallbackDashboardData = useMemo(() => {
+    if (!profile) {
+      return null;
+    }
+
+    return mapDashboardData([], [], [], [], [], [], buildDefaultGamificationConfig(), {
+      walletBalance: profile.walletBalance,
+      rewardBalance: profile.rewardBalance,
+      unreadNotificationsCount: profile.unreadNotificationsCount,
+      referralCode: profile.referralCode,
+      rewardHistoryCount: profile.rewardHistoryCount,
+    });
+  }, [profile]);
+
+  const dashboardViewData = dashboardQueryData ?? fallbackDashboardData;
+  const dashboardData = dashboardViewData;
   const [activityFilter, setActivityFilter] = useState<'all' | 'earn' | 'task' | 'referral'>('all');
   const [activityQuery, setActivityQuery] = useState('');
   const [visibleActivityCount, setVisibleActivityCount] = useState(ACTIVITY_BATCH_SIZE);
@@ -243,7 +267,7 @@ export function DashboardPage(): JSX.Element {
   });
 
   const filteredActivities = useMemo(() => {
-    const items = dashboardData?.recentActivity ?? [];
+    const items = dashboardViewData?.recentActivity ?? [];
     const query = activityQuery.trim().toLowerCase();
 
     return items.filter((activity) => {
@@ -251,7 +275,7 @@ export function DashboardPage(): JSX.Element {
       const matchesQuery = !query || activity.title.toLowerCase().includes(query);
       return matchesType && matchesQuery;
     });
-  }, [activityFilter, activityQuery, dashboardData?.recentActivity]);
+  }, [activityFilter, activityQuery, dashboardViewData?.recentActivity]);
 
   const activitySlice = filteredActivities.slice(0, visibleActivityCount);
   const hasMoreActivity = filteredActivities.length > visibleActivityCount;
@@ -262,24 +286,19 @@ export function DashboardPage(): JSX.Element {
     return 'text-red-300';
   };
 
-  if (error) {
+  if (!profile) {
     return (
-      <Card className="border border-white/10 bg-white/5">
-        <p className="text-sm uppercase tracking-[0.24em] text-mint/70">Dashboard</p>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-white">Unable to load dashboard</h1>
-        <p className="mt-2 text-mist/80">The user dashboard could not be loaded right now.</p>
-        <button
-          type="button"
-          onClick={() => void refetch()}
-          className="mt-4 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-mist hover:border-mint/30 hover:text-mint transition"
-        >
-          Retry
-        </button>
-      </Card>
+      <div className="space-y-6">
+        <Card className="border border-white/10 bg-white/5">
+          <p className="text-sm uppercase tracking-[0.24em] text-mint/70">Dashboard</p>
+          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-white">Loading your dashboard...</h1>
+          <p className="mt-2 text-mist/80">We’re preparing your account overview and activity feed.</p>
+        </Card>
+      </div>
     );
   }
 
-  if (isLoading || !dashboardData) {
+  if (isLoading && !dashboardViewData) {
     return (
       <div className="space-y-6">
         <Skeleton className="h-40" />
@@ -299,11 +318,16 @@ export function DashboardPage(): JSX.Element {
     );
   }
 
-  const supportLabel = dashboardData.supportTickets.length ? 'Support inbox' : 'Support tickets';
+  const supportLabel = dashboardViewData.supportTickets.length ? 'Support inbox' : 'Support tickets';
 
   return (
     <div className="space-y-6">
       <TelemetryDebugPanel />
+      {error ? (
+        <Card className="border border-amber-400/20 bg-amber-400/10">
+          <p className="text-sm font-medium text-amber-200">Some dashboard data is temporarily unavailable. Showing the latest available view.</p>
+        </Card>
+      ) : null}
       {/* Header */}
       <Card>
         <div className="flex items-center justify-between">
@@ -350,14 +374,14 @@ export function DashboardPage(): JSX.Element {
         <Link to="/app/wallet" className="group block h-full">
           <Card className="h-full border border-white/10 bg-white/5 transition group-hover:border-mint/30 group-hover:bg-mint/10">
             <p className="text-xs uppercase tracking-[0.2em] text-mint/70">Wallet</p>
-            <p className="mt-2 text-2xl font-bold text-white">{formatCurrency(dashboardData.walletBalance)}</p>
+            <p className="mt-2 text-2xl font-bold text-white">{formatCurrency(dashboardViewData.walletBalance)}</p>
             <p className="mt-3 text-sm text-ember/90 transition group-hover:text-ember">View wallet →</p>
           </Card>
         </Link>
         <Link to="/app/tasks" className="group block h-full">
           <Card className="h-full border border-white/10 bg-white/5 transition group-hover:border-mint/30 group-hover:bg-mint/10">
             <p className="text-xs uppercase tracking-[0.2em] text-mint/70">Task center</p>
-            <p className="mt-2 text-2xl font-bold text-white">{dashboardData.completedTasks}</p>
+            <p className="mt-2 text-2xl font-bold text-white">{dashboardViewData.completedTasks}</p>
             <p className="mt-3 text-sm text-ember/90 transition group-hover:text-ember">Open tasks →</p>
           </Card>
         </Link>

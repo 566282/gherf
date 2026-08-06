@@ -1,5 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
+import { resolveAccountRole } from '../lib/authRole';
 import { resolveMembershipLabel, resolveMembershipPlan } from '../services/api/membership';
+import type { AppRole } from '../types/auth';
 
 const allowedRoles = new Set(['super_admin', 'campaign_manager', 'moderator', 'advertiser', 'registered_user', 'guest']);
 const profileSelect = 'id,email,full_name,avatar_url,role,status,is_active,is_email_verified,two_factor_enabled,referral_code,referred_by_code,wallet_balance,reward_balance,reward_history_count,unread_notifications_count,reputation_score,level_label,level_tier,badges,last_login_at';
@@ -106,7 +108,14 @@ export async function handler(event: AdminCreateUserHandlerEvent) {
     .eq('id', authUser.user.id)
     .maybeSingle();
 
-  if (callerProfileError || callerProfile?.role !== 'super_admin') {
+  const callerRole = resolveAccountRole(callerProfile?.role as AppRole | null | undefined, {
+    id: authUser.user.id,
+    email: authUser.user.email,
+    user_metadata: authUser.user.user_metadata,
+    app_metadata: authUser.user.app_metadata,
+  });
+
+  if (callerProfileError || callerRole !== 'super_admin') {
     return json(403, { error: 'Only super admins can create managed users.' });
   }
 

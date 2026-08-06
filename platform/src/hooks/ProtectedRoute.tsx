@@ -19,7 +19,7 @@ export function ProtectedRoute({
   requiredRoles,
   fallback,
 }: ProtectedRouteProps) {
-  const { user, loading } = useAuth();
+  const { user, loading, isAuthenticated } = useAuth();
   // hasRole must be called unconditionally to satisfy React's Rules of Hooks.
   const hasRole = useHasRole(...(requiredRoles ?? []));
 
@@ -27,7 +27,7 @@ export function ProtectedRoute({
     return fallback || <div className="flex items-center justify-center min-h-screen">Loading...</div>;
   }
 
-  if (!user) {
+  if (!isAuthenticated || !user) {
     return <Navigate to="/login" replace />;
   }
 

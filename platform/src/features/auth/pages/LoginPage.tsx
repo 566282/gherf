@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import {
   getCurrentProfile,
+  getCurrentProfileForPostLogin,
   requestPhoneOtp,
   signIn,
   signInWithApple,
@@ -80,7 +81,7 @@ export function LoginPage(): JSX.Element {
 
     try {
       await signIn(email, password, rememberLogin);
-      const profile = await getCurrentProfile();
+      const profile = await getCurrentProfileForPostLogin();
       setSuccessMessage('Signed in successfully. Redirecting to your dashboard.');
       navigate(getPostLoginRoute(profile?.role), { replace: true });
     } catch (authenticationError) {
@@ -123,7 +124,7 @@ export function LoginPage(): JSX.Element {
     setIsSubmitting(true);
     try {
       await verifyPhoneOtp(phone.trim(), otpCode.trim(), rememberLogin);
-      const profile = await getCurrentProfile();
+      const profile = await getCurrentProfileForPostLogin();
       setSuccessMessage('Phone verified. Redirecting to your dashboard.');
       navigate(getPostLoginRoute(profile?.role), { replace: true });
     } catch (otpError) {
