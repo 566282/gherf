@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { signUp } from '@/services/api/auth';
+import { resendSignupConfirmation, signUp } from '@/services/api/auth';
 import type { AppRole } from '@/types/auth';
 
 const roleOptions: Array<{ value: AppRole; label: string }> = [
@@ -19,9 +19,35 @@ export function SignupPage(): JSX.Element {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isResendingConfirmation, setIsResendingConfirmation] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [registeredEmail, setRegisteredEmail] = useState<string | null>(null);
+  const [registeredRole, setRegisteredRole] = useState<AppRole | null>(null);
+  const [emailConfirmationRequired, setEmailConfirmationRequired] = useState(true);
   const [touched, setTouched] = useState({ fullName: false, email: false, password: false, confirmPassword: false });
+
+  const roleOnboardingSummary = useMemo(() => {
+    if (registeredRole === 'advertiser') {
+      return {
+        heading: 'Advertiser onboarding next steps',
+        steps: [
+          'Verify your email from the confirmation message we just sent.',
+          'Sign in and complete advertiser profile, brand details, and payout setup.',
+          'Create your first campaign and submit it for review.',
+        ],
+      };
+    }
+
+    return {
+      heading: 'User onboarding next steps',
+      steps: [
+        'Verify your email from the confirmation message we just sent.',
+        'Sign in and complete your profile to unlock dashboard features.',
+        'Explore missions, referrals, and rewards from your dashboard.',
+      ],
+    };
+  }, [registeredRole]);
 
   const fieldErrors = useMemo(() => {
     const nextErrors: { fullName?: string; email?: string; password?: string; confirmPassword?: string } = {};
@@ -62,14 +88,53 @@ export function SignupPage(): JSX.Element {
     setSuccessMessage(null);
 
     try {
-      await signUp(email, password, fullName, referralCode || undefined, role);
-      setSuccessMessage('Account created successfully. Redirecting to sign in.');
-      navigate('/login', { replace: true });
+      const signupResult = await signUp(email, password, fullName, referralCode || undefined, role);
+      setRegisteredEmail(signupResult.email);
+      setRegisteredRole(signupResult.role);
+      setEmailConfirmationRequired(signupResult.emailConfirmationRequired);
+      setSuccessMessage(
+        signupResult.emailConfirmationRequired
+          ? 'Registration successful. Check your inbox for the confirmation link to activate your account.'
+          : 'Registration successful. Your account is ready and you can sign in now.',
+      );
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to create account.');
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleResendConfirmation = async () => {
+    if (!registeredEmail) {
+      return;
+    }
+
+    setIsResendingConfirmation(true);
+    setMessage(null);
+
+    try {
+      await resendSignupConfirmation(registeredEmail);
+      setSuccessMessage(`A fresh confirmation email has been sent to ${registeredEmail}.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to resend confirmation email right now.');
+    } finally {
+      setIsResendingConfirmation(false);
+    }
+  };
+
+  const handleRegisterAnotherAccount = () => {
+    setFullName('');
+    setEmail('');
+    setReferralCode('');
+    setRole('registered_user');
+    setPassword('');
+    setConfirmPassword('');
+    setMessage(null);
+    setSuccessMessage(null);
+    setRegisteredEmail(null);
+    setRegisteredRole(null);
+    setEmailConfirmationRequired(true);
+    setTouched({ fullName: false, email: false, password: false, confirmPassword: false });
   };
 
   return (
@@ -78,6 +143,49 @@ export function SignupPage(): JSX.Element {
         <p className="text-sm uppercase tracking-[0.24em] text-mint/70">Onboarding</p>
         <h1 className="mt-2 text-2xl font-semibold tracking-tight text-white">Create account</h1>
         <p className="mt-2 text-sm text-mist/80">Email signup, optional referral tracking, and role-based onboarding.</p>
+        {successMessage && registeredEmail && registeredRole ? (
+          <div className="mt-6 space-y-5" aria-live="polite">
+            <div className="rounded-2xl border border-success/30 bg-success/10 p-4">
+              <p className="text-sm uppercase tracking-[0.2em] text-success/80">Registration complete</p>
+              <p className="mt-2 text-base font-medium text-white">{successMessage}</p>
+              <p className="mt-2 text-sm text-mist/80">
+                Signed up as <span className="font-semibold text-white">{registeredRole === 'advertiser' ? 'Advertiser' : 'User'}</span> with <span className="font-semibold text-white">{registeredEmail}</span>.
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+              <h2 className="text-sm uppercase tracking-[0.2em] text-mint/80">{roleOnboardingSummary.heading}</h2>
+              <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-mist/85">
+                {roleOnboardingSummary.steps.map((step) => (
+                  <li key={step}>{step}</li>
+                ))}
+              </ol>
+            </div>
+
+            {emailConfirmationRequired ? (
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-mist/85">
+                <p className="font-medium text-white">No email yet?</p>
+                <p className="mt-2">Check your spam or promotions folder, then resend the confirmation email if needed.</p>
+              </div>
+            ) : null}
+
+            {message ? <p className="form-error" role="alert">{message}</p> : null}
+
+            <div className="flex flex-wrap gap-3">
+              <Button type="button" onClick={() => navigate('/login')}>
+                Continue to sign in
+              </Button>
+              {emailConfirmationRequired ? (
+                <Button type="button" variant="ghost" onClick={handleResendConfirmation} disabled={isResendingConfirmation}>
+                  {isResendingConfirmation ? 'Resending confirmation...' : 'Resend confirmation email'}
+                </Button>
+              ) : null}
+              <Button type="button" variant="ghost" onClick={handleRegisterAnotherAccount}>
+                Register another account
+              </Button>
+            </div>
+          </div>
+        ) : (
         <form onSubmit={handleSubmit} className="mt-6 grid gap-4 md:grid-cols-2" noValidate>
           <label className="grid gap-2 md:col-span-2" htmlFor="signup-full-name">
             <span className="text-sm text-mist/70">Full name</span>
@@ -169,12 +277,12 @@ export function SignupPage(): JSX.Element {
             ) : null}
           </label>
           {message ? <p className="md:col-span-2 form-error" role="alert">{message}</p> : null}
-          {successMessage ? <p className="md:col-span-2 form-success" role="status">{successMessage}</p> : null}
           <div className="md:col-span-2 flex flex-wrap gap-3">
             <Button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Creating account...' : 'Create account'}</Button>
             <Button type="button" variant="ghost" onClick={() => navigate('/login')}>Back to sign in</Button>
           </div>
         </form>
+        )}
         <p className="mt-4 text-sm text-mist/70">Already have an account? <Link to="/login" className="text-ember/90 transition hover:text-ember">Sign in</Link></p>
       </Card>
     </div>

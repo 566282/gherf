@@ -42,6 +42,12 @@ export interface AdminCreateUserRequest {
   levelTier: number;
 }
 
+export interface SignUpResult {
+  emailConfirmationRequired: boolean;
+  email: string;
+  role: AppRole;
+}
+
 type LockStatusRow = {
   is_locked: boolean;
   locked_until: string | null;
@@ -350,7 +356,7 @@ export async function signUp(
   fullName: string,
   referralCode?: string,
   role: AppRole = 'registered_user',
-): Promise<void> {
+): Promise<SignUpResult> {
   const { data, error } = await supabase.auth.signUp(buildReferralSignupRequest(email, password, fullName, referralCode, role));
 
   if (error) throw error;
@@ -361,6 +367,26 @@ export async function signUp(
     } catch {
       // Best effort bind: signup should not fail if reward binding is temporarily unavailable.
     }
+  }
+
+  return {
+    emailConfirmationRequired: !data.session,
+    email,
+    role,
+  };
+}
+
+export async function resendSignupConfirmation(email: string): Promise<void> {
+  const { error } = await supabase.auth.resend({
+    type: 'signup',
+    email,
+    options: {
+      emailRedirectTo: `${window.location.origin}/login`,
+    },
+  });
+
+  if (error) {
+    throw error;
   }
 }
 
