@@ -76,8 +76,16 @@ export function requireAuthMiddleware(requiredRoles?: UserRole[]) {
       .eq('id', session.user.id)
       .maybeSingle<ProfileGuardRow>();
 
-    if (error || !profile || !profile.is_active) {
-      return redirect('/unauthorized');
+    if (error) {
+      return null;
+    }
+
+    if (!profile) {
+      return null;
+    }
+
+    if (!profile.is_active) {
+      return null;
     }
 
     if (profile.status === 'suspended' || profile.status === 'banned') {
@@ -85,7 +93,7 @@ export function requireAuthMiddleware(requiredRoles?: UserRole[]) {
     }
 
     if (profile.status !== 'active') {
-      return redirect('/unauthorized');
+      return null;
     }
 
     if (requiredRoles && requiredRoles.length > 0 && !hasAnyRequiredRole(profile.role, requiredRoles)) {
