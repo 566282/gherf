@@ -21,8 +21,20 @@ import { supabase } from '@/services/supabase/client';
 
 type OAuthProvider = 'google' | 'facebook' | 'apple';
 
+function resolvePublicOrigin(): string {
+  if (env.publicAppUrl) {
+    return env.publicAppUrl;
+  }
+
+  if (typeof window !== 'undefined' && typeof window.location?.origin === 'string' && window.location.origin) {
+    return window.location.origin;
+  }
+
+  throw new Error('Unable to resolve public app origin. Set VITE_APP_PUBLIC_URL for non-browser runtimes.');
+}
+
 function buildPublicAppUrl(pathname: string): string {
-  const baseUrl = env.publicAppUrl || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
+  const baseUrl = resolvePublicOrigin();
   return new URL(pathname, baseUrl).toString();
 }
 
@@ -286,13 +298,15 @@ export function buildReferralSignupRequest(
   fullName: string,
   referralCode?: string,
   role: AppRole = 'registered_user',
-  redirectOrigin = env.publicAppUrl || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost'),
+  redirectOrigin?: string,
 ): ReferralSignupRequest {
+  const resolvedRedirectOrigin = redirectOrigin || resolvePublicOrigin();
+
   return {
     email,
     password,
     options: {
-      emailRedirectTo: new URL('/login', redirectOrigin).toString(),
+      emailRedirectTo: new URL('/login', resolvedRedirectOrigin).toString(),
       data: {
         full_name: fullName,
         referral_code: generateReferralCode(fullName, email),

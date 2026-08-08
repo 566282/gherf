@@ -44,6 +44,7 @@ This phase formalizes the production deployment and operations model across Netl
 - Local development uses `.env.example` as the template.
 - Production and preview values must be configured in Netlify and GitHub Actions secrets/variables.
 - Do not commit `.env.local` or any production credential file.
+- Runtime mapping rules and local/live separation are documented in `docs/SERVER_ENV_RUNTIME_GUIDE.md`.
 
 ## Monitoring and Error Logging
 

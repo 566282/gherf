@@ -71,6 +71,11 @@ See [.env.setup.md](.env.setup.md) for:
 - Development & production configuration
 - Security notes
 
+See [docs/SERVER_ENV_RUNTIME_GUIDE.md](docs/SERVER_ENV_RUNTIME_GUIDE.md) for:
+- Local server runtime file mapping
+- Live Netlify runtime file mapping
+- Explicit runtime source indicators returned by server endpoints
+
 ## Features
 
 ### Authentication & Authorization
@@ -136,8 +141,9 @@ See `netlify.toml` for deployment configuration.
 1. Pull requests run lint, typecheck, test, and build validation.
 2. Pushes to `main` can deploy to Netlify once the production secrets are configured.
 3. Required secrets: `NETLIFY_AUTH_TOKEN`, `NETLIFY_SITE_ID`.
-4. Required build variables: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_APP_ENV=production`.
-5. Set `VITE_APP_PUBLIC_URL=https://go4wealth.org` so Supabase email redirects land on the production site instead of localhost.
+4. Required build variables: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_APP_ENV=production`, `VITE_APP_PUBLIC_URL`.
+5. Required server runtime variables for Netlify Functions: `SUPABASE_URL` (or `VITE_SUPABASE_URL`) and `SUPABASE_SERVICE_ROLE_KEY`.
+6. Verify runtime behavior and response headers using `docs/SERVER_ENV_RUNTIME_GUIDE.md`.
 
 ### Supabase Production
 
@@ -234,8 +240,10 @@ platform/
 
 ### Environment Variables
 - Copy `.env.example` to `.env.local` (must be local, not committed)
-- Ensure `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are set
+- Ensure `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are set for the client build
+- Ensure `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are set for server runtime
 - Frontend can only access variables starting with `VITE_`
+- Use [docs/SERVER_ENV_RUNTIME_GUIDE.md](docs/SERVER_ENV_RUNTIME_GUIDE.md) to prevent local/live env mix-ups
 
 ## License
 

@@ -1,4 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
 import { resolveAccountRole } from '../lib/authRole';
 import { resolveMembershipLabel, resolveMembershipPlan } from '../services/api/membership';
 import type { AppRole } from '../types/auth';
@@ -6,19 +8,114 @@ import type { AppRole } from '../types/auth';
 const allowedRoles = new Set(['super_admin', 'campaign_manager', 'moderator', 'advertiser', 'registered_user', 'guest']);
 const profileSelect = 'id,email,full_name,avatar_url,role,status,is_active,is_email_verified,two_factor_enabled,referral_code,referred_by_code,wallet_balance,reward_balance,reward_history_count,unread_notifications_count,reputation_score,level_label,level_tier,badges,last_login_at';
 
+let cachedLocalEnv: Record<string, string> | null = null;
+
+type EnvSource = 'process' | 'local-file' | 'missing';
+
+type ResolvedServerEnv = {
+  value: string;
+  source: EnvSource;
+};
+
 function getPlanLabelForTier(levelTier: number): string {
   return resolveMembershipLabel(levelTier);
 }
 
-function json(statusCode: number, body: Record<string, unknown>) {
+function json(statusCode: number, body: Record<string, unknown>, extraHeaders: Record<string, string> = {}) {
   return {
     statusCode,
     headers: {
       'Content-Type': 'application/json',
       'Cache-Control': 'no-store',
+      ...extraHeaders,
     },
     body: JSON.stringify(body),
   };
+}
+
+function resolveRuntimeMode(): string {
+  const netlifyContext = process.env.CONTEXT?.trim();
+  if (netlifyContext) {
+    return `netlify:${netlifyContext}`;
+  }
+
+  return process.env.NODE_ENV === 'production' ? 'production' : 'local';
+}
+
+function parseEnvFile(content: string): Record<string, string> {
+  const result: Record<string, string> = {};
+
+  for (const rawLine of content.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) {
+      continue;
+    }
+
+    const separatorIndex = line.indexOf('=');
+    if (separatorIndex <= 0) {
+      continue;
+    }
+
+    const key = line.slice(0, separatorIndex).trim();
+    let value = line.slice(separatorIndex + 1).trim();
+
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+
+    result[key] = value;
+  }
+
+  return result;
+}
+
+function readLocalEnvFile(): Record<string, string> {
+  if (cachedLocalEnv) {
+    return cachedLocalEnv;
+  }
+
+  const loaded: Record<string, string> = {};
+  const candidates = [
+    path.resolve(process.cwd(), '.env.local'),
+    path.resolve(process.cwd(), '.env'),
+  ];
+
+  for (const candidate of candidates) {
+    if (!existsSync(candidate)) {
+      continue;
+    }
+
+    const parsed = parseEnvFile(readFileSync(candidate, 'utf8'));
+    Object.assign(loaded, parsed);
+  }
+
+  cachedLocalEnv = loaded;
+  return loaded;
+}
+
+function resolveServerEnv(...keys: string[]): ResolvedServerEnv {
+  for (const key of keys) {
+    const value = process.env[key];
+    if (value && value.trim().length > 0) {
+      return { value: value.trim(), source: 'process' };
+    }
+  }
+
+  // Local development fallback: read .env.local/.env when function runner did not inject process.env.
+  if (process.env.NODE_ENV !== 'production') {
+    const localEnv = readLocalEnvFile();
+    for (const key of keys) {
+      const value = localEnv[key];
+      if (value && value.trim().length > 0) {
+        return { value: value.trim(), source: 'local-file' };
+      }
+    }
+  }
+
+  return { value: '', source: 'missing' };
 }
 
 function normalizeTier(input: unknown): number {
@@ -76,11 +173,32 @@ export async function handler(event: AdminCreateUserHandlerEvent) {
     return json(405, { error: 'Method not allowed.' });
   }
 
-  const supabaseUrl = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SERVICE_ROLE;
+  const supabaseUrl = resolveServerEnv('SUPABASE_URL', 'VITE_SUPABASE_URL');
+  const serviceRoleKey = resolveServerEnv('SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SERVICE_ROLE');
+  const runtimeMode = resolveRuntimeMode();
+  const runtimeHeader = {
+    'X-Admin-Create-User-Runtime-Mode': runtimeMode,
+    'X-Admin-Create-User-Env-Source': `supabaseUrl:${supabaseUrl.source};serviceRoleKey:${serviceRoleKey.source}`,
+  };
 
-  if (!supabaseUrl || !serviceRoleKey) {
-    return json(500, { error: 'Admin creation service is not configured.' });
+  if (!supabaseUrl.value || !serviceRoleKey.value) {
+    const missing: string[] = [];
+    if (!supabaseUrl.value) {
+      missing.push('SUPABASE_URL (or VITE_SUPABASE_URL)');
+    }
+    if (!serviceRoleKey.value) {
+      missing.push('SUPABASE_SERVICE_ROLE_KEY');
+    }
+
+    return json(500, {
+      error: `Admin creation service is not configured. Missing: ${missing.join(', ')}.`,
+      code: 'ADMIN_CREATE_USER_CONFIG_MISSING',
+      runtimeMode,
+      envSource: {
+        supabaseUrl: supabaseUrl.source,
+        serviceRoleKey: serviceRoleKey.source,
+      },
+    }, runtimeHeader);
   }
 
   const authorization = event.headers.authorization ?? event.headers.Authorization ?? '';
@@ -90,7 +208,7 @@ export async function handler(event: AdminCreateUserHandlerEvent) {
     return json(401, { error: 'Missing authorization token.' });
   }
 
-  const adminClient = createClient(supabaseUrl, serviceRoleKey, {
+  const adminClient = createClient(supabaseUrl.value, serviceRoleKey.value, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
@@ -237,5 +355,5 @@ export async function handler(event: AdminCreateUserHandlerEvent) {
     return json(500, { error: 'User was created, but the audit entry failed to save.' });
   }
 
-  return json(200, { profile: mapProfile(profileRow) });
+  return json(200, { profile: mapProfile(profileRow), runtimeMode }, runtimeHeader);
 }

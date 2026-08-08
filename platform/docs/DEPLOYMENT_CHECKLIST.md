@@ -3,18 +3,21 @@
 ## Before Deploy
 
 - Confirm `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are configured for the target environment.
+- Confirm `SUPABASE_URL` (or `VITE_SUPABASE_URL`) and `SUPABASE_SERVICE_ROLE_KEY` are configured for Netlify Functions runtime in the same target environment.
 - Confirm `VITE_APP_ENV=production` in Netlify production context.
 - Verify migrations are applied to the target Supabase project.
 - Confirm RLS policies are enabled for all application tables.
 - Run lint, typecheck, tests, and build locally or in CI.
 - Apply notification-related migrations in order: `016_notification_delivery_infra.sql`, `017_withdrawal_scheduled_date.sql`, then `018_notification_queue_worker.sql`.
 - Verify the `notify_super_admins`, `process_notification_queue`, and `retry_notification_queue_item` RPCs exist in the target Supabase project before release.
+- Review [SERVER_ENV_RUNTIME_GUIDE.md](SERVER_ENV_RUNTIME_GUIDE.md) and confirm local vs live runtime separation before publish.
 
 ## Netlify
 
 - Build command: `npm run build`
 - Publish directory: `dist`
 - Node version: 20
+- Ensure environment variable scope covers Functions runtime, not build-only scope.
 - Keep the SPA redirect to `index.html`.
 - Keep the long-lived immutable asset cache headers.
 
