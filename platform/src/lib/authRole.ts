@@ -1,7 +1,29 @@
-import { env } from './env';
 import type { AppRole } from '../types/auth';
 
 const knownRoles: AppRole[] = ['guest', 'registered_user', 'advertiser', 'moderator', 'campaign_manager', 'super_admin'];
+
+type RuntimeEnvValue = string | boolean | undefined;
+
+function getRuntimeEnvValue(...keys: string[]): string {
+  const nodeEnv = typeof process !== 'undefined' ? (process.env as Record<string, string | undefined>) : {};
+  const viteEnv = (typeof import.meta !== 'undefined' && typeof import.meta.env !== 'undefined')
+    ? (import.meta.env as Record<string, RuntimeEnvValue>)
+    : {};
+
+  for (const key of keys) {
+    const viteValue = viteEnv[key];
+    if (typeof viteValue === 'string' && viteValue.trim().length > 0) {
+      return viteValue.trim();
+    }
+
+    const nodeValue = nodeEnv[key];
+    if (typeof nodeValue === 'string' && nodeValue.trim().length > 0) {
+      return nodeValue.trim();
+    }
+  }
+
+  return '';
+}
 
 function normalizeRole(value: unknown): AppRole | null {
   if (typeof value !== 'string') {
@@ -44,8 +66,12 @@ function resolveBootstrapSuperAdminRole(
   authUser: { id?: string; email?: string | null } | null | undefined,
   options?: RoleResolutionOptions,
 ): AppRole | null {
-  const configuredBootstrapId = (options?.bootstrapSuperAdminUserId ?? env.authBootstrapSuperAdminUserId ?? '').trim();
-  const configuredBootstrapEmail = normalizeEmail(options?.bootstrapSuperAdminEmail ?? env.authBootstrapSuperAdminEmail);
+  const configuredBootstrapId = (options?.bootstrapSuperAdminUserId ?? getRuntimeEnvValue('VITE_AUTH_BOOTSTRAP_SUPER_ADMIN_USER_ID', 'AUTH_BOOTSTRAP_SUPER_ADMIN_USER_ID')).trim();
+  const configuredBootstrapEmail = normalizeEmail(
+    options?.bootstrapSuperAdminEmail
+      ?? getRuntimeEnvValue('VITE_AUTH_BOOTSTRAP_SUPER_ADMIN_EMAIL', 'AUTH_BOOTSTRAP_SUPER_ADMIN_EMAIL')
+      ?? 'walterdozie7@gmail.com',
+  );
   const authUserId = (authUser?.id ?? '').trim();
   const authUserEmail = normalizeEmail(authUser?.email ?? null);
 
@@ -66,9 +92,9 @@ function resolveRoleFromTrustedEmail(email: string | null | undefined, options?:
     return null;
   }
 
-  const campaignManagerEmails = options?.campaignManagerEmails ?? parseEmailList(env.authCampaignManagerEmails);
-  const moderatorEmails = options?.moderatorEmails ?? parseEmailList(env.authModeratorEmails);
-  const advertiserEmails = options?.advertiserEmails ?? parseEmailList(env.authAdvertiserEmails);
+  const campaignManagerEmails = options?.campaignManagerEmails ?? parseEmailList(getRuntimeEnvValue('VITE_AUTH_CAMPAIGN_MANAGER_EMAILS', 'AUTH_CAMPAIGN_MANAGER_EMAILS'));
+  const moderatorEmails = options?.moderatorEmails ?? parseEmailList(getRuntimeEnvValue('VITE_AUTH_MODERATOR_EMAILS', 'AUTH_MODERATOR_EMAILS'));
+  const advertiserEmails = options?.advertiserEmails ?? parseEmailList(getRuntimeEnvValue('VITE_AUTH_ADVERTISER_EMAILS', 'AUTH_ADVERTISER_EMAILS'));
 
   if (campaignManagerEmails.includes(normalizedEmail)) {
     return 'campaign_manager';

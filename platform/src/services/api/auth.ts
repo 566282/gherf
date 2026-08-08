@@ -322,7 +322,15 @@ function getAdminCreateUserEndpoint(): string {
     ? String(import.meta.env.VITE_ADMIN_CREATE_USER_ENDPOINT)
     : '';
 
-  return configured || '/.netlify/functions/create-admin-user';
+  if (configured) {
+    return configured;
+  }
+
+  if (typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
+    return '/api/admin/create-user';
+  }
+
+  return '/.netlify/functions/create-admin-user';
 }
 
 function getAdminListUsersEndpoint(): string {
@@ -330,7 +338,15 @@ function getAdminListUsersEndpoint(): string {
     ? String(import.meta.env.VITE_ADMIN_LIST_USERS_ENDPOINT)
     : '';
 
-  return configured || '/.netlify/functions/list-admin-users';
+  if (configured) {
+    return configured;
+  }
+
+  if (typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
+    return '/api/admin/list-users';
+  }
+
+  return '/.netlify/functions/list-admin-users';
 }
 
 async function getCurrentAccessToken(): Promise<string> {

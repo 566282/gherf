@@ -167,9 +167,10 @@ function mapProfile(row: Record<string, unknown>) {
 }
 
 export async function handler(event: ListUsersEvent) {
-  if ((event.httpMethod ?? 'GET') !== 'GET') {
-    return json(405, { error: 'Method not allowed.' });
-  }
+  try {
+    if ((event.httpMethod ?? 'GET') !== 'GET') {
+      return json(405, { error: 'Method not allowed.' });
+    }
 
   const supabaseUrl = resolveServerEnv('SUPABASE_URL', 'VITE_SUPABASE_URL');
   const serviceRoleKey = resolveServerEnv('SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SERVICE_ROLE');
@@ -263,5 +264,21 @@ export async function handler(event: ListUsersEvent) {
     return json(400, { error: error.message || 'Unable to list users.' });
   }
 
-  return json(200, { profiles: (data ?? []).map((row) => mapProfile(row as Record<string, unknown>)), runtimeMode }, runtimeHeader);
+    return json(200, { profiles: (data ?? []).map((row) => mapProfile(row as Record<string, unknown>)), runtimeMode }, runtimeHeader);
+  } catch (error) {
+    const runtimeMode = resolveRuntimeMode();
+
+    return json(
+      500,
+      {
+        error: error instanceof Error ? error.message : 'Unexpected error while listing managed users.',
+        code: 'ADMIN_LIST_USERS_UNHANDLED',
+        runtimeMode,
+      },
+      {
+        'X-Admin-List-Users-Runtime-Mode': runtimeMode,
+        'X-Admin-List-Users-Env-Source': 'supabaseUrl:unknown;serviceRoleKey:unknown',
+      },
+    );
+  }
 }

@@ -169,9 +169,10 @@ export type AdminCreateUserHandlerEvent = {
 };
 
 export async function handler(event: AdminCreateUserHandlerEvent) {
-  if ((event.httpMethod ?? 'GET') !== 'POST') {
-    return json(405, { error: 'Method not allowed.' });
-  }
+  try {
+    if ((event.httpMethod ?? 'GET') !== 'POST') {
+      return json(405, { error: 'Method not allowed.' });
+    }
 
   const supabaseUrl = resolveServerEnv('SUPABASE_URL', 'VITE_SUPABASE_URL');
   const serviceRoleKey = resolveServerEnv('SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SERVICE_ROLE');
@@ -355,5 +356,21 @@ export async function handler(event: AdminCreateUserHandlerEvent) {
     return json(500, { error: 'User was created, but the audit entry failed to save.' });
   }
 
-  return json(200, { profile: mapProfile(profileRow), runtimeMode }, runtimeHeader);
+    return json(200, { profile: mapProfile(profileRow), runtimeMode }, runtimeHeader);
+  } catch (error) {
+    const runtimeMode = resolveRuntimeMode();
+
+    return json(
+      500,
+      {
+        error: error instanceof Error ? error.message : 'Unexpected error while creating managed user.',
+        code: 'ADMIN_CREATE_USER_UNHANDLED',
+        runtimeMode,
+      },
+      {
+        'X-Admin-Create-User-Runtime-Mode': runtimeMode,
+        'X-Admin-Create-User-Env-Source': 'supabaseUrl:unknown;serviceRoleKey:unknown',
+      },
+    );
+  }
 }

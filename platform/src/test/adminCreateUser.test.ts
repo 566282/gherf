@@ -75,7 +75,7 @@ describe('admin user creation', () => {
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      '/.netlify/functions/create-admin-user',
+      expect.stringMatching(/\/api\/admin\/create-user|\/.netlify\/functions\/create-admin-user/),
       expect.objectContaining({
         method: 'POST',
         headers: expect.objectContaining({
