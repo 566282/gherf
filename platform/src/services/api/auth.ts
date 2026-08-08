@@ -5,7 +5,7 @@ import { getDeviceFingerprintInput, getOrCreateSessionId, sanitizeEmail } from '
 import { bindStoredReservationToUser } from '@/services/api/promotionalRewards';
 import { releaseWithdrawalHolds } from '@/services/api/wallet';
 import { resolveMembershipLabel, resolveMembershipPlan } from '@/services/api/membership';
-import { createFiatPaymentIntent } from '@/services/api/p2pMerchant';
+import { createMembershipUpgradeRequest } from '@/services/api/membershipUpgradeRequests';
 import type {
   ActivityLogItem,
   AdminUserFilters,
@@ -103,7 +103,7 @@ function buildFallbackProfileFromAuthUser(user: { id: string; email?: string | n
   const fullName = typeof user.user_metadata?.full_name === 'string' ? user.user_metadata.full_name : null;
   const email = user.email ?? null;
   const level = getUserLevel(0);
-  const resolvedMembershipPlan = resolveMembershipPlan(1);
+  const resolvedMembershipPlan = resolveMembershipPlan(0);
 
   return {
     id: user.id,
@@ -131,7 +131,7 @@ function buildFallbackProfileFromAuthUser(user: { id: string; email?: string | n
 
 function mapProfile(row: ProfileRow, email: string | null): UserProfile {
   const level = getUserLevel(row.reputation_score ?? 0);
-  const resolvedMembershipPlan = resolveMembershipPlan(row.level_tier ?? 1);
+  const resolvedMembershipPlan = resolveMembershipPlan(row.level_tier ?? 0);
 
   return {
     id: row.id,
@@ -304,7 +304,11 @@ export function buildReferralSignupRequest(
 }
 
 function getAdminCreateUserEndpoint(): string {
-  return '/.netlify/functions/create-admin-user';
+  const configured = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_ADMIN_CREATE_USER_ENDPOINT)
+    ? String(import.meta.env.VITE_ADMIN_CREATE_USER_ENDPOINT)
+    : '';
+
+  return configured || '/.netlify/functions/create-admin-user';
 }
 
 async function getCurrentAccessToken(): Promise<string> {
@@ -342,7 +346,14 @@ export async function getCurrentProfile(): Promise<UserProfile | null> {
   const effectiveRole = resolveAccountRole(data.role, authUser);
 
   if (effectiveRole !== data.role) {
-    void supabase.from('profiles').update({ role: effectiveRole }).eq('id', authUser.id);
+    const { error: roleSyncError } = await supabase
+      .from('profiles')
+      .update({ role: effectiveRole, updated_at: new Date().toISOString() })
+      .eq('id', authUser.id);
+
+    if (!roleSyncError) {
+      data.role = effectiveRole;
+    }
   }
 
   return mapProfile({ ...data, role: effectiveRole }, authUser.email ?? null);
@@ -355,10 +366,22 @@ export async function getCurrentProfileForPostLogin(maxAttempts = 4): Promise<Us
     profile = await getCurrentProfile();
 
     if (!shouldRetryPostLoginProfile(profile, attempt, maxAttempts)) {
-      return profile;
+      if (profile) {
+        return profile;
+      }
+      break;
     }
 
     await waitForAuthSessionStabilization(150 * (attempt + 1));
+  }
+
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (session?.user) {
+    const effectiveRole = resolveAccountRole(null, session.user);
+    return buildFallbackProfileFromAuthUser(session.user, effectiveRole);
   }
 
   return profile;
@@ -497,10 +520,11 @@ export async function resendSignupConfirmation(email: string): Promise<void> {
 
 export async function createAdminUser(input: AdminCreateUserRequest): Promise<UserProfile> {
   const accessToken = await getCurrentAccessToken();
+  const endpoint = getAdminCreateUserEndpoint();
   let response: Response;
 
   try {
-    response = await fetch(getAdminCreateUserEndpoint(), {
+    response = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -518,10 +542,32 @@ export async function createAdminUser(input: AdminCreateUserRequest): Promise<Us
     throw new Error('Admin create-user endpoint is unreachable. Make sure the Netlify function or dev middleware is running.');
   }
 
-  const body = (await response.json().catch(() => null)) as { profile?: UserProfile; error?: string; message?: string } | null;
+  let rawBody = '';
+  let body: { profile?: UserProfile; error?: string; message?: string } | null = null;
+
+  if (typeof response.text === 'function') {
+    rawBody = await response.text().catch(() => '');
+    if (rawBody) {
+      body = (() => {
+        try {
+          return JSON.parse(rawBody) as { profile?: UserProfile; error?: string; message?: string };
+        } catch {
+          return null;
+        }
+      })();
+    }
+  } else if (typeof response.json === 'function') {
+    body = (await response.json().catch(() => null)) as { profile?: UserProfile; error?: string; message?: string } | null;
+  }
 
   if (!response.ok) {
-    throw new Error(body?.error ?? body?.message ?? 'Admin create-user endpoint returned an unexpected response.');
+    if (!body?.error && !body?.message && response.status === 404 && endpoint.startsWith('/.netlify/functions/')) {
+      throw new Error('Admin create-user endpoint is unavailable on this server. Run the app with `netlify dev` so Netlify functions are served, or set `VITE_ADMIN_CREATE_USER_ENDPOINT` to a reachable API URL.');
+    }
+
+    const statusSummary = `HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ''}`;
+    const fallbackMessage = `${statusSummary} from admin create-user endpoint.`;
+    throw new Error(body?.error ?? body?.message ?? fallbackMessage);
   }
 
   if (!body?.profile) {
@@ -530,8 +576,8 @@ export async function createAdminUser(input: AdminCreateUserRequest): Promise<Us
 
   const resolvedProfile = {
     ...body.profile,
-    levelLabel: body.profile.levelLabel ?? resolveMembershipLabel(body.profile.levelTier ?? 1),
-    levelTier: body.profile.levelTier ?? resolveMembershipPlan(body.profile.levelTier ?? 1).level,
+    levelLabel: body.profile.levelLabel ?? resolveMembershipLabel(body.profile.levelTier ?? 0),
+    levelTier: body.profile.levelTier ?? resolveMembershipPlan(body.profile.levelTier ?? 0).level,
   };
 
   return resolvedProfile;
@@ -737,19 +783,21 @@ export async function updateMemberPlan(userId: string, levelTier: number, paymen
   const rpc = typeof supabase.rpc === 'function' ? supabase.rpc : null;
 
   if (paymentAmount > 0) {
-    const idempotencyKey = `membership-upgrade-${userId}-${resolvedTier}-${Math.round(paymentAmount * 100)}`;
-    await createFiatPaymentIntent({
+    await createMembershipUpgradeRequest({
       userId,
-      moduleKey: 'membership',
-      intentType: 'membership_plan_upgrade',
-      sourceReference: `membership-tier-${resolvedTier}`,
-      amount: paymentAmount,
-      currency: paymentCurrency,
-      idempotencyKey,
-      metadata: {
-        levelTier: resolvedTier,
-      },
+      targetTier: resolvedTier,
+      paymentAmount,
+      paymentCurrency,
     });
+
+    const { data: currentProfile, error: currentProfileError } = await supabase
+      .from('profiles')
+      .select('id,email,full_name,avatar_url,role,status,is_active,is_email_verified,two_factor_enabled,referral_code,referred_by_code,wallet_balance,reward_balance,reward_history_count,unread_notifications_count,reputation_score,level_label,level_tier,badges,last_login_at')
+      .eq('id', userId)
+      .single<ProfileRow>();
+
+    if (currentProfileError) throw currentProfileError;
+    return mapProfile(currentProfile, currentProfile.email);
   }
 
   if (rpc) {
@@ -834,10 +882,28 @@ export async function suspendUser(userId: string, reason?: string): Promise<void
   if (error) throw error;
 }
 
+export async function unsuspendUser(userId: string): Promise<void> {
+  const { error } = await supabase
+    .from('profiles')
+    .update({ status: 'active', suspension_reason: null })
+    .eq('id', userId);
+
+  if (error) throw error;
+}
+
 export async function banUser(userId: string, reason?: string): Promise<void> {
   const { error } = await supabase
     .from('profiles')
     .update({ status: 'banned', ban_reason: reason ?? null })
+    .eq('id', userId);
+
+  if (error) throw error;
+}
+
+export async function unbanUser(userId: string): Promise<void> {
+  const { error } = await supabase
+    .from('profiles')
+    .update({ status: 'active', ban_reason: null })
     .eq('id', userId);
 
   if (error) throw error;

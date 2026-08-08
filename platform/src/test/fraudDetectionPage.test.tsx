@@ -8,6 +8,14 @@ const fraudApiState = vi.hoisted(() => ({
   updateFraudDetectionConfig: vi.fn(),
 }));
 
+const authApiState = vi.hoisted(() => ({
+  listUsers: vi.fn(),
+}));
+
+const referralApiState = vi.hoisted(() => ({
+  listReferralFraudFlags: vi.fn(),
+}));
+
 vi.mock('@/services/api/fraud', () => ({
   defaultFraudThresholds: {
     review: 45,
@@ -51,6 +59,14 @@ vi.mock('@/app/providers/AuthProvider', () => ({
   }),
 }));
 
+vi.mock('@/services/api/auth', () => ({
+  listUsers: authApiState.listUsers,
+}));
+
+vi.mock('@/services/api/referrals', () => ({
+  listReferralFraudFlags: referralApiState.listReferralFraudFlags,
+}));
+
 describe('FraudDetectionPage', () => {
   beforeEach(() => {
     fraudApiState.listFraudDetectionConfig.mockResolvedValue({
@@ -73,12 +89,40 @@ describe('FraudDetectionPage', () => {
     });
     fraudApiState.listFraudPolicyAuditTrail.mockResolvedValue([]);
     fraudApiState.updateFraudDetectionConfig.mockResolvedValue(undefined);
+    authApiState.listUsers.mockResolvedValue([
+      {
+        id: 'user-1',
+        email: 'risky@example.com',
+        fullName: 'Risky User',
+        avatarUrl: null,
+        role: 'registered_user',
+        status: 'active',
+        createdAt: '2026-08-01T00:00:00.000Z',
+        updatedAt: '2026-08-02T00:00:00.000Z',
+      },
+    ]);
+    referralApiState.listReferralFraudFlags.mockResolvedValue([
+      {
+        id: 'flag-1',
+        programId: 'program-1',
+        attributionId: 'attr-1',
+        profileId: 'user-1',
+        relatedProfileId: null,
+        ruleKey: 'vpn_detection',
+        severity: 'high',
+        status: 'open',
+        signal: 'vpn',
+        metadata: {},
+        createdAt: '2026-08-02T00:00:00.000Z',
+      },
+    ]);
   });
 
   it('renders the fraud detection admin page without crashing', async () => {
     render(<FraudDetectionPage />);
 
     expect(screen.getByText('Fraud prevention engine')).toBeInTheDocument();
+    expect(await screen.findByText('Project-wide telemetry')).toBeInTheDocument();
 
     await waitFor(() => expect(screen.getByText('Detection coverage')).toBeInTheDocument());
     expect(screen.getByText('VPN')).toBeInTheDocument();

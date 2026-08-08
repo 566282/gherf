@@ -1,4 +1,5 @@
 import { supabase } from '@/services/supabase/client';
+import { evaluateMerchantQualification } from '@/services/api/p2pCompliance';
 
 export { listMerchantProfiles } from '@/services/api/p2pMerchant';
 
@@ -225,5 +226,24 @@ export async function applyMerchantWalletOperation(input: {
   });
 
   if (error) throw error;
+
+  // Re-evaluate qualification whenever wallet liquidity changes.
+  await evaluateMerchantQualification(input.merchantId);
+
   return (data as Record<string, unknown> | null) ?? {};
+}
+
+export async function updateMerchantProfileMetadata(input: {
+  merchantId: string;
+  metadata: Record<string, unknown>;
+}): Promise<void> {
+  const { error } = await supabase
+    .from('merchant_profiles')
+    .update({
+      metadata: input.metadata,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', input.merchantId);
+
+  if (error) throw error;
 }

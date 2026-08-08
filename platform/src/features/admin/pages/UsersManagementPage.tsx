@@ -9,6 +9,8 @@ import {
   createAdminUser,
   listUsers,
   resetUserPassword,
+  unbanUser,
+  unsuspendUser,
   suspendUser,
   updateProfile,
   updateMemberPlan,
@@ -34,6 +36,7 @@ const statusOptions: Array<{ label: string; value: UserProfile['status'] | 'all'
 
 export function UsersManagementPage(): JSX.Element {
   const [users, setUsers] = useState<UserProfile[]>([]);
+  const [usersError, setUsersError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [role, setRole] = useState<AppRole | 'all'>('all');
   const [status, setStatus] = useState<UserProfile['status'] | 'all'>('all');
@@ -52,23 +55,29 @@ export function UsersManagementPage(): JSX.Element {
 
   const membershipPlanOptions = useMemo(() => getMembershipPlanOptions(), []);
   const selectedUser = useMemo(() => users.find((user) => user.id === selectedUserId) ?? null, [selectedUserId, users]);
-  const selectedMembershipAccess = selectedUser?.levelTier && selectedUser.levelTier >= 2 ? 'Paid member' : 'Free member';
-  const selectedWithdrawalAccess = selectedUser?.levelTier && selectedUser.levelTier >= 2 ? 'Enabled' : 'Disabled';
+  const selectedMembershipAccess = selectedUser?.levelTier && selectedUser.levelTier >= 1 ? 'Paid member' : 'Free member';
+  const selectedWithdrawalAccess = selectedUser?.levelTier && selectedUser.levelTier >= 1 ? 'Enabled' : 'Disabled';
 
   const loadUsers = async () => {
-    const data = await listUsers({
-      query: query || undefined,
-      role: role === 'all' ? undefined : role,
-      status: status === 'all' ? undefined : status,
-    });
-    setUsers(data);
-    if (!selectedUserId && data[0]) {
-      setSelectedUserId(data[0].id);
+    try {
+      const data = await listUsers({
+        query: query || undefined,
+        role: role === 'all' ? undefined : role,
+        status: status === 'all' ? undefined : status,
+      });
+      setUsersError(null);
+      setUsers(data);
+      if (!selectedUserId && data[0]) {
+        setSelectedUserId(data[0].id);
+      }
+    } catch (error) {
+      setUsers([]);
+      setUsersError(error instanceof Error ? error.message : 'Unable to load users.');
     }
   };
 
   useEffect(() => {
-    void loadUsers().catch(() => setUsers([]));
+    void loadUsers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, role, status]);
 
@@ -84,8 +93,8 @@ export function UsersManagementPage(): JSX.Element {
     try {
       await action();
       await loadUsers();
-    } catch {
-      // Keep the control surface stable; the surrounding state will refresh on the next action.
+    } catch (error) {
+      setUsersError(error instanceof Error ? error.message : 'Unable to complete this action.');
     }
   };
 
@@ -123,6 +132,7 @@ export function UsersManagementPage(): JSX.Element {
       <Card>
         <h1 className="text-3xl font-semibold tracking-tight text-white">Users management</h1>
         <p className="mt-2 text-mist/80">Suspend, ban, verify, edit, and rebalance user accounts from one place.</p>
+        {usersError ? <p className="mt-3 rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-sm text-red-100">{usersError}</p> : null}
         <div className="mt-4 grid gap-3 md:grid-cols-3">
           <input className="input-base" placeholder="Search name, email, referral code" value={query} onChange={(event) => setQuery(event.target.value)} />
           <select className="input-base" value={role} onChange={(event) => setRole(event.target.value as AppRole | 'all')}>
@@ -248,8 +258,16 @@ export function UsersManagementPage(): JSX.Element {
                       <div className="flex flex-wrap gap-2">
                         <button type="button" className="rounded-lg border border-white/10 px-3 py-1 hover:bg-white/5" onClick={() => setSelectedUserId(user.id)}>View</button>
                         <button type="button" className="rounded-lg border border-white/10 px-3 py-1 hover:bg-white/5" onClick={() => void handleAction(() => verifyUser(user.id))}>Verify</button>
-                        <button type="button" className="rounded-lg border border-white/10 px-3 py-1 hover:bg-white/5" onClick={() => void handleAction(() => suspendUser(user.id, reason || 'Temporary moderation action'))}>Suspend</button>
-                        <button type="button" className="rounded-lg border border-white/10 px-3 py-1 text-mist/80 hover:bg-white/5" onClick={() => void handleAction(() => banUser(user.id, reason || 'Policy violation'))}>Ban</button>
+                        {user.status === 'suspended' ? (
+                          <button type="button" className="rounded-lg border border-white/10 px-3 py-1 hover:bg-white/5" onClick={() => void handleAction(() => unsuspendUser(user.id))}>Unsuspend</button>
+                        ) : (
+                          <button type="button" className="rounded-lg border border-white/10 px-3 py-1 hover:bg-white/5" onClick={() => void handleAction(() => suspendUser(user.id, reason || 'Temporary moderation action'))}>Suspend</button>
+                        )}
+                        {user.status === 'banned' ? (
+                          <button type="button" className="rounded-lg border border-white/10 px-3 py-1 text-mist/80 hover:bg-white/5" onClick={() => void handleAction(() => unbanUser(user.id))}>Unban</button>
+                        ) : (
+                          <button type="button" className="rounded-lg border border-white/10 px-3 py-1 text-mist/80 hover:bg-white/5" onClick={() => void handleAction(() => banUser(user.id, reason || 'Policy violation'))}>Ban</button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -289,7 +307,7 @@ export function UsersManagementPage(): JSX.Element {
                     </option>
                   ))}
                 </select>
-                <p className="text-xs text-mist/60">Tier 1 is the free membership level. Paid members can withdraw funds.</p>
+                <p className="text-xs text-mist/60">Tier 0 is the free membership level. Starter members and above can withdraw funds.</p>
               </label>
               <div className="space-y-2 rounded-xl border border-white/10 bg-white/5 p-4">
                 <p>Wallet: {formatCurrency(selectedUser.walletBalance)}</p>

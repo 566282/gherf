@@ -1,4 +1,5 @@
 import { processP2PNotificationEvents, runP2PLiquidityHealthJob, runP2PMerchantAnalyticsJob } from '../services/api/p2pCompliance';
+import { runP2PAssignmentOrchestrator } from '../services/api/p2pAssignmentOrchestrator';
 
 function json(statusCode: number, body: Record<string, unknown>) {
   return {
@@ -21,12 +22,13 @@ export async function handler(event: P2PEscrowRunnerEvent) {
   }
 
   try {
-    const [liquidity, analytics, notificationsSent] = await Promise.all([
+    const [liquidity, analytics, notificationsSent, assignment] = await Promise.all([
       runP2PLiquidityHealthJob(),
       runP2PMerchantAnalyticsJob(),
       processP2PNotificationEvents(50),
+      runP2PAssignmentOrchestrator(40),
     ]);
-    return json(200, { ok: true, liquidity, analytics, notificationsSent });
+    return json(200, { ok: true, liquidity, analytics, notificationsSent, assignment });
   } catch (error) {
     return json(500, { error: error instanceof Error ? error.message : 'Unable to run P2P escrow jobs.' });
   }

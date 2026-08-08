@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { Link } from 'react-router-dom';
 import { TelemetryDebugPanel } from '@/components/ui/TelemetryDebugPanel';
 import { useAuth } from '@/app/providers/AuthProvider';
 import { emitDashboardTelemetry } from '@/lib/telemetry';
@@ -302,6 +303,9 @@ export function MerchantDashboardPage(): JSX.Element {
         </p>
         <div className="mt-4 flex flex-wrap gap-3">
           <Button onClick={() => void refresh()}>Reload</Button>
+          <Link to="/app/merchant/kyc" className="rounded-full border border-border px-4 py-2 text-sm text-foreground transition hover:border-accent/40 hover:text-accent">
+            Open KYC requirements
+          </Link>
           <p className="rounded-xl border border-border bg-surface px-4 py-2 text-sm text-muted">{statusMessage}</p>
         </div>
         {lowLiquidity ? (

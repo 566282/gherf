@@ -4,12 +4,17 @@ import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/app/providers/AuthProvider';
 import {
   listFiatPaymentIntents,
+  listActiveMerchantPaymentAccounts,
   listMerchantOrdersForUser,
+  type MerchantPaymentAccountOption,
   previewFiatProvider,
   quoteFiatFee,
   startFiatPurchase,
 } from '@/services/api/p2pMerchant';
 import { listMembershipFeeInvoicesForUser, type MembershipFeeInvoiceRecord } from '@/services/api/membershipAdmin';
+import { evaluateMultiplierPricing } from '@/services/api/membershipLifecycle';
+import { listWalletSettings } from '@/services/api/wallet';
+import { notifySuperAdmins } from '@/services/api/communications';
 import { submitP2PPaymentProof, transitionP2POrderState } from '@/services/api/p2pEscrow';
 import { openP2PDispute } from '@/services/api/p2pDisputes';
 
@@ -24,13 +29,13 @@ type CatalogItem = {
   key: string;
   label: string;
   description: string;
-  moduleKey: 'premium_features' | 'promotional_purchase';
+  moduleKey: 'premium_features' | 'promotional_purchase' | 'membership_multiplier';
   intentType: string;
   amount: number;
   currency: string;
 };
 
-const premiumFeatureCatalog: CatalogItem[] = [
+const basePremiumFeatureCatalog: CatalogItem[] = [
   {
     key: 'priority-support',
     label: 'Priority support unlock',
@@ -105,27 +110,82 @@ export function UserOrdersPage(): JSX.Element {
   const [orders, setOrders] = useState<Awaited<ReturnType<typeof listMerchantOrdersForUser>>>([]);
   const [intents, setIntents] = useState<Awaited<ReturnType<typeof listFiatPaymentIntents>>>([]);
   const [invoices, setInvoices] = useState<MembershipFeeInvoiceRecord[]>([]);
+  const [walletSettings, setWalletSettings] = useState<Awaited<ReturnType<typeof listWalletSettings>> | null>(null);
   const [fundingAmount, setFundingAmount] = useState('100');
   const [fundingCurrency, setFundingCurrency] = useState('USD');
   const [fundingQuote, setFundingQuote] = useState<QuotePreview | null>(null);
   const [invoiceQuotes, setInvoiceQuotes] = useState<Record<string, QuotePreview>>({});
   const [catalogQuotes, setCatalogQuotes] = useState<Record<string, QuotePreview>>({});
   const [paymentReferences, setPaymentReferences] = useState<Record<string, string>>({});
+  const [paymentAccountsByOrderId, setPaymentAccountsByOrderId] = useState<Record<string, MerchantPaymentAccountOption[]>>({});
+  const [isLoadingAccountsByOrderId, setIsLoadingAccountsByOrderId] = useState<Record<string, boolean>>({});
   const [statusMessage, setStatusMessage] = useState('Loading payment intents and P2P orders...');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const internalTransferUnlockPrice = walletSettings?.internalTransferUnlockPrice ?? 65;
+  const internalTransferUnlockCurrency = walletSettings?.currency ?? 'USD';
+  const internalTransfersUnlocked = walletSettings?.internalTransfersEnabled ?? false;
+  const multiplierPremiumStatus = walletSettings?.multiplierPremiumEnabled ?? false;
+  const multiplierPricing = useMemo(() => evaluateMultiplierPricing(profile?.levelTier ?? 1), [profile?.levelTier]);
+
+  const premiumFeatureCatalog = useMemo<CatalogItem[]>(() => {
+    return [
+      ...basePremiumFeatureCatalog,
+      {
+        key: 'internal-transfer-unlock',
+        label: 'Internal transfer unlock',
+        description: 'Unlock wallet internal transfers (bonus/referral/cashback/reward to main wallet).',
+        moduleKey: 'premium_features',
+        intentType: 'internal_transfer_unlock',
+        amount: internalTransferUnlockPrice,
+        currency: internalTransferUnlockCurrency,
+      },
+      {
+        key: 'multiplier-premium-unlock',
+        label: 'Multiplier premium activation',
+        description: 'Purchase multiplier premium using the membership multiplier activation flow shown in wallet dashboard.',
+        moduleKey: 'membership_multiplier',
+        intentType: 'membership_multiplier_activation',
+        amount: multiplierPricing.amount,
+        currency: multiplierPricing.currency,
+      },
+    ];
+  }, [internalTransferUnlockCurrency, internalTransferUnlockPrice, multiplierPricing.amount, multiplierPricing.currency]);
+
+  const loadApprovedAccountsForOrder = async (orderId: string, currency: string): Promise<MerchantPaymentAccountOption[]> => {
+    setIsLoadingAccountsByOrderId((current) => ({ ...current, [orderId]: true }));
+
+    try {
+      const accounts = await listActiveMerchantPaymentAccounts({
+        currency,
+        limit: 200,
+      });
+
+      setPaymentAccountsByOrderId((current) => ({
+        ...current,
+        [orderId]: accounts,
+      }));
+
+      return accounts;
+    } finally {
+      setIsLoadingAccountsByOrderId((current) => ({ ...current, [orderId]: false }));
+    }
+  };
 
   const refresh = async (): Promise<void> => {
     if (!profile) return;
 
-    const [nextOrders, nextIntents, nextInvoices] = await Promise.all([
+    const [nextOrders, nextIntents, nextInvoices, nextWalletSettings] = await Promise.all([
       listMerchantOrdersForUser(profile.id, 40),
       listFiatPaymentIntents(profile.id, 40),
       listMembershipFeeInvoicesForUser(profile.id, 12),
+      listWalletSettings(),
     ]);
 
     setOrders(nextOrders);
     setIntents(nextIntents);
     setInvoices(nextInvoices);
+    setWalletSettings(nextWalletSettings);
     setStatusMessage('Orders, payment intents, and invoice routes synced.');
   };
 
@@ -133,7 +193,7 @@ export function UserOrdersPage(): JSX.Element {
     void refresh().catch(() => {
       setStatusMessage('Unable to load orders and payments right now.');
     });
-  }, [profile?.id]);
+  }, [premiumFeatureCatalog, profile?.id]);
 
   useEffect(() => {
     let active = true;
@@ -218,6 +278,15 @@ export function UserOrdersPage(): JSX.Element {
     };
   }, [invoices, profile?.id]);
 
+  useEffect(() => {
+    const ordersWithoutLoadedAccounts = orders.filter((order) => !paymentAccountsByOrderId[order.id] && !isLoadingAccountsByOrderId[order.id]);
+    if (!ordersWithoutLoadedAccounts.length) return;
+
+    void Promise.all(
+      ordersWithoutLoadedAccounts.map((order) => loadApprovedAccountsForOrder(order.id, order.currency).catch(() => [])),
+    );
+  }, [orders, paymentAccountsByOrderId, isLoadingAccountsByOrderId]);
+
   const pendingInvoices = useMemo(() => invoices.filter((invoice) => invoice.status === 'unpaid'), [invoices]);
 
   const handleStartPurchase = async (input: {
@@ -247,10 +316,20 @@ export function UserOrdersPage(): JSX.Element {
         },
       });
 
+      let accountsLoaded = 0;
+      if (result.order) {
+        try {
+          const accounts = await loadApprovedAccountsForOrder(result.order.id, result.order.currency);
+          accountsLoaded = accounts.length;
+        } catch {
+          accountsLoaded = 0;
+        }
+      }
+
       await refresh();
       setStatusMessage(
         result.order
-          ? `Payment intent ${result.intent.id.slice(0, 8)} created and routed to P2P order ${result.order.orderCode}.`
+          ? `Payment intent ${result.intent.id.slice(0, 8)} created and routed to P2P order ${result.order.orderCode}. ${accountsLoaded} approved merchant payment account${accountsLoaded === 1 ? '' : 's'} loaded below. You can pay immediately and then click I have paid.`
           : `Payment intent ${result.intent.id.slice(0, 8)} created with provider ${result.intent.providerKey}.`,
       );
     } catch (error) {
@@ -289,8 +368,32 @@ export function UserOrdersPage(): JSX.Element {
           paymentReference,
         },
       });
+
+      const selectedOrder = orders.find((order) => order.id === orderId);
+      try {
+        await notifySuperAdmins({
+          title: 'P2P payment proof submitted by user',
+          message: `User ${profile.fullName ?? profile.email ?? profile.id} submitted payment proof for order ${selectedOrder?.orderCode ?? orderId}. Please confirm with the assigned P2P merchant.`,
+          type: 'info',
+          channel: 'in_app',
+          category: 'transactional',
+          metadata: {
+            source: 'user_orders_page',
+            orderId,
+            orderCode: selectedOrder?.orderCode ?? null,
+            userId: profile.id,
+            userEmail: profile.email,
+            paymentReference: paymentReference ?? null,
+            amount: selectedOrder?.totalAmount ?? null,
+            currency: selectedOrder?.currency ?? null,
+          },
+        });
+      } catch {
+        // Payment submission should not fail if admin notification fails.
+      }
+
       await refresh();
-      setStatusMessage('Payment proof submitted and order moved to payment_submitted.');
+      setStatusMessage('Payment proof submitted and order moved to payment_submitted. Admin notification has been triggered for merchant confirmation.');
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : 'Unable to submit payment proof.');
     } finally {
@@ -456,6 +559,12 @@ export function UserOrdersPage(): JSX.Element {
                   </div>
                   <div className="text-right">
                     <p className="text-lg font-semibold text-foreground">{formatCurrency(item.amount, item.currency)}</p>
+                    {item.key === 'internal-transfer-unlock' ? (
+                      <p className="mt-1 text-xs text-muted">{internalTransfersUnlocked ? 'Status: unlocked by admin' : 'Status: locked by admin'}</p>
+                    ) : null}
+                    {item.key === 'multiplier-premium-unlock' ? (
+                      <p className="mt-1 text-xs text-muted">{multiplierPremiumStatus ? 'Status: unlocked by admin' : 'Status: locked by admin'}</p>
+                    ) : null}
                     <Button
                       className="mt-3"
                       onClick={() => void handleStartPurchase({
@@ -467,11 +576,22 @@ export function UserOrdersPage(): JSX.Element {
                         metadata: {
                           productKey: item.key,
                           productLabel: item.label,
+                          unlockFeature: item.key === 'internal-transfer-unlock' ? 'internal_transfers' : undefined,
+                          multiplierFeature: item.key === 'multiplier-premium-unlock' ? 'membership_multiplier' : undefined,
+                          planLevel: item.key === 'multiplier-premium-unlock' ? profile.levelTier : undefined,
                         },
                       })}
-                      disabled={isSubmitting}
+                      disabled={
+                        isSubmitting ||
+                        (item.key === 'internal-transfer-unlock' && internalTransfersUnlocked) ||
+                        (item.key === 'multiplier-premium-unlock' && multiplierPremiumStatus)
+                      }
                     >
-                      Buy feature
+                      {item.key === 'internal-transfer-unlock' && internalTransfersUnlocked
+                        ? 'Already unlocked by admin'
+                        : item.key === 'multiplier-premium-unlock' && multiplierPremiumStatus
+                          ? 'Already unlocked by admin'
+                          : 'Buy feature'}
                     </Button>
                   </div>
                 </div>
@@ -559,6 +679,30 @@ export function UserOrdersPage(): JSX.Element {
                   <Button variant="ghost" onClick={() => void handleRequestReview(order.id)} disabled={isSubmitting}>
                     Request review
                   </Button>
+                </div>
+                <div className="mt-4 rounded-xl border border-border/70 bg-surface-elevated p-4 text-sm text-muted">
+                  <p className="font-medium text-foreground">Approved P2P merchant payment accounts</p>
+                  <p className="mt-1">Pay to any active admin-approved account below, then click I have paid.</p>
+                  {isLoadingAccountsByOrderId[order.id] ? (
+                    <p className="mt-2">Loading approved merchant accounts...</p>
+                  ) : null}
+                  {!isLoadingAccountsByOrderId[order.id] && paymentAccountsByOrderId[order.id]?.length ? (
+                    <div className="mt-3 space-y-2">
+                      {paymentAccountsByOrderId[order.id].map((account) => (
+                        <div key={`${order.id}:${account.id}`} className="rounded-lg border border-border bg-surface px-3 py-2">
+                          <p className="font-medium text-foreground">{account.merchantName} ({account.merchantCode})</p>
+                          <p>{account.label}</p>
+                          <p>{account.bankName ?? account.provider ?? 'Settlement account'} · {account.currency}</p>
+                          <p>Account name: <span className="text-foreground">{account.accountName}</span></p>
+                          <p>Account number: <span className="text-foreground">{account.accountNumber}</span></p>
+                          {account.paymentInstructions ? <p className="mt-1">Instructions: {account.paymentInstructions}</p> : null}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                  {!isLoadingAccountsByOrderId[order.id] && !paymentAccountsByOrderId[order.id]?.length ? (
+                    <p className="mt-2">No active admin-approved merchant accounts are currently available for {order.currency}. Please request support review.</p>
+                  ) : null}
                 </div>
               </div>
             ))}

@@ -1,6 +1,7 @@
 import { supabase } from '@/services/supabase/client';
 import { defaultFraudThresholds, fraudRiskChecks } from '@/services/api/fraud';
 import type {
+  Business,
   CampaignCategory,
   Campaign,
   CampaignBrowserRestriction,
@@ -188,6 +189,20 @@ function slugify(value: string) {
     .replace(/^-+|-+$/g, '') || 'campaign-type';
 }
 
+function normalizeBusinessId(value: string): string {
+  const normalized = value.trim();
+  if (!normalized) {
+    throw new Error('A valid business selection is required.');
+  }
+
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuidRegex.test(normalized)) {
+    throw new Error('A valid business selection is required.');
+  }
+
+  return normalized;
+}
+
 function mapCampaignTypeRow(row: CampaignTypeRow): CampaignTypeDefinition {
   return {
     value: row.slug,
@@ -299,6 +314,13 @@ function normalizeRecurringConfig(value: unknown, fallback: CampaignRecurringCon
 }
 
 export const campaignTypeOptions: CampaignTypeDefinition[] = [
+  {
+    value: 'classroom_learning',
+    label: 'Classroom learning',
+    description: 'Launch learn-to-earn campaigns with lesson telemetry, anti-cheat checks, and milestone rewards.',
+    defaultInstructions: 'Complete course lessons, pass assessments, and satisfy verification checkpoints to unlock rewards.',
+    defaultVerificationMethod: 'api_verification' as const,
+  },
   {
     value: 'watch_videos',
     label: 'Watch videos',
@@ -834,9 +856,10 @@ export function buildCampaignEngineConfig(form: CampaignEditorFormValues): Campa
 
 function buildCampaignPayload(form: CampaignEditorFormValues) {
   const engineConfig = buildCampaignEngineConfig(form);
+  const businessId = normalizeBusinessId(form.businessId);
 
   return {
-    business_id: form.businessId,
+    business_id: businessId,
     title: form.title,
     description: form.description || null,
     banner_url: form.bannerUrl || null,
@@ -900,6 +923,20 @@ export async function listCampaigns(): Promise<Campaign[]> {
 
   if (error) throw error;
   return (data ?? []).map((row) => mapCampaignRow(row as CampaignRow));
+}
+
+export async function listBusinesses(): Promise<Business[]> {
+  const { data, error } = await supabase.from('businesses').select('id,name,status,owner_id,created_at,updated_at').order('name');
+
+  if (error) throw error;
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    ownerId: row.owner_id,
+    name: row.name,
+    status: row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  })) as Business[];
 }
 
 export async function getCampaign(id: string): Promise<Campaign | null> {

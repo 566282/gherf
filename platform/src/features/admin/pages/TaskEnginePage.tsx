@@ -21,6 +21,13 @@ import {
 } from '@/services/api/tasks';
 
 const taskFamilies = [
+  'Classroom learning',
+  'Learning watch lesson',
+  'Learning pass quiz',
+  'Learning submit assignment',
+  'Learning complete module',
+  'Learning final assessment',
+  'Learning certificate claim',
   'Watch video',
   'Click advertisement',
   'Visit website',
@@ -46,6 +53,12 @@ const taskFamilies = [
 ];
 
 const taskTypeSuggestions = [
+  'learning_watch_lesson',
+  'learning_pass_quiz',
+  'learning_submit_assignment',
+  'learning_complete_module',
+  'learning_final_assessment',
+  'learning_certificate_claim',
   'watch_video',
   'click_advertisement',
   'visit_website',

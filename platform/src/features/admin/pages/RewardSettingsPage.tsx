@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { EnterpriseModulePage } from '../components/EnterpriseModulePage';
-import { enterpriseModuleConfigs } from '../data/enterpriseModules';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/app/providers/AuthProvider';
+import { listGamificationConfig, type GamificationConfig } from '@/services/api/gamification';
+import { listWalletSettings } from '@/services/api/wallet';
+import type { WalletSettings } from '@/types';
 import {
   adminDecidePromotionalReward,
   buildPromotionalWheelSegments,
@@ -104,6 +105,8 @@ function formatPercent(value: number): string {
 
 export function RewardSettingsPage(): JSX.Element {
   const { profile } = useAuth();
+  const [projectGamification, setProjectGamification] = useState<GamificationConfig | null>(null);
+  const [projectWalletSettings, setProjectWalletSettings] = useState<WalletSettings | null>(null);
   const [settings, setSettings] = useState<PromotionalSpinSettings | null>(null);
   const [campaigns, setCampaigns] = useState<SpinCampaignAdminItem[]>([]);
   const [campaignDraft, setCampaignDraft] = useState<SpinCampaignAdminInput | null>(null);
@@ -146,13 +149,17 @@ export function RewardSettingsPage(): JSX.Element {
   useEffect(() => {
     let active = true;
     void Promise.all([
+      listGamificationConfig(),
+      listWalletSettings(),
       listPromotionalSpinSettings(),
       listSpinCampaignsAdmin(),
       listPromotionalRewardQueue(),
       getPromotionalSpinAnalytics(30),
     ])
-      .then(([spinSettings, spinCampaigns, queue, spinAnalytics]) => {
+      .then(([gamificationConfig, walletSettings, spinSettings, spinCampaigns, queue, spinAnalytics]) => {
         if (!active) return;
+        setProjectGamification(gamificationConfig);
+        setProjectWalletSettings(walletSettings);
         setSettings(spinSettings);
         setCampaigns(spinCampaigns);
         setRewardQueue(queue);
@@ -324,7 +331,41 @@ export function RewardSettingsPage(): JSX.Element {
 
   return (
     <div className="space-y-6">
-      <EnterpriseModulePage config={enterpriseModuleConfigs.rewardSettings} />
+      <Card className="relative overflow-hidden border border-border bg-[radial-gradient(circle_at_top_left,hsl(var(--chart-1)/0.16),transparent_34%),linear-gradient(135deg,hsl(var(--color-surface))_0%,hsl(var(--color-surface-elevated))_100%)]">
+        <div className="absolute inset-0 bg-[linear-gradient(120deg,transparent,hsl(var(--color-foreground)/0.03),transparent)]" />
+        <div className="relative space-y-4">
+          <div>
+            <p className="text-sm uppercase tracking-[0.24em] text-accent/70">Project-wide reward scope</p>
+            <h1 className="mt-2 text-3xl font-semibold tracking-tight text-foreground md:text-4xl">Reward settings control plane</h1>
+            <p className="mt-2 text-sm text-muted">Live reward controls pulled from project-wide platform settings across gamification, wallet policy, and promotional spin configuration.</p>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-xl border border-border bg-surface p-3">
+              <p className="text-xs uppercase tracking-[0.2em] text-muted">Season</p>
+              <p className="mt-2 text-xl font-semibold text-foreground">{projectGamification?.seasonName ?? 'Loading...'}</p>
+              <p className="mt-1 text-xs text-muted">Theme: {projectGamification?.seasonTheme ?? 'Syncing project settings'}</p>
+            </div>
+            <div className="rounded-xl border border-border bg-surface p-3">
+              <p className="text-xs uppercase tracking-[0.2em] text-muted">Daily spin cap</p>
+              <p className="mt-2 text-xl font-semibold text-foreground">{projectGamification ? projectGamification.maxDailyWheelSpins : '--'}</p>
+              <p className="mt-1 text-xs text-muted">Configured from project gamification settings</p>
+            </div>
+            <div className="rounded-xl border border-border bg-surface p-3">
+              <p className="text-xs uppercase tracking-[0.2em] text-muted">Wallet thresholds</p>
+              <p className="mt-2 text-xl font-semibold text-foreground">
+                {projectWalletSettings ? `${projectWalletSettings.currency} ${projectWalletSettings.minWithdrawal}-${projectWalletSettings.maxWithdrawal}` : 'Loading...'}
+              </p>
+              <p className="mt-1 text-xs text-muted">Global withdrawal min/max range</p>
+            </div>
+            <div className="rounded-xl border border-border bg-surface p-3">
+              <p className="text-xs uppercase tracking-[0.2em] text-muted">Spin rollout</p>
+              <p className="mt-2 text-xl font-semibold text-foreground">{settings ? settings.rolloutStage : 'Loading...'}</p>
+              <p className="mt-1 text-xs text-muted">Current promotional rollout stage</p>
+            </div>
+          </div>
+        </div>
+      </Card>
 
       {settings ? (
         <Card className="space-y-4 border border-border bg-surface-elevated">

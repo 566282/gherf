@@ -26,6 +26,7 @@ const supabaseState = vi.hoisted(() => ({
   in: vi.fn(),
   eq: vi.fn(),
   single: vi.fn(),
+  maybeSingle: vi.fn(),
   delete: vi.fn(),
 }));
 
@@ -56,6 +57,7 @@ describe('withdrawal notifications', () => {
     supabaseState.in.mockReset();
     supabaseState.eq.mockReset();
     supabaseState.single.mockReset();
+    supabaseState.maybeSingle.mockReset();
     supabaseState.delete.mockReset();
     notificationState.notifySuperAdmins.mockReset();
     notificationState.sendUserNotification.mockReset();
@@ -64,7 +66,15 @@ describe('withdrawal notifications', () => {
       select: supabaseState.select,
       eq: supabaseState.eq,
       single: supabaseState.single,
+      maybeSingle: supabaseState.maybeSingle,
       update: supabaseState.update,
+    };
+
+    const onboardingQuery = {
+      select: supabaseState.select,
+      eq: supabaseState.eq,
+      maybeSingle: supabaseState.maybeSingle,
+      insert: supabaseState.insert,
     };
 
     const walletTransactionQuery = {
@@ -83,6 +93,15 @@ describe('withdrawal notifications', () => {
       update: supabaseState.update,
     };
 
+    const complianceQuery = {
+      insert: supabaseState.insert,
+      select: supabaseState.select,
+      single: supabaseState.single,
+      maybeSingle: supabaseState.maybeSingle,
+      eq: supabaseState.eq,
+      update: supabaseState.update,
+    };
+
     const settingsQuery = {
       select: supabaseState.select,
       in: supabaseState.in,
@@ -91,6 +110,11 @@ describe('withdrawal notifications', () => {
     supabaseState.from.mockImplementation((table: string) => {
       if (table === 'platform_settings') return settingsQuery;
       if (table === 'profiles') return profileQuery;
+      if (table === 'task_compliance_profiles') return onboardingQuery;
+      if (table === 'onboarding_gate_audits') return onboardingQuery;
+      if (table === 'withdrawal_compliance_reviews') return complianceQuery;
+      if (table === 'withdrawal_compliance_review_items') return complianceQuery;
+      if (table === 'withdrawal_compliance_decisions') return complianceQuery;
       if (table === 'wallet_transactions') return walletTransactionQuery;
       if (table === 'withdrawal_requests') return withdrawalQuery;
       return profileQuery;
@@ -99,6 +123,7 @@ describe('withdrawal notifications', () => {
     supabaseState.select.mockReturnValue({
       eq: supabaseState.eq,
       single: supabaseState.single,
+      maybeSingle: supabaseState.maybeSingle,
       in: supabaseState.in,
       order: vi.fn().mockReturnThis(),
       limit: vi.fn().mockReturnThis(),
@@ -108,6 +133,7 @@ describe('withdrawal notifications', () => {
 
     supabaseState.eq.mockReturnValue({
       single: supabaseState.single,
+      maybeSingle: supabaseState.maybeSingle,
       update: supabaseState.update,
       delete: supabaseState.delete,
       select: supabaseState.select,
@@ -121,15 +147,25 @@ describe('withdrawal notifications', () => {
     supabaseState.insert.mockReturnValue({ select: supabaseState.select, single: supabaseState.single });
     supabaseState.delete.mockReturnValue({ eq: supabaseState.eq });
     supabaseState.rpc.mockResolvedValue({ data: 1, error: null });
+    supabaseState.maybeSingle.mockResolvedValue({
+      data: {
+        user_id: 'user-1',
+        onboarding_completed: true,
+        onboarding_completed_at: '2026-07-01T00:00:00.000Z',
+        onboarding_block_reason: null,
+        onboarding_progress: null,
+      },
+      error: null,
+    });
     notificationState.notifySuperAdmins.mockResolvedValue(1);
     notificationState.sendUserNotification.mockResolvedValue(undefined);
   });
 
-  it('rejects free members before creating a withdrawal request', async () => {
+  it('rejects tier 0 free members before creating a withdrawal request', async () => {
     const scheduledFor = getFutureDate(2);
 
     supabaseState.single.mockResolvedValueOnce({
-      data: { wallet_balance: 500, full_name: 'Ada Example', email: 'ada@example.com', level_tier: 1, level_label: 'Starter' },
+      data: { wallet_balance: 500, full_name: 'Ada Example', email: 'ada@example.com', level_tier: 0, level_label: 'Free' },
       error: null,
     });
 
@@ -149,13 +185,55 @@ describe('withdrawal notifications', () => {
     expect(notificationState.sendUserNotification).not.toHaveBeenCalled();
   });
 
-  it('notifies admins and users with the withdrawal limit and date for paid members', async () => {
+  it('notifies admins and users with the withdrawal limit and date for starter members and above', async () => {
     const scheduledFor = getFutureDate(2);
     const expectedDateLabel = toExpectedLabel(scheduledFor);
 
     supabaseState.single
-      .mockResolvedValueOnce({ data: { wallet_balance: 500, full_name: 'Ada Example', email: 'ada@example.com', level_tier: 2, level_label: 'Balanced' }, error: null })
+      .mockResolvedValueOnce({ data: { wallet_balance: 500, full_name: 'Ada Example', email: 'ada@example.com', level_tier: 1, level_label: 'Starter' }, error: null })
       .mockResolvedValueOnce({ data: { id: 'tx-1' }, error: null })
+      .mockResolvedValueOnce({
+        data: {
+          id: 'withdrawal-1',
+          user_id: 'user-1',
+          wallet_transaction_id: 'tx-1',
+          method: 'bank_transfer',
+          destination_label: 'Primary payout account',
+          destination_value: '9876543210',
+          destination_currency: 'USD',
+          currency: 'USD',
+          amount: 125,
+          processing_fee: 1.88,
+          exchange_rate: 1,
+          net_amount: 123.12,
+          approval_workflow: 'manual',
+          status: 'pending',
+          scheduled_for: `${scheduledFor}T00:00:00.000Z`,
+          admin_notes: null,
+          reviewed_by: null,
+          reviewed_at: null,
+          created_at: '2026-07-05T12:00:00.000Z',
+          updated_at: '2026-07-05T12:00:00.000Z',
+        },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          id: 'review-1',
+          withdrawal_request_id: 'withdrawal-1',
+          user_id: 'user-1',
+          policy_key: 'task_compliance_policy',
+          policy_version: 'v1-baseline',
+          state: 'approved',
+          risk_score: 20,
+          summary: {},
+          decided_by: null,
+          decided_at: null,
+          created_at: '2026-07-05T12:00:00.000Z',
+          updated_at: '2026-07-05T12:00:00.000Z',
+        },
+        error: null,
+      })
       .mockResolvedValueOnce({
         data: {
           id: 'withdrawal-1',
@@ -245,6 +323,48 @@ describe('withdrawal notifications', () => {
           updated_at: '2026-07-05T12:00:00.000Z',
         },
         error: null,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          id: 'review-3',
+          withdrawal_request_id: 'withdrawal-3',
+          user_id: 'user-1',
+          policy_key: 'task_compliance_policy',
+          policy_version: 'v1-baseline',
+          state: 'approved',
+          risk_score: 35,
+          summary: {},
+          decided_by: null,
+          decided_at: null,
+          created_at: '2026-07-05T12:00:00.000Z',
+          updated_at: '2026-07-05T12:00:00.000Z',
+        },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          id: 'withdrawal-3',
+          user_id: 'user-1',
+          wallet_transaction_id: 'tx-3',
+          method: 'bank_transfer',
+          destination_label: 'Primary payout account',
+          destination_value: '9876543210',
+          destination_currency: 'USD',
+          currency: 'USD',
+          amount: 75,
+          processing_fee: 1.13,
+          exchange_rate: 1,
+          net_amount: 73.87,
+          approval_workflow: 'manual',
+          status: 'held',
+          scheduled_for: null,
+          admin_notes: null,
+          reviewed_by: null,
+          reviewed_at: null,
+          created_at: '2026-07-05T12:00:00.000Z',
+          updated_at: '2026-07-05T12:00:00.000Z',
+        },
+        error: null,
       });
 
     const result = await createWithdrawalRequest('user-1', {
@@ -284,6 +404,48 @@ describe('withdrawal notifications', () => {
     supabaseState.single
       .mockResolvedValueOnce({ data: { wallet_balance: 500, full_name: 'Ada Example', email: 'ada@example.com', level_tier: 2, level_label: 'Balanced' }, error: null })
       .mockResolvedValueOnce({ data: { id: 'tx-2' }, error: null })
+      .mockResolvedValueOnce({
+        data: {
+          id: 'withdrawal-2',
+          user_id: 'user-1',
+          wallet_transaction_id: 'tx-2',
+          method: 'bank_transfer',
+          destination_label: 'Primary payout account',
+          destination_value: '9876543210',
+          destination_currency: 'USD',
+          currency: 'USD',
+          amount: 50,
+          processing_fee: 0.75,
+          exchange_rate: 1,
+          net_amount: 49.25,
+          approval_workflow: 'manual',
+          status: 'pending',
+          scheduled_for: `${scheduledFor}T00:00:00.000Z`,
+          admin_notes: null,
+          reviewed_by: null,
+          reviewed_at: null,
+          created_at: '2026-07-05T12:00:00.000Z',
+          updated_at: '2026-07-05T12:00:00.000Z',
+        },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          id: 'review-2',
+          withdrawal_request_id: 'withdrawal-2',
+          user_id: 'user-1',
+          policy_key: 'task_compliance_policy',
+          policy_version: 'v1-baseline',
+          state: 'approved',
+          risk_score: 20,
+          summary: {},
+          decided_by: null,
+          decided_at: null,
+          created_at: '2026-07-05T12:00:00.000Z',
+          updated_at: '2026-07-05T12:00:00.000Z',
+        },
+        error: null,
+      })
       .mockResolvedValueOnce({
         data: {
           id: 'withdrawal-2',

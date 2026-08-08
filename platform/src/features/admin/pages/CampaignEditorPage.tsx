@@ -12,6 +12,7 @@ import {
   campaignToFormValues,
   createDefaultCampaignForm,
   getCampaign,
+  listBusinesses,
   listCampaignCategories,
   listCampaignTypes,
   saveCampaign,
@@ -180,6 +181,7 @@ export function CampaignEditorPage() {
   const [currentStep, setCurrentStep] = useState<WizardStep>('type');
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
   const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [presetApplied, setPresetApplied] = useState(false);
   const [taskDrafts, setTaskDrafts] = useState<CampaignTaskDraft[]>([createCampaignTaskDraft()]);
   const [taskDraftsHydrated, setTaskDraftsHydrated] = useState(false);
@@ -193,6 +195,11 @@ export function CampaignEditorPage() {
   const { data: campaignCategories = [] } = useQuery({
     queryKey: ['campaign-categories'],
     queryFn: listCampaignCategories,
+  });
+
+  const { data: businesses = [] } = useQuery({
+    queryKey: ['businesses'],
+    queryFn: listBusinesses,
   });
 
   const availableCampaignTypes = campaignTypes.length ? campaignTypes : campaignTypeOptions;
@@ -237,11 +244,17 @@ export function CampaignEditorPage() {
 
       return { savedCampaign, savedTasks };
     },
+    onMutate: () => {
+      setSaveError(null);
+    },
     onSuccess: ({ savedCampaign, savedTasks }) => {
       setLastSavedTime(new Date().toLocaleTimeString());
       setTaskDrafts(savedTasks.map((task) => ({ ...taskViewToDraft(task), id: task.id })));
       setTaskDraftsHydrated(true);
       navigate(`${campaignBasePath}/campaigns/${savedCampaign.id}/edit`);
+    },
+    onError: (error) => {
+      setSaveError(error instanceof Error ? error.message : 'Unable to save campaign.');
     },
   });
 
@@ -282,7 +295,9 @@ export function CampaignEditorPage() {
     if (!autoSaveEnabled || !isDirty || saveMutation.isPending) return;
 
     const autoSaveTimer = setTimeout(() => {
-      void saveMutation.mutateAsync(form.getValues());
+      void saveMutation.mutateAsync(form.getValues()).catch((error) => {
+        setSaveError(error instanceof Error ? error.message : 'Unable to auto-save campaign.');
+      });
     }, 3000);
 
     return () => clearTimeout(autoSaveTimer);
@@ -293,7 +308,11 @@ export function CampaignEditorPage() {
   const taskPreview = useMemo(() => taskDrafts.map(formatTaskPreview), [taskDrafts]);
 
   const onSubmit = handleSubmit(async (submittedValues) => {
-    await saveMutation.mutateAsync(submittedValues);
+    try {
+      await saveMutation.mutateAsync(submittedValues);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'Unable to save campaign.');
+    }
   });
 
   const addTaskDraft = () => {
@@ -423,7 +442,14 @@ export function CampaignEditorPage() {
             <h2 className="text-2xl font-bold text-white">Campaign details</h2>
             <div className="grid gap-4 md:grid-cols-2">
               <FieldGroup label="Business ID" hint="Reference the business that owns this campaign.">
-                <input {...register('businessId')} className="input-base" placeholder="business-uuid-or-slug" />
+                <input {...register('businessId')} className="input-base" list="business-id-options" placeholder="Select or paste a business UUID" />
+                <datalist id="business-id-options">
+                  {businesses.map((business) => (
+                    <option key={business.id} value={business.id}>
+                      {business.name}
+                    </option>
+                  ))}
+                </datalist>
               </FieldGroup>
               <FieldGroup label="Status">
                 <select {...register('status')} className="input-base">
@@ -827,6 +853,12 @@ export function CampaignEditorPage() {
       </div>
 
       {stepContent}
+
+      {saveError ? (
+        <div className="rounded-2xl border border-ember/40 bg-ember/10 p-4 text-sm text-ember">
+          {saveError}
+        </div>
+      ) : null}
 
       <div className="sticky bottom-6 flex flex-wrap justify-between gap-3">
         <div className="flex gap-3">

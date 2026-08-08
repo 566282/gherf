@@ -55,6 +55,7 @@ export interface WithdrawalPolicyEvaluation {
 }
 
 const tierLabels = [
+  'Free',
   'Starter',
   'Starter Plus',
   'Bronze',
@@ -158,6 +159,7 @@ const tierLabels = [
 ];
 
 const tierPrices = [
+  0,
   5000, 7500, 10000, 15000, 20000, 25000, 30000, 35000, 40000, 45000,
   50000, 60000, 70000, 80000, 90000, 100000, 110000, 125000, 140000, 155000,
   170000, 185000, 200000, 225000, 250000, 275000, 300000, 325000, 350000, 375000,
@@ -178,7 +180,7 @@ function buildCatalog(): MembershipPlanDefinition[] {
   }
 
   const plans = tierLabels.map((label, index) => {
-    const level = index + 1;
+    const level = index;
     const price = tierPrices[index] ?? 13000000;
 
     return {
@@ -188,7 +190,7 @@ function buildCatalog(): MembershipPlanDefinition[] {
       price,
       currency: 'NGN',
       durationDays: 30,
-      category: level >= 50 ? 'enterprise' : level >= 20 ? 'growth' : 'starter',
+      category: level === 0 ? 'free' : level >= 50 ? 'enterprise' : level >= 20 ? 'growth' : 'starter',
       benefits: [
         'Priority support',
         'Reward multiplier access',
@@ -206,8 +208,8 @@ export function getMembershipPlanCatalog(): MembershipPlanDefinition[] {
 }
 
 export function resolveMembershipPlan(levelTier: number): MembershipPlanDefinition {
-  const normalizedTier = Math.max(1, Math.min(100, Math.round(Number(levelTier) || 1)));
-  return buildCatalog()[normalizedTier - 1];
+  const normalizedTier = Math.max(0, Math.min(100, Math.round(Number(levelTier) || 0)));
+  return buildCatalog()[normalizedTier];
 }
 
 export function resolveMembershipLabel(levelTier: number): string {
@@ -281,7 +283,7 @@ export function evaluateWithdrawalPolicy(input: {
   feePaid: boolean;
 }): WithdrawalPolicyEvaluation {
   const evaluation = evaluateMembershipRuleSet({ level: input.level, balance: input.balance, withdrawalCount: input.withdrawalCount });
-  const planEligible = Math.max(1, Math.round(input.level || 1)) >= 2;
+  const planEligible = Math.max(0, Math.round(input.level || 0)) >= 1;
   const withinPolicy = input.requestAmount <= evaluation.withdrawalConfig.maxWithdrawal && input.requestAmount >= evaluation.withdrawalConfig.minThreshold;
   const allowed = planEligible && input.feePaid && withinPolicy;
   let reason: WithdrawalPolicyEvaluation['reason'] = 'eligible';

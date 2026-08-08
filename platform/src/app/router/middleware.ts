@@ -1,6 +1,7 @@
 import type { LoaderFunctionArgs } from 'react-router-dom';
 import { redirect } from 'react-router-dom';
 import { resolveAccountRole } from '@/lib/authRole';
+import { resolveOnboardingGate } from '@/services/api/onboardingGate';
 import { supabase } from '@/services/supabase/client';
 import { UserRole } from '@/types';
 import type { AppRole } from '@/types/auth';
@@ -41,6 +42,14 @@ function getReturnTo(request: Request): string {
   return encodeURIComponent(returnTo);
 }
 
+function getModuleKeyFromPath(pathname: string): string {
+  const appPrefix = '/app/';
+  if (!pathname.startsWith(appPrefix)) return '';
+
+  const raw = pathname.slice(appPrefix.length).split('/')[0]?.trim().toLowerCase() ?? '';
+  return raw || 'dashboard';
+}
+
 export function guestOnlyMiddleware() {
   return async () => {
     const {
@@ -65,6 +74,7 @@ export function guestOnlyMiddleware() {
 
 export function requireAuthMiddleware(requiredRoles?: UserRole[]) {
   return async ({ request }: LoaderFunctionArgs) => {
+    const url = new URL(request.url);
     const {
       data: { session },
     } = await supabase.auth.getSession();
@@ -80,6 +90,13 @@ export function requireAuthMiddleware(requiredRoles?: UserRole[]) {
       .maybeSingle<ProfileGuardRow>();
 
     const effectiveRole = resolveAccountRole(profile?.role, session.user);
+
+    if (profile && effectiveRole !== profile.role) {
+      await supabase
+        .from('profiles')
+        .update({ role: effectiveRole, updated_at: new Date().toISOString() })
+        .eq('id', session.user.id);
+    }
 
     if (error) {
       return null;
@@ -103,6 +120,21 @@ export function requireAuthMiddleware(requiredRoles?: UserRole[]) {
 
     if (requiredRoles && requiredRoles.length > 0 && !hasAnyRequiredRole(effectiveRole, requiredRoles)) {
       return redirect('/unauthorized');
+    }
+
+    if (url.pathname.startsWith('/app')) {
+      const moduleKey = getModuleKeyFromPath(url.pathname);
+      const isBypassPath = moduleKey === 'onboarding' || moduleKey === 'profile';
+
+      if (!isBypassPath) {
+        const gate = await resolveOnboardingGate(session.user.id);
+        const allowed = gate.allowedModuleKeys.includes('*') || gate.allowedModuleKeys.includes(moduleKey);
+
+        if (gate.blocked && !allowed) {
+          const reason = encodeURIComponent(gate.reason ?? 'Complete onboarding to continue.');
+          return redirect(`/app/onboarding?blocked=1&reason=${reason}`);
+        }
+      }
     }
 
     return null;

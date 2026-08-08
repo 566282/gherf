@@ -1,5 +1,6 @@
 import { supabase } from '../supabase/client';
 import { resolvePaymentGatewayRoute } from './membershipLifecycle';
+import { markMembershipUpgradeFailed, settleMembershipUpgradeRequest } from './membershipUpgradeRequests';
 
 export type MembershipGatewayProvider = {
   id: string;
@@ -74,6 +75,7 @@ export async function ingestMembershipGatewayWebhook(input: MembershipGatewayWeb
 
   const paymentStatus = String(input.payload.status ?? '').toLowerCase();
   const isPaid = paymentStatus === 'paid' || paymentStatus === 'success' || paymentStatus === 'succeeded';
+  const isFailed = paymentStatus === 'failed' || paymentStatus === 'cancelled' || paymentStatus === 'canceled';
 
   if (isPaid) {
     const { error: orderError } = await supabase
@@ -83,5 +85,11 @@ export async function ingestMembershipGatewayWebhook(input: MembershipGatewayWeb
       .in('status', ['pending', 'processing']);
 
     if (orderError) throw orderError;
+
+    await settleMembershipUpgradeRequest(input.paymentReference, input.payload);
+  }
+
+  if (isFailed) {
+    await markMembershipUpgradeFailed(input.paymentReference, `Gateway status=${paymentStatus}`);
   }
 }

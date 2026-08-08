@@ -180,8 +180,42 @@ export async function handler(event: AdminCreateUserHandlerEvent) {
   }
 
   if (!profileRow) {
-    await adminClient.auth.admin.deleteUser(createdUser.user.id);
-    return json(500, { error: 'User was created in Auth, but the profile bootstrap step failed.' });
+    const { data: bootstrappedProfile, error: profileBootstrapError } = await adminClient
+      .from('profiles')
+      .upsert(
+        {
+          id: createdUser.user.id,
+          email,
+          full_name: fullName,
+          avatar_url: null,
+          role,
+          status: 'active',
+          is_active: true,
+          is_email_verified: true,
+          two_factor_enabled: false,
+          referral_code: null,
+          referred_by_code: null,
+          wallet_balance: 0,
+          reward_balance: 0,
+          reward_history_count: 0,
+          unread_notifications_count: 0,
+          reputation_score: 0,
+          level_label: getPlanLabelForTier(levelTier),
+          level_tier: levelTier,
+          badges: [],
+          last_login_at: null,
+        },
+        { onConflict: 'id' },
+      )
+      .select(profileSelect)
+      .maybeSingle();
+
+    if (profileBootstrapError || !bootstrappedProfile) {
+      await adminClient.auth.admin.deleteUser(createdUser.user.id);
+      return json(500, { error: 'User was created in Auth, but the profile bootstrap step failed.' });
+    }
+
+    profileRow = bootstrappedProfile as Record<string, unknown>;
   }
 
   const { error: auditError } = await adminClient.from('admin_action_audit').insert({

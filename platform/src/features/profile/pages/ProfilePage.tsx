@@ -96,7 +96,7 @@ export function ProfilePage(): JSX.Element {
       const resolvedPlan = resolveMembershipPlan(targetTier);
       await updateMemberPlan(profile.id, targetTier, resolvedPlan.price, resolvedPlan.currency);
       await refreshProfile();
-      setPlanMessage(`${resolvedPlan.label} plan activated. Withdrawal holds are cleared.`);
+      setPlanMessage(`${resolvedPlan.label} upgrade request created. Activation will occur after confirmed settlement.`);
     } catch (error) {
       setPlanMessage(error instanceof Error ? error.message : 'Unable to upgrade plan right now.');
     }

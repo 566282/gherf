@@ -12,6 +12,7 @@ import {
   upsertFiatProviderSetting,
   upsertP2PRolloutFlag,
   upsertQualificationRule,
+  updateMerchantProfileMetadata,
 } from '@/services/api/p2pAdmin';
 import {
   listP2PAssignmentEvents,
@@ -23,6 +24,9 @@ import {
   runP2PMerchantAnalyticsJob,
 } from '@/services/api/p2pCompliance';
 import { applyMerchantWalletOperation } from '@/services/api/p2pAdmin';
+import { reviewMerchantKycRequirement } from '@/services/api/p2pKyc';
+import { useAuth } from '@/app/providers/AuthProvider';
+import { runP2PAssignmentOrchestrator } from '@/services/api/p2pAssignmentOrchestrator';
 
 function toJsonText(value: unknown): string {
   return JSON.stringify(value ?? {}, null, 2);
@@ -36,7 +40,65 @@ function safeJsonParse<T>(value: string, fallback: T): T {
   }
 }
 
+type MerchantPaymentAccountDraft = {
+  id: string;
+  label: string;
+  provider: string;
+  bankName: string;
+  accountName: string;
+  accountNumber: string;
+  currency: string;
+  countryCode: string;
+  paymentInstructions: string;
+  isActive: boolean;
+  isApproved: boolean;
+};
+
+function createEmptyPaymentAccountDraft(): MerchantPaymentAccountDraft {
+  const timestamp = Date.now();
+  return {
+    id: `acct-${timestamp}-${Math.round(Math.random() * 1000)}`,
+    label: '',
+    provider: '',
+    bankName: '',
+    accountName: '',
+    accountNumber: '',
+    currency: 'USD',
+    countryCode: '',
+    paymentInstructions: '',
+    isActive: true,
+    isApproved: false,
+  };
+}
+
+function readPaymentAccountsFromMetadata(metadata: Record<string, unknown> | null | undefined): MerchantPaymentAccountDraft[] {
+  const payload = metadata ?? {};
+  const raw = payload.paymentAccounts ?? payload.payment_accounts;
+  if (!Array.isArray(raw)) return [];
+
+  return raw
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === 'object')
+    .map((entry, index) => ({
+      id: typeof entry.id === 'string' && entry.id.trim() ? entry.id.trim() : `acct-${Date.now()}-${index + 1}`,
+      label: typeof entry.label === 'string' ? entry.label : '',
+      provider: typeof entry.provider === 'string' ? entry.provider : '',
+      bankName: typeof entry.bankName === 'string' ? entry.bankName : '',
+      accountName: typeof entry.accountName === 'string' ? entry.accountName : '',
+      accountNumber: typeof entry.accountNumber === 'string' ? entry.accountNumber : '',
+      currency: typeof entry.currency === 'string' && entry.currency.trim() ? entry.currency.toUpperCase() : 'USD',
+      countryCode: typeof entry.countryCode === 'string' ? entry.countryCode.toUpperCase() : '',
+      paymentInstructions: typeof entry.paymentInstructions === 'string' ? entry.paymentInstructions : '',
+      isActive: entry.isActive === false || entry.active === false ? false : true,
+      isApproved:
+        entry.isApproved === true
+        || entry.approvedByAdmin === true
+        || (typeof entry.approvalStatus === 'string' && entry.approvalStatus.toLowerCase() === 'approved')
+        || (typeof entry.status === 'string' && entry.status.toLowerCase() === 'approved'),
+    }));
+}
+
 export function P2PMerchantControlPage(): JSX.Element {
+  const { profile } = useAuth();
   const [providers, setProviders] = useState<Array<Record<string, unknown>>>([]);
   const [fees, setFees] = useState<Array<Record<string, unknown>>>([]);
   const [rules, setRules] = useState<Array<Record<string, unknown>>>([]);
@@ -63,6 +125,8 @@ export function P2PMerchantControlPage(): JSX.Element {
   const [isSaving, setIsSaving] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [simulationBucket, setSimulationBucket] = useState(5);
+  const [kycReviewReasonById, setKycReviewReasonById] = useState<Record<string, string>>({});
+  const [merchantPaymentAccounts, setMerchantPaymentAccounts] = useState<MerchantPaymentAccountDraft[]>([]);
 
   const activeProvider = useMemo(
     () => providers.find((item) => String(item.provider_key) === selectedProvider) ?? providers[0] ?? null,
@@ -136,6 +200,15 @@ export function P2PMerchantControlPage(): JSX.Element {
   useEffect(() => {
     if (activeRollout) setRolloutCohortText(toJsonText(activeRollout.cohort_rule));
   }, [activeRollout]);
+
+  useEffect(() => {
+    if (!activeMerchant) {
+      setMerchantPaymentAccounts([]);
+      return;
+    }
+
+    setMerchantPaymentAccounts(readPaymentAccountsFromMetadata((activeMerchant.metadata as Record<string, unknown>) ?? {}));
+  }, [activeMerchant]);
 
   const saveProvider = async (): Promise<void> => {
     if (!activeProvider) return;
@@ -241,16 +314,17 @@ export function P2PMerchantControlPage(): JSX.Element {
     setIsRunning(true);
     setStatusMessage('Running compliance, AML, liquidity, and analytics jobs...');
     try {
-      const [compliance, aml, liquidity, analytics, notificationsSent] = await Promise.all([
+      const [compliance, aml, liquidity, analytics, notificationsSent, assignment] = await Promise.all([
         runP2PComplianceJob(),
         runExternalAmlScreening(25),
         runP2PLiquidityHealthJob(),
         runP2PMerchantAnalyticsJob(),
         processP2PNotificationEvents(50),
+        runP2PAssignmentOrchestrator(40),
       ]);
       setAmlSummary(`provider=${aml.providerName} screened=${aml.screened} flagged=${aml.flagged} mocked=${aml.mocked ? 'yes' : 'no'}`);
       setStatusMessage(
-        `Jobs completed. compliance=${JSON.stringify(compliance)} aml=${JSON.stringify({ screened: aml.screened, flagged: aml.flagged, mocked: aml.mocked })} liquidity=${JSON.stringify(liquidity)} analytics=${JSON.stringify(analytics)} notificationsSent=${notificationsSent}`,
+        `Jobs completed. compliance=${JSON.stringify(compliance)} aml=${JSON.stringify({ screened: aml.screened, flagged: aml.flagged, mocked: aml.mocked })} liquidity=${JSON.stringify(liquidity)} analytics=${JSON.stringify(analytics)} assignment=${JSON.stringify(assignment)} notificationsSent=${notificationsSent}`,
       );
       await refresh();
     } catch (error) {
@@ -315,6 +389,83 @@ export function P2PMerchantControlPage(): JSX.Element {
     }
   };
 
+  const updateMerchantAccountField = <K extends keyof MerchantPaymentAccountDraft>(
+    accountId: string,
+    field: K,
+    value: MerchantPaymentAccountDraft[K],
+  ) => {
+    setMerchantPaymentAccounts((current) => current.map((account) => (
+      account.id === accountId
+        ? {
+            ...account,
+            [field]: value,
+          }
+        : account
+    )));
+  };
+
+  const removeMerchantAccount = (accountId: string) => {
+    setMerchantPaymentAccounts((current) => current.filter((account) => account.id !== accountId));
+  };
+
+  const addMerchantAccount = () => {
+    setMerchantPaymentAccounts((current) => [...current, createEmptyPaymentAccountDraft()]);
+  };
+
+  const saveMerchantPaymentAccounts = async (): Promise<void> => {
+    if (!activeMerchant) return;
+
+    const invalid = merchantPaymentAccounts.find((account) => {
+      if (!account.accountName.trim() || !account.accountNumber.trim()) return true;
+      if (!account.currency.trim()) return true;
+      return false;
+    });
+
+    if (invalid) {
+      setStatusMessage('Every merchant payment account must include account name, account number, and currency before saving.');
+      return;
+    }
+
+    const baseMetadata = ((activeMerchant.metadata as Record<string, unknown>) ?? {});
+    const nextMetadata: Record<string, unknown> = {
+      ...baseMetadata,
+      paymentAccounts: merchantPaymentAccounts.map((account) => ({
+        id: account.id,
+        label: account.label.trim() || null,
+        provider: account.provider.trim() || null,
+        bankName: account.bankName.trim() || null,
+        accountName: account.accountName.trim(),
+        accountNumber: account.accountNumber.trim(),
+        currency: account.currency.trim().toUpperCase(),
+        countryCode: account.countryCode.trim().toUpperCase() || null,
+        paymentInstructions: account.paymentInstructions.trim() || null,
+        isActive: account.isActive,
+        active: account.isActive,
+        isApproved: account.isApproved,
+        approvedByAdmin: account.isApproved,
+        approvalStatus: account.isApproved ? 'approved' : 'pending',
+        status: account.isApproved ? 'approved' : 'pending',
+      })),
+    };
+
+    setIsSaving(true);
+    setStatusMessage('Saving merchant payment accounts...');
+
+    try {
+      await updateMerchantProfileMetadata({
+        merchantId: String(activeMerchant.id),
+        metadata: nextMetadata,
+      });
+
+      await refresh();
+      setStatusMessage('Merchant payment accounts saved. Active approved accounts are now available to users immediately.');
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : 'Unable to save merchant payment accounts.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const runAmlScreening = async (): Promise<void> => {
     setIsRunning(true);
     setStatusMessage('Running external AML and sanctions screening...');
@@ -327,6 +478,32 @@ export function P2PMerchantControlPage(): JSX.Element {
       setStatusMessage(error instanceof Error ? error.message : 'Unable to run AML screening.');
     } finally {
       setIsRunning(false);
+    }
+  };
+
+  const applyKycReview = async (requirementId: string, action: 'approve' | 'reject' | 'request_resubmission'): Promise<void> => {
+    if (!profile?.id) {
+      setStatusMessage('You must be signed in as an admin reviewer.');
+      return;
+    }
+
+    setIsSaving(true);
+    setStatusMessage('Applying KYC review action...');
+
+    try {
+      await reviewMerchantKycRequirement({
+        requirementId,
+        action,
+        reviewerId: profile.id,
+        reason: kycReviewReasonById[requirementId],
+      });
+
+      await refresh();
+      setStatusMessage(`KYC requirement ${action.replace('_', ' ')} completed.`);
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : 'Unable to apply KYC review action.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -445,6 +622,81 @@ export function P2PMerchantControlPage(): JSX.Element {
         </Card>
 
         <Card className="space-y-3 border border-border bg-surface-elevated">
+          <h2 className="text-2xl font-semibold text-foreground">Merchant payment accounts</h2>
+          <p className="text-sm text-muted">
+            Create and approve merchant payment accounts used by users after intent creation. Only active and approved accounts are shown to users.
+          </p>
+          <label className="grid gap-2">
+            <span className="text-sm text-muted">Merchant</span>
+            <select className="input-base" value={selectedMerchantId} onChange={(event) => setSelectedMerchantId(event.target.value)}>
+              {merchants.map((item) => (
+                <option key={String(item.id)} value={String(item.id)}>
+                  {String(item.merchant_code ?? item.id)} · {String(item.display_name ?? item.legal_name ?? 'merchant')}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="space-y-3">
+            {merchantPaymentAccounts.map((account) => (
+              <div key={account.id} className="rounded-xl border border-border bg-surface p-3">
+                <div className="grid gap-3 md:grid-cols-2">
+                  <label className="grid gap-1">
+                    <span className="text-xs text-muted">Label</span>
+                    <input className="input-base" value={account.label} onChange={(event) => updateMerchantAccountField(account.id, 'label', event.target.value)} placeholder="Primary NGN payout" />
+                  </label>
+                  <label className="grid gap-1">
+                    <span className="text-xs text-muted">Provider</span>
+                    <input className="input-base" value={account.provider} onChange={(event) => updateMerchantAccountField(account.id, 'provider', event.target.value)} placeholder="Bank / Provider" />
+                  </label>
+                  <label className="grid gap-1">
+                    <span className="text-xs text-muted">Bank name</span>
+                    <input className="input-base" value={account.bankName} onChange={(event) => updateMerchantAccountField(account.id, 'bankName', event.target.value)} placeholder="Bank name" />
+                  </label>
+                  <label className="grid gap-1">
+                    <span className="text-xs text-muted">Account name</span>
+                    <input className="input-base" value={account.accountName} onChange={(event) => updateMerchantAccountField(account.id, 'accountName', event.target.value)} placeholder="Account holder" />
+                  </label>
+                  <label className="grid gap-1">
+                    <span className="text-xs text-muted">Account number</span>
+                    <input className="input-base" value={account.accountNumber} onChange={(event) => updateMerchantAccountField(account.id, 'accountNumber', event.target.value)} placeholder="0123456789" />
+                  </label>
+                  <label className="grid gap-1">
+                    <span className="text-xs text-muted">Currency</span>
+                    <input className="input-base" value={account.currency} onChange={(event) => updateMerchantAccountField(account.id, 'currency', event.target.value.toUpperCase())} placeholder="USD" />
+                  </label>
+                  <label className="grid gap-1">
+                    <span className="text-xs text-muted">Country code</span>
+                    <input className="input-base" value={account.countryCode} onChange={(event) => updateMerchantAccountField(account.id, 'countryCode', event.target.value.toUpperCase())} placeholder="NG" />
+                  </label>
+                  <label className="grid gap-1 md:col-span-2">
+                    <span className="text-xs text-muted">Payment instructions</span>
+                    <input className="input-base" value={account.paymentInstructions} onChange={(event) => updateMerchantAccountField(account.id, 'paymentInstructions', event.target.value)} placeholder="Add transfer note before sending receipt" />
+                  </label>
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-4">
+                  <label className="inline-flex items-center gap-2 text-xs text-muted">
+                    <input type="checkbox" checked={account.isActive} onChange={(event) => updateMerchantAccountField(account.id, 'isActive', event.target.checked)} />
+                    Active
+                  </label>
+                  <label className="inline-flex items-center gap-2 text-xs text-muted">
+                    <input type="checkbox" checked={account.isApproved} onChange={(event) => updateMerchantAccountField(account.id, 'isApproved', event.target.checked)} />
+                    Approved by admin
+                  </label>
+                  <Button variant="ghost" onClick={() => removeMerchantAccount(account.id)} disabled={isSaving}>Remove</Button>
+                </div>
+              </div>
+            ))}
+            {!merchantPaymentAccounts.length ? (
+              <p className="rounded-xl border border-border bg-surface px-3 py-2 text-sm text-muted">No payment accounts configured for this merchant.</p>
+            ) : null}
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <Button variant="ghost" onClick={addMerchantAccount} disabled={isSaving || !activeMerchant}>Add payment account</Button>
+            <Button onClick={() => void saveMerchantPaymentAccounts()} disabled={isSaving || !activeMerchant}>{isSaving ? 'Saving...' : 'Save payment accounts'}</Button>
+          </div>
+        </Card>
+
+        <Card className="space-y-3 border border-border bg-surface-elevated">
           <h2 className="text-2xl font-semibold text-foreground">AML and sanctions connector</h2>
           <p className="text-sm text-muted">Normalized screening connector with optional external provider URL and deterministic mock fallback.</p>
           <div className="rounded-xl border border-border bg-surface p-4 text-sm text-muted">
@@ -543,6 +795,7 @@ export function P2PMerchantControlPage(): JSX.Element {
                   <th className="px-3 py-2">Requirement</th>
                   <th className="px-3 py-2">Status</th>
                   <th className="px-3 py-2">Level</th>
+                  <th className="px-3 py-2">Review</th>
                 </tr>
               </thead>
               <tbody>
@@ -552,11 +805,52 @@ export function P2PMerchantControlPage(): JSX.Element {
                     <td className="px-3 py-2">{String(item.requirement_key ?? 'unknown')}</td>
                     <td className="px-3 py-2">{String(item.status ?? 'required')}</td>
                     <td className="px-3 py-2">{Number(item.level_required ?? 1)}</td>
+                    <td className="px-3 py-2">
+                      <div className="grid gap-2">
+                        <input
+                          className="input-base h-8 text-xs"
+                          placeholder="Reason (required for reject/resubmit)"
+                          value={kycReviewReasonById[String(item.id)] ?? ''}
+                          onChange={(event) =>
+                            setKycReviewReasonById((current) => ({
+                              ...current,
+                              [String(item.id)]: event.target.value,
+                            }))
+                          }
+                        />
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            className="rounded-lg border border-border px-2 py-1 text-xs hover:border-success/40"
+                            onClick={() => void applyKycReview(String(item.id), 'approve')}
+                            disabled={isSaving}
+                          >
+                            Approve
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded-lg border border-border px-2 py-1 text-xs hover:border-warning/40"
+                            onClick={() => void applyKycReview(String(item.id), 'request_resubmission')}
+                            disabled={isSaving}
+                          >
+                            Resubmit
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded-lg border border-border px-2 py-1 text-xs hover:border-error/40"
+                            onClick={() => void applyKycReview(String(item.id), 'reject')}
+                            disabled={isSaving}
+                          >
+                            Reject
+                          </button>
+                        </div>
+                      </div>
+                    </td>
                   </tr>
                 ))}
                 {!kycQueue.length ? (
                   <tr>
-                    <td className="px-3 py-4 text-muted" colSpan={4}>No KYC queue rows found.</td>
+                    <td className="px-3 py-4 text-muted" colSpan={5}>No KYC queue rows found.</td>
                   </tr>
                 ) : null}
               </tbody>

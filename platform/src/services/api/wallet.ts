@@ -1,4 +1,5 @@
 import { supabase } from '@/services/supabase/client';
+import { assertOnboardingModuleAccess } from '@/services/api/onboardingGate';
 import { notifySuperAdmins, sendUserNotification } from '@/services/api/communications';
 import { evaluateWithdrawalPolicy, resolveMembershipLabel } from '@/services/api/membership';
 import { canTransferFromWallet, isWalletTransferAllowed } from '@/services/api/walletPolicies';
@@ -98,6 +99,7 @@ type WithdrawalRequestRow = {
 };
 
 const SUCCESSFUL_WITHDRAWAL_STATUSES: WithdrawalRequest['status'][] = ['approved', 'completed'];
+const PAID_MEMBERSHIP_MIN_TIER = 1;
 
 function getMemberPlanLabel(levelTier: number, levelLabel?: string | null): string {
   return levelLabel?.trim() || resolveMembershipLabel(levelTier);
@@ -118,7 +120,7 @@ async function countSuccessfulWithdrawals(userId: string): Promise<number> {
 }
 
 export async function releaseWithdrawalHolds(userId: string, levelTier: number): Promise<number> {
-  if (Math.max(1, Math.floor(levelTier || 1)) < 2) {
+  if (Math.max(0, Math.floor(levelTier || 0)) < 1) {
     return 0;
   }
 
@@ -151,6 +153,9 @@ const DEFAULT_WALLET_SETTINGS: WalletSettings = {
   maxWithdrawal: 5000,
   processingFeePercent: 1.5,
   currency: 'USD',
+  internalTransfersEnabled: false,
+  internalTransferUnlockPrice: 65,
+  multiplierPremiumEnabled: false,
   approvalWorkflow: 'manual',
   exchangeRates: [
     { currency: 'USD', rate: 1, label: 'US Dollar' },
@@ -160,7 +165,7 @@ const DEFAULT_WALLET_SETTINGS: WalletSettings = {
     { currency: 'USDT', rate: 1, label: 'Tether' },
   ],
   supportedMethods: ['bank_transfer', 'crypto', 'paypal', 'gift_cards', 'manual_payout'],
-  paidMembershipMinTier: 2,
+  paidMembershipMinTier: PAID_MEMBERSHIP_MIN_TIER,
   withdrawalHoldThreshold: 4,
   membershipFeeEnforcementStartWithdrawalCount: 2,
   blockWithoutFeeSettlement: true,
@@ -228,6 +233,23 @@ function mergeWalletSettings(rows: SettingRow[]): WalletSettings {
       DEFAULT_WALLET_SETTINGS.processingFeePercent,
     ),
     currency: typeof lookup.get('wallet_currency') === 'string' ? String(lookup.get('wallet_currency')) : DEFAULT_WALLET_SETTINGS.currency,
+    internalTransfersEnabled: toBoolean(
+      lookup.get('wallet_internal_transfers_enabled'),
+      DEFAULT_WALLET_SETTINGS.internalTransfersEnabled,
+    ),
+    internalTransferUnlockPrice: Math.max(
+      1,
+      Number(
+        toNumber(
+          lookup.get('wallet_internal_transfer_unlock_price'),
+          DEFAULT_WALLET_SETTINGS.internalTransferUnlockPrice,
+        ).toFixed(2),
+      ),
+    ),
+    multiplierPremiumEnabled: toBoolean(
+      lookup.get('wallet_multiplier_premium_enabled'),
+      DEFAULT_WALLET_SETTINGS.multiplierPremiumEnabled,
+    ),
     approvalWorkflow:
       lookup.get('wallet_approval_workflow') === 'automatic' ||
       lookup.get('wallet_approval_workflow') === 'manual' ||
@@ -236,10 +258,7 @@ function mergeWalletSettings(rows: SettingRow[]): WalletSettings {
         : DEFAULT_WALLET_SETTINGS.approvalWorkflow,
     exchangeRates: toExchangeRates(lookup.get('wallet_exchange_rates')),
     supportedMethods: toStringArray(lookup.get('wallet_supported_methods'), DEFAULT_WALLET_SETTINGS.supportedMethods) as WalletWithdrawalMethod[],
-    paidMembershipMinTier: Math.max(
-      1,
-      Math.round(toNumber(lookup.get('wallet_paid_membership_min_tier'), DEFAULT_WALLET_SETTINGS.paidMembershipMinTier)),
-    ),
+    paidMembershipMinTier: PAID_MEMBERSHIP_MIN_TIER,
     withdrawalHoldThreshold: Math.max(
       1,
       Math.round(toNumber(lookup.get('wallet_withdrawal_hold_threshold'), DEFAULT_WALLET_SETTINGS.withdrawalHoldThreshold)),
@@ -364,6 +383,9 @@ export async function listWalletSettings(): Promise<WalletSettings> {
       'wallet_max_withdrawal',
       'wallet_processing_fee_percent',
       'wallet_currency',
+      'wallet_internal_transfers_enabled',
+      'wallet_internal_transfer_unlock_price',
+      'wallet_multiplier_premium_enabled',
       'wallet_approval_workflow',
       'wallet_exchange_rates',
       'wallet_supported_methods',
@@ -440,6 +462,21 @@ export async function updateWalletSettings(settings: Partial<WalletSettings>): P
       description: 'Processing fee percentage applied to withdrawals',
     },
     { key: 'wallet_currency', value: settings.currency, description: 'Base wallet currency' },
+    {
+      key: 'wallet_internal_transfers_enabled',
+      value: settings.internalTransfersEnabled,
+      description: 'Whether users can run internal wallet transfers',
+    },
+    {
+      key: 'wallet_internal_transfer_unlock_price',
+      value: settings.internalTransferUnlockPrice,
+      description: 'Admin-configured price for internal transfer unlock purchase',
+    },
+    {
+      key: 'wallet_multiplier_premium_enabled',
+      value: settings.multiplierPremiumEnabled,
+      description: 'Whether users can purchase and use multiplier premium',
+    },
     { key: 'wallet_approval_workflow', value: settings.approvalWorkflow, description: 'Withdrawal approval workflow' },
     { key: 'wallet_exchange_rates', value: settings.exchangeRates, description: 'Configured conversion rates' },
     { key: 'wallet_supported_methods', value: settings.supportedMethods, description: 'Supported payout methods' },
@@ -511,6 +548,11 @@ export async function transferWalletBalance(
   note?: string,
   currency = 'USD',
 ): Promise<void> {
+  const walletSettings = await listWalletSettings();
+  if (!walletSettings.internalTransfersEnabled) {
+    throw new Error('Internal transfers are locked by admin. Please contact support.');
+  }
+
   if (!canTransferFromWallet(fromWalletType) || !isWalletTransferAllowed(fromWalletType, toWalletType)) {
     throw new Error('Transfers are only allowed from bonus, referral, cashback, or reward wallets into the main wallet.');
   }
@@ -595,6 +637,8 @@ export async function listPendingWithdrawalRequests(limit = 12): Promise<Withdra
 }
 
 export async function createWithdrawalRequest(userId: string, input: WithdrawalRequestInput): Promise<WithdrawalRequest> {
+  await assertOnboardingModuleAccess(userId, 'wallet');
+
   const settings = await listWalletSettings();
 
   if (input.amount < settings.minWithdrawal) {
@@ -620,10 +664,10 @@ export async function createWithdrawalRequest(userId: string, input: WithdrawalR
 
   const currentBalance = profile.wallet_balance ?? 0;
   const effectiveWithdrawalLimit = Math.min(settings.maxWithdrawal, currentBalance);
-  const memberPlanTier = Math.max(1, Math.round(profile.level_tier ?? 1));
+  const memberPlanTier = Math.max(0, Math.round(profile.level_tier ?? 0));
   const memberPlanLabel = getMemberPlanLabel(memberPlanTier, profile.level_label);
 
-  const paidMembershipMinTier = settings.paidMembershipMinTier ?? DEFAULT_WALLET_SETTINGS.paidMembershipMinTier;
+  const paidMembershipMinTier = PAID_MEMBERSHIP_MIN_TIER;
 
   if (memberPlanTier < paidMembershipMinTier) {
     throw new Error('Free members cannot withdraw funds. Upgrade to a paid member plan to request withdrawals.');

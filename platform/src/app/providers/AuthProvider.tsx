@@ -43,8 +43,8 @@ function buildFallbackProfile(sessionUser: { id: string; email?: string | null; 
     rewardHistoryCount: 0,
     unreadNotificationsCount: 0,
     reputationScore: 0,
-    levelLabel: 'Starter',
-    levelTier: 1,
+    levelLabel: 'Free',
+    levelTier: 0,
     badges: [],
     lastLoginAt: null,
   };

@@ -1,10 +1,11 @@
 import type { PropsWithChildren } from 'react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/app/providers/AuthProvider';
 import { useLogout } from '@/hooks/useLogout';
+import { resolveOnboardingGate } from '@/services/api/onboardingGate';
 
 type NavItem = {
   label: string;
@@ -16,9 +17,11 @@ const appNavItems: NavItem[] = [
   { label: 'Dashboard', path: '/app', description: 'Overview and status' },
   { label: 'Orders', path: '/app/orders', description: 'Fiat purchases and P2P actions' },
   { label: 'Campaigns', path: '/app/campaigns', description: 'Browse available tasks' },
+  { label: 'Classroom', path: '/app/classroom', description: 'Learn-to-earn catalog' },
   { label: 'Tasks', path: '/app/tasks', description: 'Complete actions' },
   { label: 'Notifications', path: '/app/notifications', description: 'Full inbox and history' },
   { label: 'Wallet', path: '/app/wallet', description: 'Rewards and history' },
+  { label: 'Merchant KYC', path: '/app/merchant/kyc', description: 'Submit merchant verification' },
   { label: 'Profile', path: '/app/profile', description: 'Account settings' },
 ];
 
@@ -52,6 +55,7 @@ export function AppLayout({ children }: PropsWithChildren): JSX.Element {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [onboardingBlockReason, setOnboardingBlockReason] = useState<string | null>(null);
 
   const isBusinessShell = location.pathname.startsWith('/business');
   const shellBase = isBusinessShell ? '/business' : '/app';
@@ -87,6 +91,30 @@ export function AppLayout({ children }: PropsWithChildren): JSX.Element {
     { label: isBusinessShell ? 'Analytics' : 'Notifications', path: isBusinessShell ? `${shellBase}/analytics` : `${shellBase}/notifications`, emoji: '◌' },
     { label: 'Profile', path: '/app/profile', emoji: '☺' },
   ];
+
+  useEffect(() => {
+    if (!profile || isBusinessShell) {
+      setOnboardingBlockReason(null);
+      return;
+    }
+
+    const moduleKey = location.pathname.startsWith('/app/')
+      ? (location.pathname.slice('/app/'.length).split('/')[0] || 'dashboard').trim().toLowerCase()
+      : 'dashboard';
+
+    if (moduleKey === 'onboarding' || moduleKey === 'profile') {
+      setOnboardingBlockReason(null);
+      return;
+    }
+
+    void resolveOnboardingGate(profile.id)
+      .then((decision) => {
+        setOnboardingBlockReason(decision.blocked ? decision.reason : null);
+      })
+      .catch(() => {
+        setOnboardingBlockReason(null);
+      });
+  }, [profile?.id, location.pathname, isBusinessShell]);
 
   return (
     <div className="min-h-screen bg-hero text-foreground">
@@ -278,6 +306,15 @@ export function AppLayout({ children }: PropsWithChildren): JSX.Element {
           </header>
 
           <main id="main-content" className="flex-1 px-4 py-6 pb-32 sm:px-6 sm:pb-28 lg:px-8 lg:pb-6">
+            {onboardingBlockReason ? (
+              <div className="mb-4 rounded-2xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning">
+                <p className="font-medium">Onboarding is required before this module is available.</p>
+                <p className="mt-1">{onboardingBlockReason}</p>
+                <Link to="/app/onboarding" className="mt-2 inline-flex rounded-full border border-warning/30 px-3 py-1.5 text-xs font-medium text-warning transition hover:border-warning/60">
+                  Complete onboarding
+                </Link>
+              </div>
+            ) : null}
             {children ?? <Outlet />}
           </main>
         </div>

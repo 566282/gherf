@@ -7,6 +7,10 @@ const { mockGetSession, mockFrom } = vi.hoisted(() => ({
   mockFrom: vi.fn(),
 }));
 
+const onboardingGateState = vi.hoisted(() => ({
+  resolveOnboardingGate: vi.fn(),
+}));
+
 vi.mock('@/services/supabase/client', () => ({
   supabase: {
     auth: {
@@ -16,9 +20,18 @@ vi.mock('@/services/supabase/client', () => ({
   },
 }));
 
+vi.mock('@/services/api/onboardingGate', () => ({
+  resolveOnboardingGate: onboardingGateState.resolveOnboardingGate,
+}));
+
 describe('requireAuthMiddleware', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    onboardingGateState.resolveOnboardingGate.mockResolvedValue({
+      blocked: false,
+      reason: null,
+      allowedModuleKeys: ['*'],
+    });
   });
 
   it('redirects a signed-in super-admin user to /admin from guest pages even when profile role is stale', async () => {
@@ -107,5 +120,47 @@ describe('requireAuthMiddleware', () => {
     const result = await loader({ request: new Request('https://example.com/business') } as never);
 
     expect(result).toBeNull();
+  });
+
+  it('redirects blocked users to onboarding for gated app modules', async () => {
+    mockGetSession.mockResolvedValue({
+      data: {
+        session: {
+          user: {
+            id: 'user-3',
+            email: 'user3@example.com',
+            user_metadata: { role: 'registered_user' },
+            app_metadata: {},
+          },
+        },
+      },
+      error: null,
+    });
+
+    const maybeSingle = vi.fn().mockResolvedValue({
+      data: {
+        id: 'user-3',
+        role: 'registered_user',
+        status: 'active',
+        is_active: true,
+      },
+      error: null,
+    });
+    const eq = vi.fn().mockReturnValue({ maybeSingle });
+    const select = vi.fn().mockReturnValue({ eq });
+    mockFrom.mockReturnValue({ select });
+
+    onboardingGateState.resolveOnboardingGate.mockResolvedValue({
+      blocked: true,
+      reason: 'Complete onboarding first.',
+      allowedModuleKeys: ['onboarding', 'profile'],
+    });
+
+    const loader = requireAuthMiddleware([UserRole.REGISTERED_USER]);
+    const result = await loader({ request: new Request('https://example.com/app/tasks') } as never);
+
+    expect(result).toBeInstanceOf(Response);
+    expect((result as Response).status).toBe(302);
+    expect((result as Response).headers.get('Location')).toContain('/app/onboarding?blocked=1');
   });
 });

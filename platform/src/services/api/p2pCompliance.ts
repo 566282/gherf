@@ -116,6 +116,24 @@ async function persistAmlScreeningResults(results: Array<Record<string, unknown>
   if (error) throw error;
 }
 
+async function reevaluateMerchantsAfterRiskUpdates(results: Array<Record<string, unknown>>): Promise<void> {
+  const merchantIds = Array.from(
+    new Set(
+      results
+        .map((result) => result.merchantId)
+        .filter((merchantId): merchantId is string => typeof merchantId === 'string' && merchantId.trim().length > 0),
+    ),
+  );
+
+  if (!merchantIds.length) return;
+
+  const outcomes = await Promise.allSettled(merchantIds.map((merchantId) => evaluateMerchantQualification(merchantId)));
+  const failed = outcomes.find((outcome) => outcome.status === 'rejected');
+  if (failed?.status === 'rejected') {
+    throw failed.reason instanceof Error ? failed.reason : new Error('Failed to re-evaluate merchant qualification after risk updates.');
+  }
+}
+
 export async function runExternalAmlScreening(limit = 25): Promise<ExternalAmlScreeningResult> {
   const settings = await loadAmlConnectorSettings();
   if (!settings.enabled) {
@@ -176,6 +194,7 @@ export async function runExternalAmlScreening(limit = 25): Promise<ExternalAmlSc
   }
 
   await persistAmlScreeningResults(results);
+  await reevaluateMerchantsAfterRiskUpdates(results);
 
   const flagged = results.filter((result) => {
     const severity = String(result.severity ?? 'low');

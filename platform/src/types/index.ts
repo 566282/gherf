@@ -480,6 +480,9 @@ export interface WalletSettings {
   maxWithdrawal: number;
   processingFeePercent: number;
   currency: string;
+  internalTransfersEnabled?: boolean;
+  internalTransferUnlockPrice?: number;
+  multiplierPremiumEnabled?: boolean;
   approvalWorkflow: WalletApprovalWorkflow;
   exchangeRates: WalletExchangeRate[];
   supportedMethods: WalletWithdrawalMethod[];

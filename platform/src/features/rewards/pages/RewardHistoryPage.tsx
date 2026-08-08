@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/app/providers/AuthProvider';
 import { formatCurrency } from '@/lib/auth';
 import { listRewardLedger, listWalletActivity } from '@/services/api/auth';
+import { getMerchantProfileByUserId } from '@/services/api/p2pMerchant';
+import { listMerchantKycRequirementsForCurrentUser, type MerchantKycRequirement } from '@/services/api/p2pKyc';
 import {
   createWithdrawalRequest,
   listWalletAccounts,
@@ -47,6 +50,9 @@ const walletAccountLabels: Record<WalletAccountType, string> = {
   merchant_locked: 'Merchant Locked',
 };
 
+const consumerWalletAccountTypes: WalletAccountType[] = ['main', 'bonus', 'referral', 'cashback', 'reward'];
+const merchantWalletAccountTypes: WalletAccountType[] = ['merchant_available', 'merchant_reserved', 'merchant_pending', 'merchant_locked'];
+
 function getDefaultWithdrawalDate(): string {
   const nextDay = new Date();
   nextDay.setDate(nextDay.getDate() + 1);
@@ -75,6 +81,16 @@ export function RewardHistoryPage() {
   const [transferFrom, setTransferFrom] = useState<WalletAccountType>('reward');
   const [transferTo, setTransferTo] = useState<WalletAccountType>('main');
   const [transferNote, setTransferNote] = useState('Internal wallet transfer');
+  const [isTransferPanelExpanded, setIsTransferPanelExpanded] = useState(false);
+  const [isAuditSnapshotExpanded, setIsAuditSnapshotExpanded] = useState(false);
+  const [isEarningsBreakdownExpanded, setIsEarningsBreakdownExpanded] = useState(false);
+  const [isWalletDefinitionsExpanded, setIsWalletDefinitionsExpanded] = useState(false);
+  const [isMerchantWalletsExpanded, setIsMerchantWalletsExpanded] = useState(false);
+  const [isWithdrawalRequestExpanded, setIsWithdrawalRequestExpanded] = useState(false);
+  const [isWithdrawalHistoryExpanded, setIsWithdrawalHistoryExpanded] = useState(false);
+  const [isTransferHistoryExpanded, setIsTransferHistoryExpanded] = useState(false);
+  const [isRewardHistoryExpanded, setIsRewardHistoryExpanded] = useState(false);
+  const [isWalletAuditLogExpanded, setIsWalletAuditLogExpanded] = useState(false);
   const [transferFilterWalletType, setTransferFilterWalletType] = useState<'all' | WalletAccountType>('all');
   const [transferFilterStatus, setTransferFilterStatus] = useState<'all' | WalletTransfer['status']>('all');
   const [transferFilterCurrency, setTransferFilterCurrency] = useState<'all' | string>('all');
@@ -87,6 +103,8 @@ export function RewardHistoryPage() {
   const [isConfirmingReceipt, setIsConfirmingReceipt] = useState(false);
   const [isReportingNonReceipt, setIsReportingNonReceipt] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [merchantProfileStatus, setMerchantProfileStatus] = useState<string | null>(null);
+  const [merchantKycRequirements, setMerchantKycRequirements] = useState<MerchantKycRequirement[]>([]);
 
   useEffect(() => {
     if (!profile) return;
@@ -99,6 +117,8 @@ export function RewardHistoryPage() {
     void listUserWithdrawalReceiptQueue(20).then(setReceiptQueue).catch(() => setReceiptQueue([]));
     void listRewardLedger(profile.id).then(setRewards).catch(() => setRewards([]));
     void listWalletActivity(profile.id).then(setWalletActivity).catch(() => setWalletActivity([]));
+    void getMerchantProfileByUserId(profile.id).then((merchantProfile) => setMerchantProfileStatus(merchantProfile?.status ?? null)).catch(() => setMerchantProfileStatus(null));
+    void listMerchantKycRequirementsForCurrentUser(profile.id).then(setMerchantKycRequirements).catch(() => setMerchantKycRequirements([]));
   }, [profile]);
 
   const walletAccounts = useMemo(() => {
@@ -118,6 +138,44 @@ export function RewardHistoryPage() {
         (walletType === 'main' ? profile?.walletBalance ?? 0 : walletType === 'reward' ? profile?.rewardBalance ?? 0 : 0),
     }));
   }, [accounts, profile?.rewardBalance, profile?.walletBalance, settings?.currency]);
+
+  const consumerWalletAccounts = useMemo(
+    () => walletAccounts.filter((account) => consumerWalletAccountTypes.includes(account.walletType)),
+    [walletAccounts],
+  );
+
+  const merchantWalletAccounts = useMemo(
+    () => walletAccounts.filter((account) => merchantWalletAccountTypes.includes(account.walletType)),
+    [walletAccounts],
+  );
+
+  const merchantKycFullyApproved = useMemo(
+    () =>
+      merchantKycRequirements.length > 0
+      && merchantKycRequirements.every((requirement) => requirement.status === 'approved' || requirement.status === 'waived'),
+    [merchantKycRequirements],
+  );
+
+  const merchantWalletsLocked = useMemo(() => {
+    if (!merchantWalletAccounts.some((account) => account.balance > 0)) {
+      return false;
+    }
+
+    return merchantProfileStatus !== 'active' || !merchantKycFullyApproved;
+  }, [merchantKycFullyApproved, merchantProfileStatus, merchantWalletAccounts]);
+
+  const merchantWalletStatusMessage = useMemo(() => {
+    if (!merchantWalletAccounts.some((account) => account.balance > 0)) {
+      return 'Merchant wallets are hidden until balances are available.';
+    }
+    if (merchantProfileStatus !== 'active') {
+      return 'Merchant account approval is still pending.';
+    }
+    if (!merchantKycFullyApproved) {
+      return 'Complete and submit all merchant KYC requirements for approval to unlock these wallets.';
+    }
+    return 'Merchant wallets are unlocked.';
+  }, [merchantKycFullyApproved, merchantProfileStatus, merchantWalletAccounts]);
 
   const summary = useMemo(() => {
     const totals = transactions.reduce(
@@ -191,6 +249,8 @@ export function RewardHistoryPage() {
     'gift_cards',
     'manual_payout',
   ];
+  const internalTransfersEnabled = settings?.internalTransfersEnabled ?? false;
+  const multiplierPremiumEnabled = settings?.multiplierPremiumEnabled ?? false;
   const allowedTransferTargets = getAllowedTransferTargets(transferFrom);
   const transferCurrencyOptions = useMemo(() => {
     const currencies = new Set<string>([settings?.currency ?? 'USD']);
@@ -329,6 +389,10 @@ export function RewardHistoryPage() {
 
   const handleTransfer = async () => {
     if (!profile) return;
+    if (!internalTransfersEnabled) {
+      setStatusMessage('Internal transfers are locked by admin. Please contact support.');
+      return;
+    }
 
     setIsSubmitting(true);
     setStatusMessage(null);
@@ -356,6 +420,10 @@ export function RewardHistoryPage() {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleToggleTransferPanel = () => {
+    setIsTransferPanelExpanded((current) => !current);
   };
 
   if (!profile) {
@@ -444,6 +512,7 @@ export function RewardHistoryPage() {
             <p className="text-xs uppercase tracking-[0.2em] text-mint/70">Multiplier premium</p>
             <p className="mt-2 text-white">Activation: {formatCurrency(membershipMultiplierPricing.amount, membershipMultiplierPricing.currency)}</p>
             <p className="mt-2">Gateway payment: {membershipMultiplierPricing.requiresGatewayPayment ? 'Required' : 'Optional'}</p>
+            <p className="mt-2">Status: {multiplierPremiumEnabled ? 'Unlocked by admin' : 'Locked by admin'}</p>
           </div>
         </div>
 
@@ -456,7 +525,7 @@ export function RewardHistoryPage() {
         </div>
 
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-          {walletAccounts.map((account) => (
+          {consumerWalletAccounts.map((account) => (
             <div key={account.walletType} className="rounded-xl border border-white/10 bg-white/[0.04] p-4 shadow-soft">
               <p className="text-sm uppercase tracking-[0.18em] text-mist/60">{walletAccountLabels[account.walletType]}</p>
               <p className="mt-2 text-2xl font-semibold text-white">{formatCurrency(account.balance, summary.currency)}</p>
@@ -464,6 +533,53 @@ export function RewardHistoryPage() {
             </div>
           ))}
         </div>
+
+        {merchantWalletAccounts.some((account) => account.balance > 0) ? (
+          <div className="mt-6 rounded-xl border border-white/10 bg-white/[0.03] p-4 shadow-soft">
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div>
+                <p className="text-sm uppercase tracking-[0.2em] text-mint/70">Merchant wallets</p>
+                <h3 className="mt-2 text-xl font-semibold text-white">Merchant wallet accounts</h3>
+                <p className="mt-2 max-w-xl text-sm text-mist/70">This section is collapsed by default and unlocks only after merchant KYC completion and approval.</p>
+              </div>
+              <div className="flex flex-col items-start gap-2 md:items-end">
+                <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs uppercase tracking-[0.18em] text-mist/70">
+                  {merchantWalletsLocked ? 'Locked' : isMerchantWalletsExpanded ? 'Expanded' : 'Collapsed'}
+                </span>
+                {merchantWalletsLocked ? (
+                  <Link
+                    to="/app/merchant/kyc"
+                    className="rounded-full border border-amber-400/40 bg-amber-400/10 px-4 py-2 text-sm text-amber-100 transition hover:border-amber-300 hover:bg-amber-300/10"
+                  >
+                    Locked - Complete merchant KYC
+                  </Link>
+                ) : (
+                  <Button
+                    type="button"
+                    variant={isMerchantWalletsExpanded ? 'ghost' : 'primary'}
+                    onClick={() => setIsMerchantWalletsExpanded((current) => !current)}
+                  >
+                    {isMerchantWalletsExpanded ? 'Collapse merchant wallets' : 'Expand merchant wallets'}
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            <p className="mt-3 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-mist/80">{merchantWalletStatusMessage}</p>
+
+            {isMerchantWalletsExpanded && !merchantWalletsLocked ? (
+              <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                {merchantWalletAccounts.map((account) => (
+                  <div key={account.walletType} className="rounded-xl border border-white/10 bg-white/[0.04] p-4 shadow-soft">
+                    <p className="text-sm uppercase tracking-[0.18em] text-mist/60">{walletAccountLabels[account.walletType]}</p>
+                    <p className="mt-2 text-2xl font-semibold text-white">{formatCurrency(account.balance, summary.currency)}</p>
+                    <p className="mt-2 text-xs text-mist/60">Merchant settlement wallet bucket.</p>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
 
         <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4 shadow-soft">
@@ -488,71 +604,140 @@ export function RewardHistoryPage() {
           </div>
         </div>
 
-        <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-          {walletAccountTypes.map((walletType) => {
-            const rule = walletOperationalRules[walletType];
+        <div className="mt-6 rounded-xl border border-white/10 bg-white/[0.03] p-4 shadow-soft">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm uppercase tracking-[0.2em] text-mint/70">Wallet definitions</p>
+              <p className="mt-2 text-sm text-mist/70">Main wallet and other wallet types with transfer/withdrawal behavior.</p>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              aria-expanded={isWalletDefinitionsExpanded}
+              aria-controls="wallet-definitions-panel"
+              onClick={() => setIsWalletDefinitionsExpanded((current) => !current)}
+            >
+              {isWalletDefinitionsExpanded ? 'Collapse' : 'Expand'}
+            </Button>
+          </div>
+          {isWalletDefinitionsExpanded ? (
+            <div id="wallet-definitions-panel" className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+              {walletAccountTypes.map((walletType) => {
+                const rule = walletOperationalRules[walletType];
 
-            return (
-              <div key={walletType} className="rounded-xl border border-white/10 bg-white/[0.04] p-4 shadow-soft">
-                <p className="text-sm uppercase tracking-[0.18em] text-mist/60">{rule.label}</p>
-                <p className="mt-2 text-sm text-white/90">{rule.description}</p>
-                <p className="mt-2 text-xs text-mist/60">{rule.withdrawable ? 'Withdrawable directly' : `Transfer to ${getAllowedTransferTargets(walletType).map((value) => walletOperationalRules[value].label).join(', ') || 'none'}`}</p>
-              </div>
-            );
-          })}
+                return (
+                  <div key={walletType} className="rounded-xl border border-white/10 bg-white/[0.04] p-4 shadow-soft">
+                    <p className="text-sm uppercase tracking-[0.18em] text-mist/60">{rule.label}</p>
+                    <p className="mt-2 text-sm text-white/90">{rule.description}</p>
+                    <p className="mt-2 text-xs text-mist/60">{rule.withdrawable ? 'Withdrawable directly' : `Transfer to ${getAllowedTransferTargets(walletType).map((value) => walletOperationalRules[value].label).join(', ') || 'none'}`}</p>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
         </div>
 
         <div className="mt-6 grid gap-4 xl:grid-cols-[1fr_0.8fr]">
-          <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 shadow-soft">
-            <p className="text-sm uppercase tracking-[0.2em] text-mint/70">Internal transfer</p>
-            <h3 className="mt-2 text-xl font-semibold text-white">Move funds between wallets</h3>
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <label className="grid gap-2">
-                <span className="text-sm text-mist/70">From wallet</span>
-                <select className="input-base" value={transferFrom} onChange={(event) => setTransferFrom(event.target.value as WalletAccountType)}>
-                  {walletTransferSources.map((value) => <option key={value} value={value}>{walletAccountLabels[value]}</option>)}
-                </select>
-              </label>
-              <label className="grid gap-2">
-                <span className="text-sm text-mist/70">To wallet</span>
-                <select className="input-base" value={transferTo} onChange={(event) => setTransferTo(event.target.value as WalletAccountType)}>
-                  {allowedTransferTargets.map((value) => <option key={value} value={value}>{walletAccountLabels[value]}</option>)}
-                </select>
-              </label>
-              <label className="grid gap-2 md:col-span-2">
-                <span className="text-sm text-mist/70">Amount</span>
-                <input className="input-base" type="number" min="0.01" step="0.01" value={transferAmount} onChange={(event) => setTransferAmount(event.target.value)} />
-              </label>
-              <label className="grid gap-2 md:col-span-2">
-                <span className="text-sm text-mist/70">Note</span>
-                <input className="input-base" value={transferNote} onChange={(event) => setTransferNote(event.target.value)} />
-              </label>
-              <p className="md:col-span-2 text-xs text-mist/60">
-                {allowedTransferTargets.length ? `Valid destinations: ${allowedTransferTargets.map((value) => walletOperationalRules[value].label).join(', ')}` : 'This wallet cannot transfer funds.'}
+          <div id="internal-transfer" className="rounded-xl border border-white/10 bg-white/[0.03] p-4 shadow-soft">
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div>
+                <p className="text-sm uppercase tracking-[0.2em] text-mint/70">Internal transfer</p>
+                <h3 className="mt-2 text-xl font-semibold text-white">Move funds between wallets</h3>
+                <p className="mt-2 max-w-xl text-sm text-mist/70">
+                  This panel stays collapsed until you choose to open it, and it always returns to the collapsed state when you close it or revisit the page.
+                </p>
+              </div>
+              <div className="flex flex-col items-start gap-3 md:items-end">
+                <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs uppercase tracking-[0.18em] text-mist/70">
+                  {internalTransfersEnabled ? (isTransferPanelExpanded ? 'Feature unlocked' : 'Feature lock enabled') : 'Locked by admin'}
+                </span>
+                <Button
+                  type="button"
+                  variant={isTransferPanelExpanded ? 'ghost' : 'primary'}
+                  onClick={handleToggleTransferPanel}
+                  disabled={!internalTransfersEnabled}
+                >
+                  {!internalTransfersEnabled ? 'Locked by admin' : isTransferPanelExpanded ? 'Collapse transfer panel' : 'Expand transfer panel'}
+                </Button>
+              </div>
+            </div>
+
+            {!internalTransfersEnabled ? (
+              <p className="mt-3 rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-sm text-amber-100">
+                Internal transfers are currently disabled. An admin must unlock this feature before funds can be moved between wallets.
               </p>
-            </div>
-            <div className="mt-4 flex flex-wrap gap-3">
-              <Button onClick={() => void handleTransfer()} disabled={isSubmitting}>
-                {isSubmitting ? 'Processing...' : 'Move funds'}
-              </Button>
-              <Button variant="ghost" onClick={() => { setTransferAmount('25'); setTransferFrom('main'); setTransferTo('reward'); setTransferNote('Internal wallet transfer'); }}>
-                Reset transfer
-              </Button>
-            </div>
+            ) : null}
+
+            {isTransferPanelExpanded ? (
+              <>
+                <div className="mt-4 grid gap-4 md:grid-cols-2">
+                  <label className="grid gap-2">
+                    <span className="text-sm text-mist/70">From wallet</span>
+                    <select className="input-base" value={transferFrom} onChange={(event) => setTransferFrom(event.target.value as WalletAccountType)}>
+                      {walletTransferSources.map((value) => <option key={value} value={value}>{walletAccountLabels[value]}</option>)}
+                    </select>
+                  </label>
+                  <label className="grid gap-2">
+                    <span className="text-sm text-mist/70">To wallet</span>
+                    <select className="input-base" value={transferTo} onChange={(event) => setTransferTo(event.target.value as WalletAccountType)}>
+                      {allowedTransferTargets.map((value) => <option key={value} value={value}>{walletAccountLabels[value]}</option>)}
+                    </select>
+                  </label>
+                  <label className="grid gap-2 md:col-span-2">
+                    <span className="text-sm text-mist/70">Amount</span>
+                    <input className="input-base" type="number" min="0.01" step="0.01" value={transferAmount} onChange={(event) => setTransferAmount(event.target.value)} />
+                  </label>
+                  <label className="grid gap-2 md:col-span-2">
+                    <span className="text-sm text-mist/70">Note</span>
+                    <input className="input-base" value={transferNote} onChange={(event) => setTransferNote(event.target.value)} />
+                  </label>
+                  <p className="md:col-span-2 text-xs text-mist/60">
+                    {allowedTransferTargets.length ? `Valid destinations: ${allowedTransferTargets.map((value) => walletOperationalRules[value].label).join(', ')}` : 'This wallet cannot transfer funds.'}
+                  </p>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <Button onClick={() => void handleTransfer()} disabled={isSubmitting || !internalTransfersEnabled}>
+                    {isSubmitting ? 'Processing...' : 'Move funds'}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    onClick={() => { setTransferAmount('25'); setTransferFrom('main'); setTransferTo('reward'); setTransferNote('Internal wallet transfer'); }}
+                    disabled={!internalTransfersEnabled}
+                  >
+                    Reset transfer
+                  </Button>
+                </div>
+              </>
+            ) : null}
           </div>
 
           <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 shadow-soft">
-            <p className="text-sm uppercase tracking-[0.2em] text-mint/70">Audit snapshot</p>
-            <h3 className="mt-2 text-xl font-semibold text-white">Latest wallet events</h3>
-            <div className="mt-4 space-y-3 text-sm text-mist/80">
-              {walletActivity.length ? walletActivity.map((item) => (
-                <div key={item.id} className="rounded-lg border border-white/10 bg-white/[0.04] p-3">
-                  <p className="font-medium text-white">{item.entryType ?? item.transactionType ?? 'wallet event'}</p>
-                  <p className="mt-1">{item.walletType ? `${item.walletType} wallet` : 'Wallet ledger'} {item.note ? `· ${item.note}` : ''}</p>
-                  <p className="mt-1 text-xs text-mist/60">{formatCurrency(item.amount, item.currency ?? summary.currency)}{item.balanceAfter !== undefined ? ` · balance ${formatCurrency(item.balanceAfter, item.currency ?? summary.currency)}` : ''}</p>
-                </div>
-              )) : <p className="text-sm text-mist/60">No wallet events yet.</p>}
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm uppercase tracking-[0.2em] text-mint/70">Audit snapshot</p>
+                <h3 className="mt-2 text-xl font-semibold text-white">Latest wallet events</h3>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                aria-expanded={isAuditSnapshotExpanded}
+                aria-controls="audit-snapshot-panel"
+                onClick={() => setIsAuditSnapshotExpanded((current) => !current)}
+              >
+                {isAuditSnapshotExpanded ? 'Collapse' : 'Expand'}
+              </Button>
             </div>
+            {isAuditSnapshotExpanded ? (
+              <div id="audit-snapshot-panel" className="mt-4 space-y-3 text-sm text-mist/80">
+                {walletActivity.length ? walletActivity.map((item) => (
+                  <div key={item.id} className="rounded-lg border border-white/10 bg-white/[0.04] p-3">
+                    <p className="font-medium text-white">{item.entryType ?? item.transactionType ?? 'wallet event'}</p>
+                    <p className="mt-1">{item.walletType ? `${item.walletType} wallet` : 'Wallet ledger'} {item.note ? `· ${item.note}` : ''}</p>
+                    <p className="mt-1 text-xs text-mist/60">{formatCurrency(item.amount, item.currency ?? summary.currency)}{item.balanceAfter !== undefined ? ` · balance ${formatCurrency(item.balanceAfter, item.currency ?? summary.currency)}` : ''}</p>
+                  </div>
+                )) : <p className="text-sm text-mist/60">No wallet events yet.</p>}
+              </div>
+            ) : null}
           </div>
         </div>
       </Card>
@@ -587,121 +772,153 @@ export function RewardHistoryPage() {
               <h2 className="text-2xl font-semibold text-white">Earnings breakdown</h2>
               <p className="mt-1 text-sm text-mist/70">Category totals derived from the wallet ledger.</p>
             </div>
-            <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-mist/80 shadow-soft">
-              Total earned: {formatCurrency(summary.earnings, summary.currency)}
+            <div className="flex items-center gap-2">
+              <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-mist/80 shadow-soft">
+                Total earned: {formatCurrency(summary.earnings, summary.currency)}
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                aria-expanded={isEarningsBreakdownExpanded}
+                aria-controls="earnings-breakdown-panel"
+                onClick={() => setIsEarningsBreakdownExpanded((current) => !current)}
+              >
+                {isEarningsBreakdownExpanded ? 'Collapse' : 'Expand'}
+              </Button>
             </div>
           </div>
 
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
-            <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4 shadow-soft">
-              <p className="text-sm text-mist/60">Bonus rewards</p>
-              <p className="mt-2 text-xl font-semibold text-white">{formatCurrency(summary.bonusRewards, summary.currency)}</p>
-            </div>
-            <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4 shadow-soft">
-              <p className="text-sm text-mist/60">Referral commissions</p>
-              <p className="mt-2 text-xl font-semibold text-white">{formatCurrency(summary.referralCommissions, summary.currency)}</p>
-            </div>
-            <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4 shadow-soft">
-              <p className="text-sm text-mist/60">Cashback</p>
-              <p className="mt-2 text-xl font-semibold text-white">{formatCurrency(summary.cashback, summary.currency)}</p>
-            </div>
-            <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4 shadow-soft">
-              <p className="text-sm text-mist/60">Promotional rewards</p>
-              <p className="mt-2 text-xl font-semibold text-white">{formatCurrency(summary.promotionalRewards, summary.currency)}</p>
-            </div>
-            <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4 shadow-soft md:col-span-2">
-              <p className="text-sm text-mist/60">Achievement rewards</p>
-              <p className="mt-2 text-xl font-semibold text-white">{formatCurrency(summary.achievementRewards, summary.currency)}</p>
-            </div>
-          </div>
-
-          <div className="mt-6 space-y-3">
-            <h3 className="text-lg font-semibold text-white">Recent wallet transactions</h3>
-            <div className="space-y-3">
-              {transactions.length ? transactions.map((transaction) => (
-                <div key={transaction.id} className="flex flex-col gap-2 rounded-xl border border-white/10 bg-white/[0.04] p-4 shadow-soft md:flex-row md:items-center md:justify-between">
-                  <div>
-                    <p className="font-medium text-white">{transaction.transactionType.replace(/_/g, ' ')}</p>
-                    <p className="text-sm text-mist/70">{transaction.note ?? transaction.status}</p>
-                  </div>
-                  <div className="text-right text-sm text-mist/80">
-                    <p className="font-medium text-white">{formatCurrency(transaction.amount, transaction.currency)}</p>
-                    <p>Balance after {formatCurrency(transaction.balanceAfter, transaction.currency)}</p>
-                  </div>
+          {isEarningsBreakdownExpanded ? (
+            <div id="earnings-breakdown-panel">
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4 shadow-soft">
+                  <p className="text-sm text-mist/60">Bonus rewards</p>
+                  <p className="mt-2 text-xl font-semibold text-white">{formatCurrency(summary.bonusRewards, summary.currency)}</p>
                 </div>
-              )) : <p className="text-sm text-mist/60">No wallet transactions yet.</p>}
+                <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4 shadow-soft">
+                  <p className="text-sm text-mist/60">Referral commissions</p>
+                  <p className="mt-2 text-xl font-semibold text-white">{formatCurrency(summary.referralCommissions, summary.currency)}</p>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4 shadow-soft">
+                  <p className="text-sm text-mist/60">Cashback</p>
+                  <p className="mt-2 text-xl font-semibold text-white">{formatCurrency(summary.cashback, summary.currency)}</p>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4 shadow-soft">
+                  <p className="text-sm text-mist/60">Promotional rewards</p>
+                  <p className="mt-2 text-xl font-semibold text-white">{formatCurrency(summary.promotionalRewards, summary.currency)}</p>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4 shadow-soft md:col-span-2">
+                  <p className="text-sm text-mist/60">Achievement rewards</p>
+                  <p className="mt-2 text-xl font-semibold text-white">{formatCurrency(summary.achievementRewards, summary.currency)}</p>
+                </div>
+              </div>
+
+              <div className="mt-6 space-y-3">
+                <h3 className="text-lg font-semibold text-white">Recent wallet transactions</h3>
+                <div className="space-y-3">
+                  {transactions.length ? transactions.map((transaction) => (
+                    <div key={transaction.id} className="flex flex-col gap-2 rounded-xl border border-white/10 bg-white/[0.04] p-4 shadow-soft md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <p className="font-medium text-white">{transaction.transactionType.replace(/_/g, ' ')}</p>
+                        <p className="text-sm text-mist/70">{transaction.note ?? transaction.status}</p>
+                      </div>
+                      <div className="text-right text-sm text-mist/80">
+                        <p className="font-medium text-white">{formatCurrency(transaction.amount, transaction.currency)}</p>
+                        <p>Balance after {formatCurrency(transaction.balanceAfter, transaction.currency)}</p>
+                      </div>
+                    </div>
+                  )) : <p className="text-sm text-mist/60">No wallet transactions yet.</p>}
+                </div>
+              </div>
             </div>
-          </div>
+          ) : null}
         </Card>
 
         <div className="space-y-6">
           <Card id="withdrawal-request">
-            <h2 className="text-2xl font-semibold text-white">Withdrawal request</h2>
-            <p className="mt-1 text-sm text-mist/70">
-              Minimum {formatCurrency(settings?.minWithdrawal ?? 0, settings?.currency ?? 'USD')} | Maximum {formatCurrency(settings?.maxWithdrawal ?? 0, settings?.currency ?? 'USD')}
-            </p>
-
-            <div className="mt-4 space-y-4">
-              <label className="grid gap-2">
-                <span className="text-sm text-mist/70">Amount</span>
-                <input className="input-base" type="number" min={settings?.minWithdrawal ?? 0} step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} />
-              </label>
-              <label className="grid gap-2">
-                <span className="text-sm text-mist/70">Withdrawal method</span>
-                <select className="input-base" value={method} onChange={(event) => setMethod(event.target.value as WalletWithdrawalMethod)}>
-                  {supportedMethods.map((value) => <option key={value} value={value}>{withdrawalMethodLabels[value]}</option>)}
-                </select>
-              </label>
-              <label className="grid gap-2">
-                <span className="text-sm text-mist/70">Destination label</span>
-                <input className="input-base" value={destinationLabel} onChange={(event) => setDestinationLabel(event.target.value)} />
-              </label>
-              <label className="grid gap-2">
-                <span className="text-sm text-mist/70">Destination account or address</span>
-                <input className="input-base" value={destinationValue} onChange={(event) => setDestinationValue(event.target.value)} />
-              </label>
-              <label className="grid gap-2">
-                <span className="text-sm text-mist/70">Destination currency</span>
-                <select className="input-base" value={destinationCurrency} onChange={(event) => setDestinationCurrency(event.target.value)}>
-                  {(settings?.exchangeRates ?? []).map((rate) => (
-                    <option key={rate.currency} value={rate.currency}>{rate.currency}{rate.label ? ` - ${rate.label}` : ''}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="grid gap-2">
-                <span className="text-sm text-mist/70">Withdrawal date</span>
-                <input className="input-base" type="date" value={scheduledFor} onChange={(event) => setScheduledFor(event.target.value)} />
-                <p className="form-hint">This date is included in both the admin and user withdrawal notifications.</p>
-              </label>
-              <label className="grid gap-2">
-                <span className="text-sm text-mist/70">Note</span>
-                <textarea className="input-base min-h-24" value={note} onChange={(event) => setNote(event.target.value)} />
-              </label>
-            </div>
-
-            <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.04] p-4 text-sm text-mist/80 shadow-soft">
-              <p>Processing fee: {settings?.processingFeePercent ?? 0}%</p>
-              <p>Estimated fee: {formatCurrency(feePreview.fee, settings?.currency ?? 'USD')}</p>
-              <p>Estimated net payout: {formatCurrency(feePreview.net, settings?.currency ?? 'USD')}</p>
-            </div>
-
-            {statusMessage ? <p className="mt-3 text-sm text-ember">{statusMessage}</p> : null}
-
-            <div className="mt-4 flex flex-wrap gap-3">
-              <Button onClick={() => void handleWithdraw()} disabled={isSubmitting}>
-                {isSubmitting ? 'Submitting...' : 'Request withdrawal'}
-              </Button>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-2xl font-semibold text-white">Withdrawal request</h2>
+                <p className="mt-1 text-sm text-mist/70">
+                  Minimum {formatCurrency(settings?.minWithdrawal ?? 0, settings?.currency ?? 'USD')} | Maximum {formatCurrency(settings?.maxWithdrawal ?? 0, settings?.currency ?? 'USD')}
+                </p>
+              </div>
               <Button
+                type="button"
                 variant="ghost"
-                onClick={() => {
-                  setAmount('50');
-                  setMethod(defaultWithdrawalMethod);
-                  setDestinationCurrency(settings?.currency ?? 'USD');
-                }}
+                aria-expanded={isWithdrawalRequestExpanded}
+                aria-controls="withdrawal-request-panel"
+                onClick={() => setIsWithdrawalRequestExpanded((current) => !current)}
               >
-                Reset form
+                {isWithdrawalRequestExpanded ? 'Collapse' : 'Expand'}
               </Button>
             </div>
+
+            {isWithdrawalRequestExpanded ? (
+              <div id="withdrawal-request-panel">
+                <div className="mt-4 space-y-4">
+                  <label className="grid gap-2">
+                    <span className="text-sm text-mist/70">Amount</span>
+                    <input className="input-base" type="number" min={settings?.minWithdrawal ?? 0} step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} />
+                  </label>
+                  <label className="grid gap-2">
+                    <span className="text-sm text-mist/70">Withdrawal method</span>
+                    <select className="input-base" value={method} onChange={(event) => setMethod(event.target.value as WalletWithdrawalMethod)}>
+                      {supportedMethods.map((value) => <option key={value} value={value}>{withdrawalMethodLabels[value]}</option>)}
+                    </select>
+                  </label>
+                  <label className="grid gap-2">
+                    <span className="text-sm text-mist/70">Destination label</span>
+                    <input className="input-base" value={destinationLabel} onChange={(event) => setDestinationLabel(event.target.value)} />
+                  </label>
+                  <label className="grid gap-2">
+                    <span className="text-sm text-mist/70">Destination account or address</span>
+                    <input className="input-base" value={destinationValue} onChange={(event) => setDestinationValue(event.target.value)} />
+                  </label>
+                  <label className="grid gap-2">
+                    <span className="text-sm text-mist/70">Destination currency</span>
+                    <select className="input-base" value={destinationCurrency} onChange={(event) => setDestinationCurrency(event.target.value)}>
+                      {(settings?.exchangeRates ?? []).map((rate) => (
+                        <option key={rate.currency} value={rate.currency}>{rate.currency}{rate.label ? ` - ${rate.label}` : ''}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="grid gap-2">
+                    <span className="text-sm text-mist/70">Withdrawal date</span>
+                    <input className="input-base" type="date" value={scheduledFor} onChange={(event) => setScheduledFor(event.target.value)} />
+                    <p className="form-hint">This date is included in both the admin and user withdrawal notifications.</p>
+                  </label>
+                  <label className="grid gap-2">
+                    <span className="text-sm text-mist/70">Note</span>
+                    <textarea className="input-base min-h-24" value={note} onChange={(event) => setNote(event.target.value)} />
+                  </label>
+                </div>
+
+                <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.04] p-4 text-sm text-mist/80 shadow-soft">
+                  <p>Processing fee: {settings?.processingFeePercent ?? 0}%</p>
+                  <p>Estimated fee: {formatCurrency(feePreview.fee, settings?.currency ?? 'USD')}</p>
+                  <p>Estimated net payout: {formatCurrency(feePreview.net, settings?.currency ?? 'USD')}</p>
+                </div>
+
+                {statusMessage ? <p className="mt-3 text-sm text-ember">{statusMessage}</p> : null}
+
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <Button onClick={() => void handleWithdraw()} disabled={isSubmitting}>
+                    {isSubmitting ? 'Submitting...' : 'Request withdrawal'}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      setAmount('50');
+                      setMethod(defaultWithdrawalMethod);
+                      setDestinationCurrency(settings?.currency ?? 'USD');
+                    }}
+                  >
+                    Reset form
+                  </Button>
+                </div>
+              </div>
+            ) : null}
           </Card>
 
           <Card>
@@ -749,64 +966,116 @@ export function RewardHistoryPage() {
           </Card>
 
           <Card>
-            <h2 className="text-2xl font-semibold text-white">Withdrawal history</h2>
-            <div className="mt-4 space-y-3">
-              {withdrawals.length ? withdrawals.map((request) => (
-                <div key={request.id} className="rounded-xl border border-white/10 bg-white/[0.04] p-4 text-sm text-mist/80 shadow-soft">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="font-medium text-white">{withdrawalMethodLabels[request.method]}</p>
-                    <span className="rounded-full border border-white/10 px-3 py-1 text-xs uppercase tracking-[0.18em] text-mist/70">
-                      {request.status}
-                    </span>
-                  </div>
-                  <p className="mt-2">{request.destinationLabel}</p>
-                  <p>{formatCurrency(request.amount, request.currency)} | Fee {formatCurrency(request.processingFee, request.currency)}</p>
-                  <p>Net {formatCurrency(request.netAmount, request.currency)}</p>
-                </div>
-              )) : <p className="text-sm text-mist/60">No withdrawal requests yet.</p>}
+            <div className="flex items-start justify-between gap-3">
+              <h2 className="text-2xl font-semibold text-white">Withdrawal history</h2>
+              <Button
+                type="button"
+                variant="ghost"
+                aria-expanded={isWithdrawalHistoryExpanded}
+                aria-controls="withdrawal-history-panel"
+                onClick={() => setIsWithdrawalHistoryExpanded((current) => !current)}
+              >
+                {isWithdrawalHistoryExpanded ? 'Collapse' : 'Expand'}
+              </Button>
             </div>
-          </Card>
-
-          <Card id="internal-transfer">
-            <h2 className="text-2xl font-semibold text-white">Transfer history</h2>
-            <div className="mt-4 space-y-3">
-              {transfers.length ? transfers.map((transfer) => (
-                <div key={transfer.id} className="rounded-xl border border-white/10 bg-white/[0.04] p-4 text-sm text-mist/80 shadow-soft">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="font-medium text-white">{transfer.transferCategory.replace(/_/g, ' ')}</p>
-                    <span className="rounded-full border border-white/10 px-3 py-1 text-xs uppercase tracking-[0.18em] text-mist/70">{transfer.status}</span>
+            {isWithdrawalHistoryExpanded ? (
+              <div id="withdrawal-history-panel" className="mt-4 space-y-3">
+                {withdrawals.length ? withdrawals.map((request) => (
+                  <div key={request.id} className="rounded-xl border border-white/10 bg-white/[0.04] p-4 text-sm text-mist/80 shadow-soft">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="font-medium text-white">{withdrawalMethodLabels[request.method]}</p>
+                      <span className="rounded-full border border-white/10 px-3 py-1 text-xs uppercase tracking-[0.18em] text-mist/70">
+                        {request.status}
+                      </span>
+                    </div>
+                    <p className="mt-2">{request.destinationLabel}</p>
+                    <p>{formatCurrency(request.amount, request.currency)} | Fee {formatCurrency(request.processingFee, request.currency)}</p>
+                    <p>Net {formatCurrency(request.netAmount, request.currency)}</p>
                   </div>
-                  <p className="mt-2">{formatCurrency(transfer.amount, transfer.currency)}</p>
-                  <p className="text-xs text-mist/60">{transfer.note ?? 'Wallet transfer'} · {transfer.fromWalletAccountId} → {transfer.toWalletAccountId}</p>
-                </div>
-              )) : <p className="text-sm text-mist/60">No wallet transfers matched the current filters.</p>}
-            </div>
+                )) : <p className="text-sm text-mist/60">No withdrawal requests yet.</p>}
+              </div>
+            ) : null}
           </Card>
 
           <Card>
-            <h2 className="text-2xl font-semibold text-white">Reward history</h2>
-            <div className="mt-4 space-y-3 text-sm text-mist/80">
-              {rewards.length ? rewards.map((item) => (
-                <div key={item.id} className="rounded-xl border border-white/10 bg-white/[0.04] p-4 shadow-soft">
-                  <p className="font-medium text-white">{item.action}</p>
-                  <p>{formatCurrency(item.amount, item.currency)}</p>
-                  <p>{item.reason ?? 'Reward entry recorded in the ledger.'}</p>
-                </div>
-              )) : <p>No reward activity yet.</p>}
+            <div className="flex items-start justify-between gap-3">
+              <h2 className="text-2xl font-semibold text-white">Transfer history</h2>
+              <Button
+                type="button"
+                variant="ghost"
+                aria-expanded={isTransferHistoryExpanded}
+                aria-controls="transfer-history-panel"
+                onClick={() => setIsTransferHistoryExpanded((current) => !current)}
+              >
+                {isTransferHistoryExpanded ? 'Collapse' : 'Expand'}
+              </Button>
             </div>
+            {isTransferHistoryExpanded ? (
+              <div id="transfer-history-panel" className="mt-4 space-y-3">
+                {transfers.length ? transfers.map((transfer) => (
+                  <div key={transfer.id} className="rounded-xl border border-white/10 bg-white/[0.04] p-4 text-sm text-mist/80 shadow-soft">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="font-medium text-white">{transfer.transferCategory.replace(/_/g, ' ')}</p>
+                      <span className="rounded-full border border-white/10 px-3 py-1 text-xs uppercase tracking-[0.18em] text-mist/70">{transfer.status}</span>
+                    </div>
+                    <p className="mt-2">{formatCurrency(transfer.amount, transfer.currency)}</p>
+                    <p className="text-xs text-mist/60">{transfer.note ?? 'Wallet transfer'} · {transfer.fromWalletAccountId} → {transfer.toWalletAccountId}</p>
+                  </div>
+                )) : <p className="text-sm text-mist/60">No wallet transfers matched the current filters.</p>}
+              </div>
+            ) : null}
           </Card>
 
           <Card>
-            <h2 className="text-2xl font-semibold text-white">Wallet audit log</h2>
-            <div className="mt-4 space-y-3 text-sm text-mist/80">
-              {walletActivity.length ? walletActivity.map((item) => (
-                <div key={item.id} className="rounded-xl border border-white/10 bg-white/[0.04] p-4 shadow-soft">
-                  <p className="font-medium text-white">{item.entryType ?? item.transactionType ?? 'Wallet update'}</p>
-                  <p className="mt-1 text-mist/70">{item.note ?? 'Wallet update'}{item.walletType ? ` · ${item.walletType}` : ''}</p>
-                  <p>{formatCurrency(item.amount, item.currency ?? summary.currency)} · {formatCurrency(item.balanceAfter, item.currency ?? summary.currency)}</p>
-                </div>
-              )) : <p>No wallet transactions yet.</p>}
+            <div className="flex items-start justify-between gap-3">
+              <h2 className="text-2xl font-semibold text-white">Reward history</h2>
+              <Button
+                type="button"
+                variant="ghost"
+                aria-expanded={isRewardHistoryExpanded}
+                aria-controls="reward-history-panel"
+                onClick={() => setIsRewardHistoryExpanded((current) => !current)}
+              >
+                {isRewardHistoryExpanded ? 'Collapse' : 'Expand'}
+              </Button>
             </div>
+            {isRewardHistoryExpanded ? (
+              <div id="reward-history-panel" className="mt-4 space-y-3 text-sm text-mist/80">
+                {rewards.length ? rewards.map((item) => (
+                  <div key={item.id} className="rounded-xl border border-white/10 bg-white/[0.04] p-4 shadow-soft">
+                    <p className="font-medium text-white">{item.action}</p>
+                    <p>{formatCurrency(item.amount, item.currency)}</p>
+                    <p>{item.reason ?? 'Reward entry recorded in the ledger.'}</p>
+                  </div>
+                )) : <p>No reward activity yet.</p>}
+              </div>
+            ) : null}
+          </Card>
+
+          <Card>
+            <div className="flex items-start justify-between gap-3">
+              <h2 className="text-2xl font-semibold text-white">Wallet audit log</h2>
+              <Button
+                type="button"
+                variant="ghost"
+                aria-expanded={isWalletAuditLogExpanded}
+                aria-controls="wallet-audit-log-panel"
+                onClick={() => setIsWalletAuditLogExpanded((current) => !current)}
+              >
+                {isWalletAuditLogExpanded ? 'Collapse' : 'Expand'}
+              </Button>
+            </div>
+            {isWalletAuditLogExpanded ? (
+              <div id="wallet-audit-log-panel" className="mt-4 space-y-3 text-sm text-mist/80">
+                {walletActivity.length ? walletActivity.map((item) => (
+                  <div key={item.id} className="rounded-xl border border-white/10 bg-white/[0.04] p-4 shadow-soft">
+                    <p className="font-medium text-white">{item.entryType ?? item.transactionType ?? 'Wallet update'}</p>
+                    <p className="mt-1 text-mist/70">{item.note ?? 'Wallet update'}{item.walletType ? ` · ${item.walletType}` : ''}</p>
+                    <p>{formatCurrency(item.amount, item.currency ?? summary.currency)} · {formatCurrency(item.balanceAfter, item.currency ?? summary.currency)}</p>
+                  </div>
+                )) : <p>No wallet transactions yet.</p>}
+              </div>
+            ) : null}
           </Card>
         </div>
       </div>

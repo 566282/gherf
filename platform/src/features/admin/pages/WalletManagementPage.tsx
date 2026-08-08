@@ -54,9 +54,13 @@ export function WalletManagementPage(): JSX.Element {
   const [isAdjusting, setIsAdjusting] = useState(false);
   const [isReconciling, setIsReconciling] = useState(false);
   const [isSavingFeeRules, setIsSavingFeeRules] = useState(false);
+  const [isSavingTransferUnlockSettings, setIsSavingTransferUnlockSettings] = useState(false);
   const [isSavingMembershipMode, setIsSavingMembershipMode] = useState(false);
   const [membershipFeeBlockEnabled, setMembershipFeeBlockEnabled] = useState(true);
   const [membershipFeeThreshold, setMembershipFeeThreshold] = useState(2);
+  const [internalTransfersEnabled, setInternalTransfersEnabled] = useState(false);
+  const [internalTransferUnlockPrice, setInternalTransferUnlockPrice] = useState(65);
+  const [multiplierPremiumEnabled, setMultiplierPremiumEnabled] = useState(false);
   const [membershipEngineMode, setMembershipEngineMode] = useState<'shadow' | 'progressive' | 'enforced'>('progressive');
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
@@ -115,6 +119,9 @@ export function WalletManagementPage(): JSX.Element {
 
     setMembershipFeeBlockEnabled(walletSettings.blockWithoutFeeSettlement);
     setMembershipFeeThreshold(walletSettings.membershipFeeEnforcementStartWithdrawalCount);
+    setInternalTransfersEnabled(walletSettings.internalTransfersEnabled ?? false);
+    setInternalTransferUnlockPrice(walletSettings.internalTransferUnlockPrice ?? 65);
+    setMultiplierPremiumEnabled(walletSettings.multiplierPremiumEnabled ?? false);
   }, [walletSettings]);
 
   useEffect(() => {
@@ -193,6 +200,25 @@ export function WalletManagementPage(): JSX.Element {
       setStatusMessage(error instanceof Error ? error.message : 'Unable to update membership rollout mode.');
     } finally {
       setIsSavingMembershipMode(false);
+    }
+  };
+
+  const handleSaveTransferUnlockSettings = async () => {
+    setIsSavingTransferUnlockSettings(true);
+    setStatusMessage(null);
+
+    try {
+      await updateWalletSettings({
+        internalTransfersEnabled,
+        internalTransferUnlockPrice,
+        multiplierPremiumEnabled,
+      });
+      setStatusMessage('Internal transfer unlock settings saved.');
+      await refetch();
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : 'Unable to save internal transfer unlock settings.');
+    } finally {
+      setIsSavingTransferUnlockSettings(false);
     }
   };
 
@@ -342,6 +368,49 @@ export function WalletManagementPage(): JSX.Element {
           </div>
 
           <div className="rounded-xl border border-border bg-surface p-4">
+            <p className="text-sm font-medium text-foreground">Internal transfer unlock purchase</p>
+            <p className="mt-1 text-sm text-muted">Control whether internal transfers are unlocked and configure the purchase price displayed in the orders feature unlock panel.</p>
+            <label className="mt-4 inline-flex items-center gap-2 text-sm text-foreground">
+              <input
+                type="checkbox"
+                checked={internalTransfersEnabled}
+                onChange={(event) => setInternalTransfersEnabled(event.target.checked)}
+                className="h-4 w-4 rounded border-border bg-surface text-accent focus:ring-accent"
+              />
+              <span>{internalTransfersEnabled ? 'Transfers unlocked' : 'Transfers locked'}</span>
+            </label>
+            <label className="mt-4 grid gap-2">
+              <span className="text-sm text-muted">Unlock purchase price ({currency})</span>
+              <input
+                type="number"
+                min="1"
+                step="0.01"
+                className="input-base"
+                value={internalTransferUnlockPrice}
+                onChange={(event) => setInternalTransferUnlockPrice(Math.max(1, Number(event.target.value) || 1))}
+              />
+            </label>
+            <div className="mt-4">
+              <Button onClick={() => void handleSaveTransferUnlockSettings()} disabled={isSavingTransferUnlockSettings}>
+                {isSavingTransferUnlockSettings ? 'Saving...' : 'Save transfer unlock settings'}
+              </Button>
+            </div>
+            <div className="mt-6 border-t border-border pt-4">
+              <p className="text-sm font-medium text-foreground">Multiplier premium purchase</p>
+              <p className="mt-1 text-sm text-muted">Control whether multiplier premium appears as unlocked by admin in the orders feature unlock panel. Pricing continues to follow the membership multiplier configuration.</p>
+              <label className="mt-4 inline-flex items-center gap-2 text-sm text-foreground">
+                <input
+                  type="checkbox"
+                  checked={multiplierPremiumEnabled}
+                  onChange={(event) => setMultiplierPremiumEnabled(event.target.checked)}
+                  className="h-4 w-4 rounded border-border bg-surface text-accent focus:ring-accent"
+                />
+                <span>{multiplierPremiumEnabled ? 'Multiplier premium unlocked' : 'Multiplier premium locked'}</span>
+              </label>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-border bg-surface p-4 lg:col-span-2">
             <p className="text-sm font-medium text-foreground">Membership rules engine v2</p>
             <p className="mt-1 text-sm text-muted">Switch the rollout state between shadow, progressive, and enforced. The value is stored in Supabase and used by the lifecycle service.</p>
             <div className="mt-4 grid gap-2 sm:grid-cols-3">

@@ -1,4 +1,5 @@
 import { supabase } from '@/services/supabase/client';
+import { assertOnboardingModuleAccess } from '@/services/api/onboardingGate';
 import type {
   Campaign,
   CampaignEngineConfig,
@@ -156,7 +157,11 @@ export type TaskTemplateId =
   | 'api_verification'
   | 'survey_completion'
   | 'app_install'
-  | 'social_follow';
+  | 'social_follow'
+  | 'learning_watch_lesson'
+  | 'learning_pass_quiz'
+  | 'learning_complete_module'
+  | 'learning_certificate_claim';
 
 export interface TaskTemplateDefinition {
   id: TaskTemplateId;
@@ -404,6 +409,95 @@ const TASK_TEMPLATE_LIBRARY: TaskTemplateDefinition[] = [
       platform: 'social',
     },
     maxCompletions: 5000,
+    status: 'draft',
+  },
+  {
+    id: 'learning_watch_lesson',
+    label: 'Learning watch lesson',
+    description: 'Track verified classroom watch time with heartbeat and focus checks.',
+    taskType: 'learning_watch_lesson',
+    rewardAmount: 10,
+    requirements: [
+      { key: 'minimum_watch_seconds', label: 'Minimum active watch seconds', value: '600' },
+      { key: 'focus_required', label: 'Focus checks enabled', value: 'true' },
+    ],
+    cooldownSeconds: 0,
+    maximumAttempts: 1,
+    verificationMethod: 'api_verification',
+    fraudChecksText: 'fraud_detection, duplicate_detection, vpn_detection, proxy_detection, bot_detection',
+    taskConfig: {
+      telemetryContract: 'classroom_learning_v1',
+      heartbeatIntervalSeconds: 30,
+      minimumFocusRatio: 0.7,
+      allowPlaybackSpeedMax: 1.5,
+    },
+    maxCompletions: 1,
+    status: 'draft',
+  },
+  {
+    id: 'learning_pass_quiz',
+    label: 'Learning pass quiz',
+    description: 'Reward quiz completion when the score threshold is met.',
+    taskType: 'learning_pass_quiz',
+    rewardAmount: 30,
+    requirements: [
+      { key: 'minimum_score_percent', label: 'Minimum score percent', value: '70' },
+      { key: 'max_attempts', label: 'Maximum attempts', value: '3' },
+    ],
+    cooldownSeconds: 0,
+    maximumAttempts: 3,
+    verificationMethod: 'api_verification',
+    fraudChecksText: 'fraud_detection, duplicate_detection, bot_detection',
+    taskConfig: {
+      telemetryContract: 'classroom_learning_v1',
+      passScorePercent: 70,
+      requireQuestionShuffle: true,
+    },
+    maxCompletions: 1,
+    status: 'draft',
+  },
+  {
+    id: 'learning_complete_module',
+    label: 'Learning complete module',
+    description: 'Issue milestone reward after all module lessons are verified.',
+    taskType: 'learning_complete_module',
+    rewardAmount: 50,
+    requirements: [
+      { key: 'module_completion_percent', label: 'Module completion percent', value: '100' },
+      { key: 'quiz_required', label: 'Quiz pass required', value: 'true' },
+    ],
+    cooldownSeconds: 0,
+    maximumAttempts: 1,
+    verificationMethod: 'api_verification',
+    fraudChecksText: 'fraud_detection, duplicate_detection, vpn_detection, proxy_detection, bot_detection',
+    taskConfig: {
+      telemetryContract: 'classroom_learning_v1',
+      requireLessonVerification: true,
+      requireQuizThreshold: true,
+    },
+    maxCompletions: 1,
+    status: 'draft',
+  },
+  {
+    id: 'learning_certificate_claim',
+    label: 'Learning certificate claim',
+    description: 'Grant certificate reward only after verifiable completion and issuance.',
+    taskType: 'learning_certificate_claim',
+    rewardAmount: 500,
+    requirements: [
+      { key: 'course_completion_percent', label: 'Course completion percent', value: '100' },
+      { key: 'certificate_status', label: 'Certificate status', value: 'issued' },
+    ],
+    cooldownSeconds: 0,
+    maximumAttempts: 1,
+    verificationMethod: 'api_verification',
+    fraudChecksText: 'fraud_detection, duplicate_detection, vpn_detection, proxy_detection, bot_detection',
+    taskConfig: {
+      telemetryContract: 'classroom_learning_v1',
+      requireCertificateVerification: true,
+      transferHoldPolicy: 'review_or_release',
+    },
+    maxCompletions: 1,
     status: 'draft',
   },
 ];
@@ -971,6 +1065,8 @@ export async function submitTaskSubmission(
   taskId: string,
   submissionData: Record<string, unknown>,
 ): Promise<TaskSubmissionView> {
+  await assertOnboardingModuleAccess(userId, 'tasks');
+
   const bundle = await loadTaskBundle(taskId);
   if (!bundle) throw new Error('Task not found.');
 

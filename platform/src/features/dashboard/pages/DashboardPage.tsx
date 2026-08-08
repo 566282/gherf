@@ -258,13 +258,8 @@ export function DashboardPage(): JSX.Element {
   const [activityFilter, setActivityFilter] = useState<'all' | 'earn' | 'task' | 'referral'>('all');
   const [activityQuery, setActivityQuery] = useState('');
   const [visibleActivityCount, setVisibleActivityCount] = useState(ACTIVITY_BATCH_SIZE);
-  const [insightsExpanded, setInsightsExpanded] = useState(() => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
-      return true;
-    }
-
-    return window.matchMedia('(min-width: 1280px)').matches;
-  });
+  const [quickShortcutsExpanded, setQuickShortcutsExpanded] = useState(false);
+  const [insightsExpanded, setInsightsExpanded] = useState(false);
 
   const filteredActivities = useMemo(() => {
     const items = dashboardViewData?.recentActivity ?? [];
@@ -415,7 +410,18 @@ export function DashboardPage(): JSX.Element {
             <h2 className="mt-2 text-lg font-semibold text-white">Jump into the main user flows</h2>
             <p className="mt-1 text-sm text-mist/70">Use these direct links to move from overview into the screens users act on most.</p>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <button
+            type="button"
+            aria-expanded={quickShortcutsExpanded}
+            aria-controls="dashboard-quick-shortcuts"
+            onClick={() => setQuickShortcutsExpanded((current) => !current)}
+            className="rounded-full border border-white/10 px-3 py-1.5 text-sm text-mist transition hover:border-mint/30 hover:text-mint"
+          >
+            {quickShortcutsExpanded ? 'Collapse' : 'Expand'}
+          </button>
+        </div>
+        {quickShortcutsExpanded ? (
+          <div id="dashboard-quick-shortcuts" className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Link to="/app/profile" className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white transition hover:border-mint/30 hover:bg-mint/10">
               Open profile
             </Link>
@@ -432,7 +438,7 @@ export function DashboardPage(): JSX.Element {
               Open leaderboard
             </Link>
           </div>
-        </div>
+        ) : null}
       </Card>
 
       {/* Key metrics row */}

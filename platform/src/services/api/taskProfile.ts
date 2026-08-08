@@ -19,6 +19,8 @@ export interface TaskComplianceProfile {
   socialProfiles: Record<string, unknown>;
   onboardingProgress: Record<string, unknown>;
   onboardingCompleted: boolean;
+  onboardingCompletedAt: string | null;
+  onboardingBlockReason: string | null;
   metadata: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
@@ -50,6 +52,8 @@ function toProfile(row: Record<string, unknown>): TaskComplianceProfile {
     socialProfiles: (row.social_profiles as Record<string, unknown>) ?? {},
     onboardingProgress: (row.onboarding_progress as Record<string, unknown>) ?? {},
     onboardingCompleted: Boolean(row.onboarding_completed),
+    onboardingCompletedAt: row.onboarding_completed_at ? String(row.onboarding_completed_at) : null,
+    onboardingBlockReason: row.onboarding_block_reason ? String(row.onboarding_block_reason) : null,
     metadata: (row.metadata as Record<string, unknown>) ?? {},
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
@@ -115,6 +119,8 @@ export async function upsertTaskComplianceProfile(input: {
   socialProfiles: Record<string, unknown>;
   onboardingProgress: Record<string, unknown>;
   onboardingCompleted: boolean;
+  onboardingCompletedAt?: string | null;
+  onboardingBlockReason?: string | null;
   metadata?: Record<string, unknown>;
 }): Promise<TaskComplianceProfile> {
   const { data, error } = await supabase
@@ -126,6 +132,8 @@ export async function upsertTaskComplianceProfile(input: {
         social_profiles: input.socialProfiles,
         onboarding_progress: input.onboardingProgress,
         onboarding_completed: input.onboardingCompleted,
+        onboarding_completed_at: input.onboardingCompletedAt ?? (input.onboardingCompleted ? new Date().toISOString() : null),
+        onboarding_block_reason: input.onboardingBlockReason ?? null,
         metadata: input.metadata ?? {},
         updated_at: new Date().toISOString(),
       },

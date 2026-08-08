@@ -13,6 +13,7 @@ import { listCampaignTasks } from '@/services/api/tasks';
 import { listSupportTickets } from '@/services/api/support';
 import { listNotificationQueue } from '@/services/api/communications';
 import { listWalletAccounts, listWalletTransactions } from '@/services/api/wallet';
+import { getLaunchReadinessSnapshot, type LaunchReadinessSnapshot } from '@/services/api/launchReadiness';
 import type { AdminCustomizationConfig, AdminFeatureConfig, AdminThemeConfig } from '@/types';
 import type { ActivityLogItem } from '@/types/auth';
 import { useLocation } from 'react-router-dom';
@@ -231,6 +232,7 @@ const featureModules: FeatureModule[] = [
 
 const sectionAnchors = [
   { label: 'Overview', id: 'overview' },
+  { label: 'Launch', id: 'launch' },
   { label: 'Operations', id: 'operations' },
   { label: 'Finance', id: 'finance' },
   { label: 'Insights', id: 'insights' },
@@ -484,6 +486,7 @@ export function AdminPanelPage() {
   const [featureStates, setFeatureStates] = useState<Record<string, FeatureState>>(() =>
     Object.fromEntries(featureModules.map((feature) => [feature.id, defaultFeatureState(feature)])),
   );
+  const [launchReadiness, setLaunchReadiness] = useState<LaunchReadinessSnapshot | null>(null);
 
   useEffect(() => {
     void refreshOverview();
@@ -493,7 +496,7 @@ export function AdminPanelPage() {
     setIsRefreshing(true);
 
     try {
-      const [catalog, config, users, campaigns, supportTickets, auditLogs, walletAccounts, walletTransactions, notificationQueue, gamificationConfig, campaignTasks, referralSummary] =
+      const [catalog, config, users, campaigns, supportTickets, auditLogs, walletAccounts, walletTransactions, notificationQueue, gamificationConfig, campaignTasks, referralSummary, launchSnapshot] =
         await Promise.all([
           listAdminModuleCatalog(),
           listAdminConsoleConfig(),
@@ -507,6 +510,7 @@ export function AdminPanelPage() {
           listGamificationConfig(),
           listCampaignTasks(),
           getReferralEngineSummary(),
+          getLaunchReadinessSnapshot(),
         ]);
 
       setModuleCatalog(
@@ -548,11 +552,14 @@ export function AdminPanelPage() {
         referralAttributions: referralSummary.attributions.length,
         referralFraudFlags: referralSummary.fraudFlags.length,
       });
+
+      setLaunchReadiness(launchSnapshot);
     } catch {
       setModuleCatalog({});
       setRecentActivityLogs([]);
       setLivePlatformStats(defaultLivePlatformStats);
       setLiveOperationalStats(defaultLiveOperationalStats);
+      setLaunchReadiness(null);
       setSavedMessage('Using local defaults until admin settings are available.');
     } finally {
       setIsRefreshing(false);
@@ -756,6 +763,71 @@ export function AdminPanelPage() {
             <Link to="/admin/notification-center" className="rounded-full border border-border bg-surface px-3 py-1.5 text-foreground transition hover:border-accent/40 hover:text-accent">
               Open notification center
             </Link>
+          </div>
+        </div>
+      </Card>
+
+      <Card id="launch" className="border border-border bg-surface-elevated p-5">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-sm uppercase tracking-[0.24em] text-accent/70">Launch readiness</p>
+            <h2 className="mt-2 text-2xl font-semibold text-foreground">Phase 0 launch rubric</h2>
+            <p className="mt-2 text-sm text-muted">Pass/fail criteria based on live data sources and rollout feature flags.</p>
+          </div>
+          <p className="text-xs text-muted">
+            {launchReadiness ? `Updated ${new Date(launchReadiness.generatedAt).toLocaleString()}` : 'No launch snapshot available'}
+          </p>
+        </div>
+
+        <div className="mt-5 grid gap-4 xl:grid-cols-2">
+          <div className="rounded-2xl border border-border bg-background p-4">
+            <p className="text-xs uppercase tracking-[0.2em] text-muted">Launch criteria</p>
+            <div className="mt-3 space-y-3">
+              {(launchReadiness?.criteria ?? []).map((criterion) => (
+                <div key={criterion.key} className="rounded-xl border border-border bg-surface p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-medium text-foreground">{criterion.title}</p>
+                    <span className={`rounded-full border px-2 py-1 text-[10px] uppercase tracking-[0.18em] ${criterion.status === 'pass' ? statusBadgeClass('success') : statusBadgeClass('error')}`}>
+                      {criterion.status}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-xs text-muted">Source: {criterion.dataSource}</p>
+                  <p className="mt-1 text-xs text-muted">Pass condition: {criterion.passCondition}</p>
+                  <p className="mt-1 text-xs text-foreground/80">{criterion.detail}</p>
+                </div>
+              ))}
+              {!launchReadiness ? <p className="text-sm text-muted">Launch rubric will render after a successful refresh.</p> : null}
+            </div>
+          </div>
+
+          <div className="grid gap-4">
+            <div className="rounded-2xl border border-border bg-background p-4">
+              <p className="text-xs uppercase tracking-[0.2em] text-muted">Feature flag map</p>
+              <div className="mt-3 grid gap-2">
+                {Object.entries(launchReadiness?.featureFlags ?? {}).map(([key, enabled]) => (
+                  <div key={key} className="flex items-center justify-between rounded-xl border border-border bg-surface px-3 py-2">
+                    <span className="text-sm text-foreground">{key}</span>
+                    <span className={`rounded-full border px-2 py-1 text-[10px] uppercase tracking-[0.18em] ${enabled ? statusBadgeClass('success') : statusBadgeClass('error')}`}>
+                      {enabled ? 'enabled' : 'disabled'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-border bg-background p-4">
+              <p className="text-xs uppercase tracking-[0.2em] text-muted">Staging parity checklist</p>
+              <div className="mt-3 space-y-2">
+                {(launchReadiness?.stagingParityChecklist ?? []).map((item) => (
+                  <div key={item.key} className="flex items-center justify-between rounded-xl border border-border bg-surface px-3 py-2">
+                    <span className="text-sm text-foreground">{item.label}</span>
+                    <span className={`rounded-full border px-2 py-1 text-[10px] uppercase tracking-[0.18em] ${item.done ? statusBadgeClass('success') : statusBadgeClass('warning')}`}>
+                      {item.done ? 'done' : 'pending'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       </Card>

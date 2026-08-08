@@ -37,3 +37,6 @@ Thumbs.db
 
 # Supabase
 .supabase/
+
+# Local Netlify folder
+.netlify

@@ -7,12 +7,13 @@ const notificationState = vi.hoisted(() => ({
 
 const { rpcMock, fromMock } = vi.hoisted(() => ({
   rpcMock: vi.fn(),
+  fromMock: vi.fn(),
 }));
 
 vi.mock('@/services/supabase/client', () => ({
   supabase: {
     rpc: rpcMock,
-    from: vi.fn(),
+    from: fromMock,
   },
 }));
 
@@ -22,10 +23,29 @@ vi.mock('@/services/api/communications', () => ({
 }));
 
 describe('wallet money paths', () => {
+  function mockTransferFeatureSetting(enabled: boolean): void {
+    fromMock.mockImplementation((table: string) => {
+      if (table !== 'platform_settings') {
+        throw new Error(`Unexpected table ${table}`);
+      }
+
+      return {
+        select: () => ({
+          in: async () => ({
+            data: [{ key: 'wallet_internal_transfers_enabled', value: enabled }],
+            error: null,
+          }),
+        }),
+      };
+    });
+  }
+
   beforeEach(() => {
     rpcMock.mockReset();
     fromMock.mockReset();
     notificationState.sendUserNotification.mockReset();
+    notificationState.sendUserNotification.mockResolvedValue(undefined);
+    mockTransferFeatureSetting(true);
   });
 
   it('rejects invalid wallet transfer directions before calling Supabase', async () => {
@@ -47,6 +67,15 @@ describe('wallet money paths', () => {
       p_currency: 'USD',
       p_note: 'claim into main',
     });
+  });
+
+  it('rejects transfers when the admin lock is active', async () => {
+    mockTransferFeatureSetting(false);
+
+    await expect(transferWalletBalance('user-1', 'reward', 'main', 25)).rejects.toThrow(
+      'Internal transfers are locked by admin. Please contact support.',
+    );
+    expect(rpcMock).not.toHaveBeenCalled();
   });
 
   it('calls the Supabase RPC for an admin wallet adjustment', async () => {

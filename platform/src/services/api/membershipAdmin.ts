@@ -207,7 +207,7 @@ export async function upsertMembershipPlan(input: {
   benefits?: string[];
   isActive?: boolean;
 }): Promise<void> {
-  const level = Math.max(1, Math.min(100, Math.round(Number(input.level) || 1)));
+  const level = Math.max(0, Math.min(100, Math.round(Number(input.level) || 0)));
   const label = input.label.trim() || resolveMembershipPlan(level).label;
 
   const { error } = await supabase.from('membership_plan_catalog').upsert({

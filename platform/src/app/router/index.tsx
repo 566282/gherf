@@ -25,6 +25,7 @@ import { SuspensionNoticePage } from '@/features/errors/pages/SuspensionNoticePa
 // Authenticated pages
 import { DashboardPage } from '@/features/dashboard/pages/DashboardPage';
 import { MerchantDashboardPage } from '@/features/dashboard/pages/MerchantDashboardPage';
+import { MerchantKycPage } from '@/features/dashboard/pages/MerchantKycPage';
 import { UserOrdersPage } from '@/features/dashboard/pages/UserOrdersPage';
 import { CampaignBrowsePage } from '@/features/campaigns/pages/CampaignBrowsePage';
 import { CampaignDetailPage } from '@/features/campaigns/pages/CampaignDetailPage';
@@ -34,6 +35,15 @@ import { GamificationPage } from '@/features/rewards/pages/GamificationPage';
 import { ProfilePage } from '@/features/profile/pages/ProfilePage';
 import { NotificationHistoryPage } from '@/features/profile/pages/NotificationHistoryPage';
 import { TaskOnboardingPage } from '@/features/profile/pages/TaskOnboardingPage';
+import { OnboardingMembershipPage } from '@/features/profile/pages/OnboardingMembershipPage';
+import { ClassroomHomePage } from '@/features/classroom/pages/ClassroomHomePage';
+import { CourseDetailPage } from '@/features/classroom/pages/CourseDetailPage';
+import { LearningSessionPage } from '@/features/classroom/pages/LearningSessionPage';
+import { MyLearningPage } from '@/features/classroom/pages/MyLearningPage';
+import { MyCertificatesPage } from '@/features/classroom/pages/MyCertificatesPage';
+import { LearningWalletPage } from '@/features/classroom/pages/LearningWalletPage';
+import { CertificateVerificationPage } from '@/features/classroom/pages/CertificateVerificationPage';
+import { ClassroomRouteGate } from '@/features/classroom/components/ClassroomRouteGate';
 
 // Admin/Campaign Manager pages
 import { DashboardAnalyticsPage } from '@/features/admin/pages/DashboardAnalyticsPage';
@@ -74,6 +84,11 @@ import { WithdrawalComplianceQueuePage } from '@/features/admin/pages/Withdrawal
 import { AppealsManagementPage } from '@/features/admin/pages/AppealsManagementPage';
 import { SocialPlatformsConfigPage } from '@/features/admin/pages/SocialPlatformsConfigPage';
 import { SuspensionCasesPage } from '@/features/admin/pages/SuspensionCasesPage';
+import { ClassroomOpsPage } from '@/features/admin/pages/ClassroomOpsPage';
+import { ClassroomCatalogPage } from '@/features/admin/pages/ClassroomCatalogPage';
+import { ClassroomProvidersPage } from '@/features/admin/pages/ClassroomProvidersPage';
+import { ClassroomFraudReviewPage } from '@/features/admin/pages/ClassroomFraudReviewPage';
+import { ClassroomAnalyticsPage } from '@/features/admin/pages/ClassroomAnalyticsPage';
 
 // Super Admin pages
 import { AdminPanelPage } from '@/features/admin/pages/AdminPanelPage';
@@ -100,6 +115,7 @@ const routes: RouteObject[] = [
       { path: 'privacy-policy', element: <CmsPublicPage pageKey="privacy-policy" /> },
       { path: 'terms', element: <CmsPublicPage pageKey="terms" /> },
       { path: 'blog', element: <CmsPublicPage pageKey="blog" /> },
+      { path: 'verify-certificate', element: <CertificateVerificationPage /> },
       { path: 'seo', element: <CmsPublicPage pageKey="seo" /> },
       { path: 'meta-tags', element: <CmsPublicPage pageKey="meta-tags" /> },
       { path: 'open-graph', element: <CmsPublicPage pageKey="open-graph" /> },
@@ -133,15 +149,65 @@ const routes: RouteObject[] = [
       { index: true, element: <DashboardPage /> },
       { path: 'profile', element: <ProfilePage /> },
       { path: 'onboarding', element: <TaskOnboardingPage /> },
+      { path: 'onboarding/membership', element: <OnboardingMembershipPage /> },
       { path: 'campaigns', element: <CampaignBrowsePage /> },
       { path: 'campaigns/:id', element: <CampaignDetailPage /> },
       { path: 'tasks', element: <UserTasksPage /> },
       { path: 'wallet', element: <RewardHistoryPage /> },
       { path: 'orders', element: <UserOrdersPage /> },
       { path: 'merchant', element: <MerchantDashboardPage /> },
+      { path: 'merchant/kyc', element: <MerchantKycPage /> },
       { path: 'notifications', element: <NotificationHistoryPage /> },
       { path: 'rewards', element: <Navigate to="/app/wallet" replace /> },
       { path: 'gamification', element: <GamificationPage /> },
+      {
+        path: 'classroom',
+        element: (
+          <ClassroomRouteGate scope="learner">
+            <ClassroomHomePage />
+          </ClassroomRouteGate>
+        ),
+      },
+      {
+        path: 'classroom/courses/:id',
+        element: (
+          <ClassroomRouteGate scope="learner">
+            <CourseDetailPage />
+          </ClassroomRouteGate>
+        ),
+      },
+      {
+        path: 'classroom/session',
+        element: (
+          <ClassroomRouteGate scope="learner">
+            <LearningSessionPage />
+          </ClassroomRouteGate>
+        ),
+      },
+      {
+        path: 'classroom/my-learning',
+        element: (
+          <ClassroomRouteGate scope="learner">
+            <MyLearningPage />
+          </ClassroomRouteGate>
+        ),
+      },
+      {
+        path: 'classroom/certificates',
+        element: (
+          <ClassroomRouteGate scope="learner">
+            <MyCertificatesPage />
+          </ClassroomRouteGate>
+        ),
+      },
+      {
+        path: 'classroom/wallet',
+        element: (
+          <ClassroomRouteGate scope="learner">
+            <LearningWalletPage />
+          </ClassroomRouteGate>
+        ),
+      },
     ],
   },
 
@@ -211,6 +277,39 @@ const routes: RouteObject[] = [
       { path: 'appeals-management', element: <AppealsManagementPage /> },
       { path: 'social-platforms', element: <SocialPlatformsConfigPage /> },
       { path: 'suspension-cases', element: <SuspensionCasesPage /> },
+      { path: 'classroom-ops', element: <ClassroomOpsPage /> },
+      {
+        path: 'classroom-catalog',
+        element: (
+          <ClassroomRouteGate scope="admin">
+            <ClassroomCatalogPage />
+          </ClassroomRouteGate>
+        ),
+      },
+      {
+        path: 'classroom-providers',
+        element: (
+          <ClassroomRouteGate scope="admin">
+            <ClassroomProvidersPage />
+          </ClassroomRouteGate>
+        ),
+      },
+      {
+        path: 'classroom-fraud-review',
+        element: (
+          <ClassroomRouteGate scope="admin">
+            <ClassroomFraudReviewPage />
+          </ClassroomRouteGate>
+        ),
+      },
+      {
+        path: 'classroom-analytics',
+        element: (
+          <ClassroomRouteGate scope="admin">
+            <ClassroomAnalyticsPage />
+          </ClassroomRouteGate>
+        ),
+      },
       { path: 'task-engine', element: <TaskEnginePage /> },
       { path: 'system-settings', element: <SystemSettingsPage /> },
       { path: 'email-templates', element: <EmailTemplatesPage /> },

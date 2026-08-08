@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -109,6 +109,16 @@ function renderDashboard(): void {
   );
 }
 
+async function expandInsightsPanel(): Promise<void> {
+  await screen.findByText('More insights');
+  const toggle = document.querySelector('button[aria-controls="dashboard-insights-panel"]');
+  if (!(toggle instanceof HTMLButtonElement)) {
+    throw new Error('Insights toggle not found');
+  }
+
+  fireEvent.click(toggle);
+}
+
 describe('DashboardPage', () => {
   beforeEach(() => {
     Object.defineProperty(window, 'matchMedia', {
@@ -161,6 +171,8 @@ describe('DashboardPage', () => {
   it('renders the dashboard summaries and controls', async () => {
     renderDashboard();
 
+    await expandInsightsPanel();
+
     expect(await screen.findByRole('heading', { name: 'Leaderboard' })).toBeInTheDocument();
     expect(await screen.findByText('Season of Momentum')).toBeInTheDocument();
     expect(await screen.findByText('Leaderboard active')).toBeInTheDocument();
@@ -182,6 +194,8 @@ describe('DashboardPage', () => {
 
     renderDashboard();
 
+    await expandInsightsPanel();
+
     expect(await screen.findByText('No notifications yet.')).toBeInTheDocument();
     expect(screen.getByText('No campaign history yet.')).toBeInTheDocument();
     expect(screen.getByText('No withdrawal requests yet.')).toBeInTheDocument();
@@ -194,6 +208,8 @@ describe('DashboardPage', () => {
 
     renderDashboard();
 
+    await expandInsightsPanel();
+
     expect(await screen.findByRole('heading', { name: 'Leaderboard' })).toBeInTheDocument();
     expect(screen.getByText('No support tickets yet.')).toBeInTheDocument();
   });
@@ -204,6 +220,8 @@ describe('DashboardPage', () => {
     });
 
     renderDashboard();
+
+    await expandInsightsPanel();
 
     expect(await screen.findByRole('heading', { name: 'Leaderboard' })).toBeInTheDocument();
     expect(screen.getByText('No support tickets yet.')).toBeInTheDocument();
@@ -219,6 +237,8 @@ describe('DashboardPage', () => {
     apiState.listGamificationConfig.mockResolvedValue(null as never);
 
     renderDashboard();
+
+    await expandInsightsPanel();
 
     expect(await screen.findByRole('heading', { name: 'Leaderboard' })).toBeInTheDocument();
     expect(screen.getByText('No notifications yet.')).toBeInTheDocument();

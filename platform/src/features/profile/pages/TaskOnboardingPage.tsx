@@ -11,6 +11,7 @@ export function TaskOnboardingPage(): JSX.Element {
   const [taskTypes, setTaskTypes] = useState('watch_videos,visit_websites,social_follow');
   const [socialProfilesText, setSocialProfilesText] = useState('{\n  "youtube": { "handle": "" },\n  "instagram": { "handle": "" }\n}');
   const [platforms, setPlatforms] = useState<Array<{ platformKey: string; displayName: string }>>([]);
+  const [membershipPlanSelected, setMembershipPlanSelected] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
@@ -27,6 +28,7 @@ export function TaskOnboardingPage(): JSX.Element {
         if (existing) {
           setTaskTypes(existing.preferredTaskTypes.join(','));
           setSocialProfilesText(JSON.stringify(existing.socialProfiles, null, 2));
+          setMembershipPlanSelected(Boolean(existing.onboardingProgress?.membershipPlanSelected));
         }
       })
       .catch(() => setStatusMessage('Unable to load onboarding profile defaults.'));
@@ -59,16 +61,23 @@ export function TaskOnboardingPage(): JSX.Element {
         onboardingProgress: {
           taskPreferencesCompleted: true,
           socialProfilesCompleted: true,
-          completedAt: new Date().toISOString(),
+          membershipPlanSelected,
+          completedAt: membershipPlanSelected ? new Date().toISOString() : null,
         },
-        onboardingCompleted: true,
+        onboardingCompleted: membershipPlanSelected,
+        onboardingCompletedAt: membershipPlanSelected ? new Date().toISOString() : null,
+        onboardingBlockReason: membershipPlanSelected ? null : 'Choose a membership plan to continue.',
         metadata: {
           source: 'task_onboarding_page',
         },
       });
 
-      setStatusMessage('Task profile onboarding saved.');
-      navigate('/app/profile');
+      if (membershipPlanSelected) {
+        setStatusMessage('Onboarding checklist saved and unlocked.');
+        navigate('/app/profile');
+      } else {
+        setStatusMessage('Profile details saved. Choose a membership plan to complete onboarding.');
+      }
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : 'Unable to save onboarding profile.');
     } finally {
@@ -91,6 +100,18 @@ export function TaskOnboardingPage(): JSX.Element {
         <p className="text-sm uppercase tracking-[0.24em] text-mint/70">Phase 7</p>
         <h1 className="mt-2 text-3xl font-semibold text-white">Task and social profile onboarding</h1>
         <p className="mt-2 text-sm text-mist/80">Configure preferred task categories and your platform handles used for compliance checks.</p>
+        <div className="mt-4 rounded-xl border border-white/10 bg-white/5 p-4">
+          <p className="text-xs uppercase tracking-[0.2em] text-mint/75">Checklist</p>
+          <ul className="mt-3 space-y-2 text-sm text-mist/85">
+            <li>{membershipPlanSelected ? 'Done' : 'Pending'} - Choose membership plan</li>
+            <li>Optional - Save task preferences and social profiles</li>
+          </ul>
+          <div className="mt-3">
+            <Link to="/app/onboarding/membership" className="rounded-xl border border-white/10 px-4 py-2 text-sm text-mist hover:bg-white/5">
+              {membershipPlanSelected ? 'Review membership plan' : 'Choose membership plan'}
+            </Link>
+          </div>
+        </div>
       </Card>
 
       <Card className="space-y-4 border border-white/10 bg-white/5">

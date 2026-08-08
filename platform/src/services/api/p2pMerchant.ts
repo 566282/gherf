@@ -119,6 +119,21 @@ export type MerchantAnalyticsSnapshot = {
   updatedAt: string;
 };
 
+export type MerchantPaymentAccountOption = {
+  id: string;
+  merchantId: string;
+  merchantCode: string;
+  merchantName: string;
+  currency: string;
+  countryCode: string | null;
+  provider: string | null;
+  bankName: string | null;
+  accountName: string;
+  accountNumber: string;
+  label: string;
+  paymentInstructions: string | null;
+};
+
 export type CreateP2POrderInput = {
   paymentIntentId: string;
   userId: string;
@@ -139,6 +154,48 @@ export type StartedFiatPurchase = {
   intent: FiatPaymentIntent;
   order: MerchantOrderListItem | null;
 };
+
+type MerchantPaymentAccountMetadata = {
+  id?: string;
+  label?: string;
+  provider?: string;
+  bankName?: string;
+  accountName?: string;
+  accountNumber?: string;
+  currency?: string;
+  countryCode?: string;
+  paymentInstructions?: string;
+  isActive?: boolean;
+  active?: boolean;
+  isApproved?: boolean;
+  approvedByAdmin?: boolean;
+  approvalStatus?: string;
+  status?: string;
+};
+
+function toBoolean(value: unknown, fallback = false): boolean {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true') return true;
+    if (normalized === 'false') return false;
+  }
+  return fallback;
+}
+
+function toStringOrNull(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function readMerchantPaymentAccountMetadata(metadata: Record<string, unknown>): MerchantPaymentAccountMetadata[] {
+  const raw = metadata.paymentAccounts ?? metadata.payment_accounts;
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === 'object')
+    .map((entry) => ({ ...entry }));
+}
 
 function mapIntent(row: Record<string, unknown>): FiatPaymentIntent {
   return {
@@ -477,4 +534,74 @@ export async function listMerchantAnalytics(merchantId: string, limit = 30): Pro
   }
 
   return data.map((row) => mapMerchantAnalytics(row as Record<string, unknown>));
+}
+
+export async function listActiveMerchantPaymentAccounts(input?: {
+  currency?: string;
+  countryCode?: string | null;
+  limit?: number;
+}): Promise<MerchantPaymentAccountOption[]> {
+  const targetCurrency = input?.currency?.toUpperCase() ?? null;
+  const targetCountry = input?.countryCode?.toUpperCase() ?? null;
+  const limit = Math.max(10, Math.min(500, Math.round(input?.limit ?? 200)));
+
+  const { data, error } = await supabase
+    .from('merchant_profiles')
+    .select('id,merchant_code,display_name,legal_name,status,country_code,preferred_currency,metadata,updated_at')
+    .eq('status', 'active')
+    .order('updated_at', { ascending: false })
+    .limit(limit);
+
+  if (error || !Array.isArray(data)) {
+    throw error ?? new Error('Unable to load active merchant payment accounts.');
+  }
+
+  const results: MerchantPaymentAccountOption[] = [];
+
+  for (const row of data as Array<Record<string, unknown>>) {
+    const merchantId = String(row.id ?? '');
+    const merchantCode = String(row.merchant_code ?? '');
+    const merchantName = String(row.display_name ?? row.legal_name ?? row.merchant_code ?? 'Merchant');
+    const merchantCountry = toStringOrNull(row.country_code)?.toUpperCase() ?? null;
+    const merchantCurrency = String(row.preferred_currency ?? 'USD').toUpperCase();
+    const metadata = ((row.metadata as Record<string, unknown>) ?? {});
+    const accounts = readMerchantPaymentAccountMetadata(metadata);
+
+    for (let index = 0; index < accounts.length; index += 1) {
+      const account = accounts[index];
+      const accountNumber = toStringOrNull(account.accountNumber);
+      const accountName = toStringOrNull(account.accountName);
+      if (!accountNumber || !accountName) continue;
+
+      const accountCurrency = (toStringOrNull(account.currency) ?? merchantCurrency).toUpperCase();
+      const accountCountry = (toStringOrNull(account.countryCode) ?? merchantCountry)?.toUpperCase() ?? null;
+      const isActive = toBoolean(account.isActive, toBoolean(account.active, true));
+      const isApproved =
+        toBoolean(account.isApproved, false)
+        || toBoolean(account.approvedByAdmin, false)
+        || (toStringOrNull(account.approvalStatus)?.toLowerCase() === 'approved')
+        || (toStringOrNull(account.status)?.toLowerCase() === 'approved');
+
+      if (!isActive || !isApproved) continue;
+      if (targetCurrency && accountCurrency !== targetCurrency) continue;
+      if (targetCountry && accountCountry && accountCountry !== targetCountry) continue;
+
+      results.push({
+        id: toStringOrNull(account.id) ?? `${merchantId}:${index + 1}`,
+        merchantId,
+        merchantCode,
+        merchantName,
+        currency: accountCurrency,
+        countryCode: accountCountry,
+        provider: toStringOrNull(account.provider),
+        bankName: toStringOrNull(account.bankName),
+        accountName,
+        accountNumber,
+        label: toStringOrNull(account.label) ?? `${merchantName} settlement account`,
+        paymentInstructions: toStringOrNull(account.paymentInstructions),
+      });
+    }
+  }
+
+  return results;
 }
