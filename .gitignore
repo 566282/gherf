@@ -44,3 +44,6 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 platform/src/test/authService.test.ts
+
+# Local Netlify folder
+.netlify

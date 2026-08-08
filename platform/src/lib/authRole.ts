@@ -1,5 +1,5 @@
-import { env } from '@/lib/env';
-import type { AppRole } from '@/types/auth';
+import { env } from './env';
+import type { AppRole } from '../types/auth';
 
 const knownRoles: AppRole[] = ['guest', 'registered_user', 'advertiser', 'moderator', 'campaign_manager', 'super_admin'];
 
