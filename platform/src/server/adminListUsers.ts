@@ -1,9 +1,12 @@
 import { createClient } from '@supabase/supabase-js';
+import WebSocket from 'ws';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { resolveAccountRole } from '../lib/authRole';
 import { resolveMembershipLabel } from '../services/api/membership';
 import type { AppRole, UserProfile } from '../types/auth';
+
+const realtimeTransport = WebSocket as unknown as typeof globalThis.WebSocket;
 
 const allowedRoles = new Set(['super_admin', 'campaign_manager', 'moderator', 'advertiser', 'registered_user', 'guest']);
 const allowedStatuses = new Set(['active', 'suspended', 'banned', 'pending_verification']);
@@ -215,6 +218,9 @@ export async function handler(event: ListUsersEvent) {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
+    },
+    realtime: {
+      transport: realtimeTransport,
     },
   });
 
