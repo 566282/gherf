@@ -325,6 +325,14 @@ function getAdminCreateUserEndpoint(): string {
   return configured || '/.netlify/functions/create-admin-user';
 }
 
+function getAdminListUsersEndpoint(): string {
+  const configured = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_ADMIN_LIST_USERS_ENDPOINT)
+    ? String(import.meta.env.VITE_ADMIN_LIST_USERS_ENDPOINT)
+    : '';
+
+  return configured || '/.netlify/functions/list-admin-users';
+}
+
 async function getCurrentAccessToken(): Promise<string> {
   const { data, error } = await supabase.auth.getSession();
 
@@ -862,29 +870,51 @@ export async function updateMemberPlan(userId: string, levelTier: number, paymen
 }
 
 export async function listUsers(filters: AdminUserFilters = {}): Promise<UserProfile[]> {
-  let query = supabase
-    .from('profiles')
-    .select('id,email,full_name,avatar_url,role,status,is_active,is_email_verified,two_factor_enabled,referral_code,referred_by_code,wallet_balance,reward_balance,reward_history_count,unread_notifications_count,reputation_score,level_label,level_tier,badges,last_login_at')
-    .order('updated_at', { ascending: false });
+  const accessToken = await getCurrentAccessToken();
+  const endpoint = getAdminListUsersEndpoint();
+  const params = new URLSearchParams();
+
+  if (filters.query) {
+    params.set('query', filters.query);
+  }
 
   if (filters.role) {
-    query = query.eq('role', filters.role);
+    params.set('role', filters.role);
   }
 
   if (filters.status) {
-    query = query.eq('status', filters.status);
+    params.set('status', filters.status);
   }
 
-  if (filters.query) {
-    query = query.or(
-      `full_name.ilike.%${filters.query}%,email.ilike.%${filters.query}%,referral_code.ilike.%${filters.query}%`,
-    );
+  const requestUrl = params.size > 0
+    ? `${endpoint}${endpoint.includes('?') ? '&' : '?'}${params.toString()}`
+    : endpoint;
+
+  let response: Response;
+
+  try {
+    response = await fetch(requestUrl, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+  } catch {
+    throw new Error('Admin list-users endpoint is unreachable. Make sure the Netlify function or dev middleware is running.');
   }
 
-  const { data, error } = await query;
-  if (error) throw error;
+  const body = (await response.json().catch(() => null)) as { profiles?: UserProfile[]; error?: string; message?: string } | null;
 
-  return (data ?? []).map((row) => mapProfile(row as ProfileRow, row.email ?? null));
+  if (!response.ok) {
+    if (!body?.error && !body?.message && response.status === 404 && endpoint.startsWith('/.netlify/functions/')) {
+      throw new Error('Admin list-users endpoint is unavailable on this server. Run the app with `netlify dev` so Netlify functions are served, or set `VITE_ADMIN_LIST_USERS_ENDPOINT` to a reachable API URL.');
+    }
+
+    const statusSummary = `HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ''}`;
+    throw new Error(body?.error ?? body?.message ?? `${statusSummary} from admin list-users endpoint.`);
+  }
+
+  return body?.profiles ?? [];
 }
 
 export async function suspendUser(userId: string, reason?: string): Promise<void> {

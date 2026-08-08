@@ -172,6 +172,13 @@ function hasType(value: string | null, options: Array<{ value: string }>) {
   return Boolean(value && options.some((option) => option.value === value));
 }
 
+function resolveDefaultBusinessId(profileId: string | undefined, businesses: Array<{ id: string; ownerId: string }>): string {
+  if (!profileId) return '';
+
+  const ownedBusiness = businesses.find((business) => business.ownerId === profileId);
+  return ownedBusiness?.id ?? profileId;
+}
+
 export function CampaignEditorPage() {
   const { profile } = useAuth();
   const navigate = useNavigate();
@@ -306,6 +313,19 @@ export function CampaignEditorPage() {
   const values = watch();
   const preview = buildPreview(values);
   const taskPreview = useMemo(() => taskDrafts.map(formatTaskPreview), [taskDrafts]);
+  const defaultBusinessId = useMemo(
+    () => resolveDefaultBusinessId(profile?.id, businesses.map((business) => ({ id: business.id, ownerId: business.ownerId }))),
+    [businesses, profile?.id],
+  );
+
+  useEffect(() => {
+    if (id) return;
+
+    const currentBusinessId = form.getValues('businessId').trim();
+    if (currentBusinessId || !defaultBusinessId) return;
+
+    setValue('businessId', defaultBusinessId, { shouldDirty: false });
+  }, [defaultBusinessId, form, id, setValue]);
 
   const onSubmit = handleSubmit(async (submittedValues) => {
     try {
@@ -442,7 +462,7 @@ export function CampaignEditorPage() {
             <h2 className="text-2xl font-bold text-white">Campaign details</h2>
             <div className="grid gap-4 md:grid-cols-2">
               <FieldGroup label="Business ID" hint="Reference the business that owns this campaign.">
-                <input {...register('businessId')} className="input-base" list="business-id-options" placeholder="Select or paste a business UUID" />
+                <input {...register('businessId')} className="input-base" list="business-id-options" placeholder="Auto-filled from your account UUID" />
                 <datalist id="business-id-options">
                   {businesses.map((business) => (
                     <option key={business.id} value={business.id}>
